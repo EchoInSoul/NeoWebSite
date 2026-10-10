@@ -15,7 +15,7 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		Addr:        getEnv("ADDR", ":8080"),
+		Addr:        getEnv("ADDR", ":5732"),
 		Environment: getEnv("APP_ENV", "development"),
 		Version:     getEnv("APP_VERSION", version.Version),
 		ServiceName: getEnv("SERVICE_NAME", "website-backend"),

@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.0.1
+当前版本：0.0.2
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -41,7 +41,7 @@ postsModule.Register(api)
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `ADDR` | `:8080` | 监听地址 |
+| `ADDR` | `:5732` | 监听地址（本机 8080 被 Steam 的 CEF 调试接口占用，默认改用 5732） |
 | `APP_ENV` | `development` | 环境标识，出现在健康检查响应里；`production` 时自动切到 Gin release 模式（关闭 debug 横幅与路由表打印） |
 | `APP_VERSION` | 编译进二进制的版本号 | 仅作运行时临时覆盖（本地调试），常规部署不设置 |
 | `SERVICE_NAME` | `website-backend` | 服务名 |
@@ -68,7 +68,7 @@ postsModule.Register(api)
 在 `backend/` 目录下：
 
 ```bash
-go run .                # 默认 :8080
+go run .                # 默认 :5732
 ADDR=:9090 go run .     # 自定义端口
 ```
 
