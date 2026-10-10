@@ -1,0 +1,10 @@
+# build output
+/backend
+/backend.exe
+/bin/
+*.exe
+*.test
+*.out
+
+# local env
+.env
