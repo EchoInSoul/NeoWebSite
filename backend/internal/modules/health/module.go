@@ -12,8 +12,8 @@ type Module struct {
 	controller *controller
 }
 
-func New(cfg config.Config) *Module {
-	service := newService(cfg)
+func New(cfg config.Config, db pinger) *Module {
+	service := newService(cfg, db)
 	return &Module{
 		Service:    service,
 		controller: newController(service),

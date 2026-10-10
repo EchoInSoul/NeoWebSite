@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"website/backend/internal/config"
+	"website/backend/internal/database"
 	"website/backend/internal/modules/health"
 )
 
@@ -28,7 +29,7 @@ type App struct {
 	engine *gin.Engine
 }
 
-func New(cfg config.Config) *App {
+func New(cfg config.Config, db *database.Database) *App {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -39,7 +40,7 @@ func New(cfg config.Config) *App {
 
 	api := engine.Group(apiPrefix)
 
-	healthModule := health.New(cfg)
+	healthModule := health.New(cfg, db)
 	healthModule.Register(api)
 
 	return &App{engine: engine}

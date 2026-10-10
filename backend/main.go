@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	"website/backend/internal/app"
 	"website/backend/internal/config"
+	"website/backend/internal/database"
 )
 
 func main() {
@@ -13,8 +15,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	db, err := database.Open(context.Background(), cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
 	log.Printf("listening on %s", cfg.Addr)
-	if err := app.New(cfg).Run(cfg.Addr); err != nil {
+	if err := app.New(cfg, db).Run(cfg.Addr); err != nil {
 		log.Fatal(err)
 	}
 }

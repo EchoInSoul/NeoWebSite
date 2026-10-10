@@ -27,6 +27,8 @@
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
 5. 模块只通过 `New(cfg)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
+7. 模块禁止自建数据库连接（禁止 `sql.Open` 等），只能用注入进来的连接。
+8. `internal/database` 不得 import 任何业务模块。
 
 ## 新增一个功能模块的顺序
 
@@ -72,4 +74,4 @@ go run .                # 默认 :5732
 ADDR=:9090 go run .     # 自定义端口
 ```
 
-健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.0.1","environment":"development","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`
+健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.0.2","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。

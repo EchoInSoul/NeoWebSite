@@ -19,5 +19,12 @@ func (c *controller) register(r *gin.RouterGroup) {
 }
 
 func (c *controller) check(ctx *gin.Context) {
-	ctx.JSON(http.StatusOK, c.service.Check())
+	status := c.service.Check(ctx.Request.Context())
+
+	code := http.StatusOK
+	if status.Status != "ok" {
+		code = http.StatusServiceUnavailable
+	}
+
+	ctx.JSON(code, status)
 }
