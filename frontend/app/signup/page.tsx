@@ -1,31 +1,38 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 
 import { AuthFrame } from "@/components/auth/auth-frame";
 import { SignupForm } from "./signup-form";
 
-export const metadata: Metadata = {
-  title: "创建账号",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("auth.signup");
 
-export default function SignupPage() {
+  return {
+    title: t("title"),
+  };
+}
+
+export default async function SignupPage() {
+  const t = await getTranslations("auth.signup");
+
   return (
     <AuthFrame
       footer={
         <p className="mt-5 flex items-center justify-center gap-1 text-center text-sm text-muted-foreground">
-          已有账号？
+          {t("prompt")}
           <Link
             href="/signin"
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
-            去登录
+            {t("link")}
           </Link>
         </p>
       }
     >
       <div>
-        <h1 className="text-xl font-semibold">创建账号</h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">注册新账号</p>
+        <h1 className="text-xl font-semibold">{t("title")}</h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
       <div className="mt-6">
         <SignupForm />

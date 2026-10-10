@@ -1,0 +1,45 @@
+{
+  "userMenu": {
+    "openMenu": "Open user menu",
+    "visitSite": "Visit site",
+    "theme": "Theme",
+    "themeSystem": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "language": "Language",
+    "localeZhCn": "简体中文",
+    "localeEn": "English"
+  },
+  "sidebar": {
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
+  },
+  "common": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
+  },
+  "auth": {
+    "signin": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to continue",
+      "identifier": "Username or email",
+      "password": "Password",
+      "submit": "Sign in",
+      "prompt": "No account yet?",
+      "link": "Sign up"
+    },
+    "signup": {
+      "title": "Create your account",
+      "subtitle": "Start your new account",
+      "email": "Email",
+      "name": "Username",
+      "password": "Password",
+      "confirmPassword": "Confirm password",
+      "passwordHint": "At least {minLength} characters, with letters and digits",
+      "submit": "Sign up",
+      "mismatch": "The two passwords do not match",
+      "prompt": "Already have an account?",
+      "link": "Sign in"
+    }
+  }
+}

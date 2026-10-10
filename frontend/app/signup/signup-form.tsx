@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,8 @@ import { Label } from "@/components/ui/label";
 const PASSWORD_MIN_LENGTH = 8;
 
 export function SignupForm() {
+  const t = useTranslations("auth.signup");
+  const tCommon = useTranslations("common");
   const emailFieldId = useId();
   const nameFieldId = useId();
   const passwordFieldId = useId();
@@ -42,7 +45,7 @@ export function SignupForm() {
     <form className="flex flex-col gap-5" onSubmit={handleSubmit} noValidate>
       <fieldset className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <Label htmlFor={emailFieldId}>邮箱</Label>
+          <Label htmlFor={emailFieldId}>{t("email")}</Label>
           <Input
             id={emailFieldId}
             name="email"
@@ -53,7 +56,7 @@ export function SignupForm() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor={nameFieldId}>用户名</Label>
+          <Label htmlFor={nameFieldId}>{t("name")}</Label>
           <Input
             id={nameFieldId}
             name="name"
@@ -64,7 +67,7 @@ export function SignupForm() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor={passwordFieldId}>密码</Label>
+          <Label htmlFor={passwordFieldId}>{t("password")}</Label>
           <InputGroup>
             <InputGroupInput
               id={passwordFieldId}
@@ -78,7 +81,11 @@ export function SignupForm() {
             <InputGroupAddon align="inline-end">
               <InputGroupButton
                 size="icon-xs"
-                aria-label={isPasswordVisible ? "隐藏密码" : "显示密码"}
+                aria-label={
+                  isPasswordVisible
+                    ? tCommon("hidePassword")
+                    : tCommon("showPassword")
+                }
                 onClick={() => setIsPasswordVisible((visible) => !visible)}
               >
                 {isPasswordVisible ? <EyeOff /> : <Eye />}
@@ -86,12 +93,12 @@ export function SignupForm() {
             </InputGroupAddon>
           </InputGroup>
           <p className="text-xs text-muted-foreground">
-            密码长度至少 {PASSWORD_MIN_LENGTH} 位，须包含：字母/数字
+            {t("passwordHint", { minLength: PASSWORD_MIN_LENGTH })}
           </p>
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor={confirmFieldId}>确认密码</Label>
+          <Label htmlFor={confirmFieldId}>{t("confirmPassword")}</Label>
           <InputGroup>
             <InputGroupInput
               id={confirmFieldId}
@@ -108,7 +115,11 @@ export function SignupForm() {
             <InputGroupAddon align="inline-end">
               <InputGroupButton
                 size="icon-xs"
-                aria-label={isConfirmVisible ? "隐藏密码" : "显示密码"}
+                aria-label={
+                  isConfirmVisible
+                    ? tCommon("hidePassword")
+                    : tCommon("showPassword")
+                }
                 onClick={() => setIsConfirmVisible((visible) => !visible)}
               >
                 {isConfirmVisible ? <EyeOff /> : <Eye />}
@@ -121,14 +132,14 @@ export function SignupForm() {
               id={mismatchId}
               role="alert"
             >
-              两次输入的密码不一致
+              {t("mismatch")}
             </p>
           ) : null}
         </div>
       </fieldset>
 
       <Button type="submit" className="w-full">
-        注册
+        {t("submit")}
       </Button>
     </form>
   );

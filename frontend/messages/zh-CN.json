@@ -1,0 +1,45 @@
+{
+  "userMenu": {
+    "openMenu": "打开用户菜单",
+    "visitSite": "访问前台",
+    "theme": "主题色",
+    "themeSystem": "跟随系统",
+    "themeLight": "亮色",
+    "themeDark": "暗色",
+    "language": "语言",
+    "localeZhCn": "简体中文",
+    "localeEn": "English"
+  },
+  "sidebar": {
+    "collapse": "收起侧边栏",
+    "expand": "展开侧边栏"
+  },
+  "common": {
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码"
+  },
+  "auth": {
+    "signin": {
+      "title": "欢迎回来",
+      "subtitle": "登录以继续",
+      "identifier": "用户名或邮箱",
+      "password": "密码",
+      "submit": "登录",
+      "prompt": "没有账号？",
+      "link": "去注册"
+    },
+    "signup": {
+      "title": "创建账号",
+      "subtitle": "注册新账号",
+      "email": "邮箱",
+      "name": "用户名",
+      "password": "密码",
+      "confirmPassword": "确认密码",
+      "passwordHint": "密码长度至少 {minLength} 位，须包含：字母/数字",
+      "submit": "注册",
+      "mismatch": "两次输入的密码不一致",
+      "prompt": "已有账号？",
+      "link": "去登录"
+    }
+  }
+}
