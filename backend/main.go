@@ -10,6 +10,10 @@ import (
 )
 
 func main() {
+	if err := config.LoadDotEnv(); err != nil {
+		log.Printf("dotenv: %v", err)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal(err)

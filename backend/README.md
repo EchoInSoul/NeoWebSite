@@ -14,7 +14,7 @@
 | `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close`；下一轮在此长出 `*ent.Client` |
 | `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
 | `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
-| `scripts/db-up.sh` / `scripts/dev.sh` | — | 起本地 Postgres 容器（等到 healthy） / 读取 `.env` 后启动后端 |
+| `scripts/db-up.sh` / `scripts/dev.sh` | — | 起本地 Postgres 容器（等到 healthy） / 启动后端（先定位到 `backend/` 再 `go run .`，可在任意目录执行） |
 | `docker-compose.yml` + `deploy/postgres/` | — | 本地 Postgres 容器定义与首次初始化（建 `neoblog_test`、`neoblog_atlas_dev`） |
 | `internal/modules/health/module.go` | `health.module.ts` | 装配本模块，`New` 返回 `*Module` 并暴露对外能力 |
 | `internal/modules/health/controller.go` | `health.controller.ts` | 本模块的路由声明与 HTTP 编解码（包内私有） |
@@ -50,7 +50,7 @@ postsModule.Register(api)
 | `APP_ENV` | `development` | 环境标识，出现在健康检查响应里；`production` 时自动切到 Gin release 模式（关闭 debug 横幅与路由表打印） |
 | `APP_VERSION` | 编译进二进制的版本号 | 仅作运行时临时覆盖（本地调试），常规部署不设置 |
 | `SERVICE_NAME` | `website-backend` | 服务名 |
-| `DATABASE_URL` | 无（必需） | Postgres 连接串；缺失或不可用时启动即失败 |
+| `DATABASE_URL` | 无（必需） | Postgres 连接串；可写在 `backend/.env`（启动时自动加载，环境变量优先）；缺失或不可用时启动即失败 |
 | `DATABASE_URL_TEST` | 无 | 集成测试专用连接串；不设置时集成用例自动 skip |
 | `DB_MAX_OPEN_CONNS` | `10` | 连接池最大连接数 |
 | `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
@@ -95,8 +95,8 @@ cd /mnt/f/protect/NeoBlog/backend && docker compose up -d
 在 `backend/` 目录下：
 
 ```bash
-bash scripts/dev.sh     # 读取 .env 后启动（推荐）
-go run .                # 需自行 export DATABASE_URL；默认 :5732
+go run .                # 启动时自动加载工作目录下的 .env；默认 :5732（推荐）
+bash scripts/dev.sh     # 同上（先定位到 backend/，可在任意目录执行）
 ADDR=:9090 go run .     # 自定义端口
 ```
 

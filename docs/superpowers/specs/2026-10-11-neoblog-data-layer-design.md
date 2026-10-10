@@ -69,7 +69,7 @@ backend/
 - `database.Open(ctx, cfg) (*Database, error)`：`sql.Open("pgx", dsn)` → 设置连接池 → 启动期 `Ping`（超时 5s）。失败返回错误，`main.go` 终止启动；**不做重试**。
 - `Database` 本轮形状：私有 `db *sql.DB` + `Ping(ctx) error` + `Close() error`。下一轮新增 `Client *ent.Client` 字段与构造逻辑，`Open` 签名不变（只增字段，不改契约）。
 - 本地连接串：`postgresql://neoblog:neoblog@127.0.0.1:5434/neoblog?sslmode=disable`（写进 `.env.example`）；生产由部署注入完整 DSN。
-- 本地读 `.env` 的唯一途径是 `scripts/dev.sh`（`set -a` 加载后 `go run .`）；生产不读 `.env`。
+- 启动时自动加载工作目录下的 `.env`（`config.LoadDotEnv`：已存在的环境变量优先，文件缺失不算错误，非法行报错但不算致命）；`scripts/dev.sh` 保留为等价的 shell 方式；生产直接注入环境变量即可。
 - `.env` 同时被 `docker-compose.yml` 读取（compose 默认读同目录 `.env`）：改密码要同时改 `POSTGRES_PASSWORD` 与 `DATABASE_URL` 两处，`.env.example` 里写明。
 
 ## 6. 迁移工作流（下一轮落地，命令已真机验证）

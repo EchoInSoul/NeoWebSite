@@ -24,7 +24,7 @@ type Config struct {
 func Load() (Config, error) {
 	databaseURL := getEnv("DATABASE_URL", "")
 	if databaseURL == "" {
-		return Config{}, errors.New("DATABASE_URL is required")
+		return Config{}, errors.New("DATABASE_URL is required (add it to .env or export it)")
 	}
 
 	maxOpen, err := getEnvInt("DB_MAX_OPEN_CONNS", 10)
