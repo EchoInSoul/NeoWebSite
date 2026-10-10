@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -18,7 +19,7 @@ import (
 	"website/backend/internal/database"
 )
 
-func newTestApp(t *testing.T, db *database.Database) *httptest.Server {
+func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Server, *scs.SessionManager) {
 	t.Helper()
 
 	sm := scs.New()
@@ -35,6 +36,13 @@ func newTestApp(t *testing.T, db *database.Database) *httptest.Server {
 
 	ts := httptest.NewServer(sm.LoadAndSave(engine))
 	t.Cleanup(ts.Close)
+	return ts, sm
+}
+
+func newTestApp(t *testing.T, db *database.Database) *httptest.Server {
+	t.Helper()
+
+	ts, _ := newTestAppWithSessions(t, db)
 	return ts
 }
 
@@ -294,5 +302,64 @@ func TestLogoutDestroysSession(t *testing.T) {
 	defer me.Body.Close()
 	if me.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("me after logout status = %d, want 401", me.StatusCode)
+	}
+}
+
+type deleteFailStore struct {
+	scs.Store
+}
+
+func (s deleteFailStore) Delete(token string) error {
+	return errors.New("store delete failed")
+}
+
+func TestLoginFailsWhenSessionStoreDeleteFails(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts, sm := newTestAppWithSessions(t, db)
+	client := testClient(t)
+
+	first := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	first.Body.Close()
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("first login status = %d, want 200", first.StatusCode)
+	}
+
+	sm.Store = deleteFailStore{sm.Store}
+
+	second := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("second login status = %d, want 500", second.StatusCode)
+	}
+}
+
+func TestLogoutFailsWhenSessionStoreDeleteFails(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts, sm := newTestAppWithSessions(t, db)
+	client := testClient(t)
+
+	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login.Body.Close()
+	if login.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want 200", login.StatusCode)
+	}
+
+	sm.Store = deleteFailStore{sm.Store}
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	if err != nil {
+		t.Fatalf("build logout: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("logout status = %d, want 500", resp.StatusCode)
 	}
 }

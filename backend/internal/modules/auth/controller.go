@@ -47,7 +47,10 @@ func (c *controller) login(ctx *gin.Context) {
 }
 
 func (c *controller) logout(ctx *gin.Context) {
-	c.service.Logout(ctx.Request.Context())
+	if err := c.service.Logout(ctx.Request.Context()); err != nil {
+		ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error"})
+		return
+	}
 	ctx.Status(http.StatusNoContent)
 }
 

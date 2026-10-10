@@ -17,6 +17,9 @@ func CreateAdminUser(ctx context.Context, db *database.Database, email, nickname
 	if len(password) > maxPasswordBytes {
 		return User{}, errors.New("password must be at most 72 bytes")
 	}
+	if password == "" {
+		return User{}, errors.New("password is required")
+	}
 
 	email = strings.ToLower(strings.TrimSpace(email))
 	nickname = strings.TrimSpace(nickname)

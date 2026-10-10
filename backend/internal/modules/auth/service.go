@@ -52,14 +52,16 @@ func (s *Service) Login(ctx context.Context, identifier, password string) (User,
 		return User{}, ErrInvalidCredentials
 	}
 
-	s.sessions.RenewToken(ctx)
+	if err := s.sessions.RenewToken(ctx); err != nil {
+		return User{}, err
+	}
 	s.sessions.Put(ctx, guard.SessionUserIDKey, found.ID.String())
 
 	return toUser(found), nil
 }
 
-func (s *Service) Logout(ctx context.Context) {
-	s.sessions.Destroy(ctx)
+func (s *Service) Logout(ctx context.Context) error {
+	return s.sessions.Destroy(ctx)
 }
 
 func (s *Service) CurrentUser(ctx context.Context, userID string) (User, error) {

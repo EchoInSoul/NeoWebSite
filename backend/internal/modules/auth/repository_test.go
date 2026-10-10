@@ -153,3 +153,16 @@ func TestCreateAdminUserRejectsLongPassword(t *testing.T) {
 		t.Fatal("expected 73-byte password to be rejected")
 	}
 }
+
+func TestCreateAdminUserRejectsEmptyPassword(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+
+	created, err := CreateAdminUser(context.Background(), db, "empty+"+tag+"@example.com", "empty"+tag, "")
+	if err == nil {
+		t.Cleanup(func() {
+			_ = db.Client.User.DeleteOneID(uuid.MustParse(created.ID)).Exec(context.Background())
+		})
+		t.Fatal("expected empty password to be rejected")
+	}
+}
