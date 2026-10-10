@@ -133,3 +133,8 @@
     @apply font-sans;
   }
 }
+
+.disable-theme-transitions,
+.disable-theme-transitions * {
+  transition: none !important;
+}
