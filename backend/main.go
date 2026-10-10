@@ -8,7 +8,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	log.Printf("listening on %s", cfg.Addr)
 	if err := app.New(cfg).Run(cfg.Addr); err != nil {
