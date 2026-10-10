@@ -1,6 +1,10 @@
 package config
 
-import "os"
+import (
+	"os"
+
+	"website/backend/internal/version"
+)
 
 type Config struct {
 	Addr        string
@@ -13,7 +17,7 @@ func Load() Config {
 	return Config{
 		Addr:        getEnv("ADDR", ":8080"),
 		Environment: getEnv("APP_ENV", "development"),
-		Version:     getEnv("APP_VERSION", "dev"),
+		Version:     getEnv("APP_VERSION", version.Version),
 		ServiceName: getEnv("SERVICE_NAME", "website-backend"),
 	}
 }

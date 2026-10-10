@@ -1,5 +1,7 @@
 # website 后端（Go + Gin）
 
+当前版本：0.0.1
+
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
 ## 目录与 NestJS 对照
@@ -9,6 +11,8 @@
 | `main.go` | `main.ts` | 启动引导：加载配置、创建应用、启动 |
 | `internal/app/app.go` | `app.module.ts` + `setGlobalPrefix` | 组装模块、全局前缀 `/api/v1`、HTTP 服务器（超时 / 优雅关闭） |
 | `internal/config` | `ConfigModule` | 读环境变量，产出 `Config` |
+| `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
+| `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
 | `internal/modules/health/module.go` | `health.module.ts` | 装配本模块，`New` 返回 `*Module` 并暴露对外能力 |
 | `internal/modules/health/controller.go` | `health.controller.ts` | 本模块的路由声明与 HTTP 编解码（包内私有） |
 | `internal/modules/health/service.go` | `health.service.ts` | 业务逻辑，模块对外暴露的能力 |
@@ -39,8 +43,21 @@ postsModule.Register(api)
 | --- | --- | --- |
 | `ADDR` | `:8080` | 监听地址 |
 | `APP_ENV` | `development` | 环境标识，出现在健康检查响应里；`production` 时自动切到 Gin release 模式（关闭 debug 横幅与路由表打印） |
-| `APP_VERSION` | `dev` | 版本号，部署时通过环境变量注入 |
+| `APP_VERSION` | 编译进二进制的版本号 | 仅作运行时临时覆盖（本地调试），常规部署不设置 |
 | `SERVICE_NAME` | `website-backend` | 服务名 |
+
+## 版本号
+
+格式 `x.y.z`，唯一来源是 `internal/version/version.go`，用脚本自动进位（minor 进位时 z 归零，major 进位时 y、z 归零）：
+
+| 场景 | 命令 | 示例 |
+| --- | --- | --- |
+| 细节更改 | `./scripts/bump-version.sh patch` | 0.0.1 → 0.0.2 |
+| 中等功能 | `./scripts/bump-version.sh minor` | 0.0.1 → 0.1.0（z 归零） |
+| 大功能 | `./scripts/bump-version.sh major` | 0.0.1 → 1.0.0（y、z 归零） |
+| 直接指定 | `./scripts/bump-version.sh set <x.y.z>` | 设为任意合法版本，如 `set 1.0.0` |
+
+版本号随代码编译进二进制，出现在 `GET /api/v1/healthy` 的 `version` 字段；运行时可用 `APP_VERSION` 环境变量临时覆盖。进位脚本会同步更新本 README 顶部的「当前版本」，改完把 `internal/version/version.go` 和本次改动一起提交。
 
 ## HTTP 服务器
 
@@ -55,4 +72,4 @@ go run .                # 默认 :8080
 ADDR=:9090 go run .     # 自定义端口
 ```
 
-健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"dev","environment":"development","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`
+健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.0.1","environment":"development","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`
