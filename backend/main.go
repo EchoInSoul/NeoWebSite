@@ -1,32 +1,17 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
-	"net/http"
-	"os"
+
+	"website/backend/internal/app"
+	"website/backend/internal/config"
 )
 
 func main() {
-	mux := http.NewServeMux()
+	cfg := config.Load()
 
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-
-	addr := os.Getenv("ADDR")
-	if addr == "" {
-		addr = ":8080"
-	}
-
-	log.Printf("listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	log.Printf("listening on %s", cfg.Addr)
+	if err := app.New(cfg).Run(cfg.Addr); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }
