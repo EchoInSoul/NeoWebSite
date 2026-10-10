@@ -6,15 +6,19 @@ import (
 	"fmt"
 	"time"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"website/backend/internal/config"
+	"website/backend/internal/database/ent"
 )
 
 const pingTimeout = 5 * time.Second
 
 type Database struct {
-	db *sql.DB
+	db     *sql.DB
+	Client *ent.Client
 }
 
 func Open(ctx context.Context, cfg config.Config) (*Database, error) {
@@ -35,7 +39,13 @@ func Open(ctx context.Context, cfg config.Config) (*Database, error) {
 		return nil, fmt.Errorf("database: connect: %w", err)
 	}
 
-	return &Database{db: db}, nil
+	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+
+	return &Database{db: db, Client: client}, nil
+}
+
+func (d *Database) SQL() *sql.DB {
+	return d.db
 }
 
 func (d *Database) Ping(ctx context.Context) error {
@@ -43,5 +53,9 @@ func (d *Database) Ping(ctx context.Context) error {
 }
 
 func (d *Database) Close() error {
+	if err := d.Client.Close(); err != nil {
+		_ = d.db.Close()
+		return err
+	}
 	return d.db.Close()
 }

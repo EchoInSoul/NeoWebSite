@@ -44,3 +44,21 @@ func TestOpenPingClose(t *testing.T) {
 		t.Fatal("expected ping to fail after close")
 	}
 }
+
+func TestOpenBuildsEntClient(t *testing.T) {
+	url := os.Getenv("DATABASE_URL_TEST")
+	if url == "" {
+		t.Skip("SKIP: DATABASE_URL_TEST is not set")
+	}
+	db, err := Open(context.Background(), testConfig(url))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	if db.Client == nil {
+		t.Fatal("expected ent client to be built")
+	}
+	if err := db.SQL().PingContext(context.Background()); err != nil {
+		t.Fatalf("sql ping: %v", err)
+	}
+}
