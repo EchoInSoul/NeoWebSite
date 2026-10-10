@@ -11,8 +11,11 @@
 | `main.go` | `main.ts` | 启动引导：加载配置、创建应用、启动 |
 | `internal/app/app.go` | `app.module.ts` + `setGlobalPrefix` | 组装模块、全局前缀 `/api/v1`、HTTP 服务器（超时 / 优雅关闭） |
 | `internal/config` | `ConfigModule` | 读环境变量，产出 `Config` |
+| `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close`；下一轮在此长出 `*ent.Client` |
 | `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
 | `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
+| `scripts/db-up.sh` / `scripts/dev.sh` | — | 起本地 Postgres 容器（等到 healthy） / 读取 `.env` 后启动后端 |
+| `docker-compose.yml` + `deploy/postgres/` | — | 本地 Postgres 容器定义与首次初始化（建 `neoblog_test`、`neoblog_atlas_dev`） |
 | `internal/modules/health/module.go` | `health.module.ts` | 装配本模块，`New` 返回 `*Module` 并暴露对外能力 |
 | `internal/modules/health/controller.go` | `health.controller.ts` | 本模块的路由声明与 HTTP 编解码（包内私有） |
 | `internal/modules/health/service.go` | `health.service.ts` | 业务逻辑，模块对外暴露的能力 |
@@ -47,6 +50,12 @@ postsModule.Register(api)
 | `APP_ENV` | `development` | 环境标识，出现在健康检查响应里；`production` 时自动切到 Gin release 模式（关闭 debug 横幅与路由表打印） |
 | `APP_VERSION` | 编译进二进制的版本号 | 仅作运行时临时覆盖（本地调试），常规部署不设置 |
 | `SERVICE_NAME` | `website-backend` | 服务名 |
+| `DATABASE_URL` | 无（必需） | Postgres 连接串；缺失或不可用时启动即失败 |
+| `DATABASE_URL_TEST` | 无 | 集成测试专用连接串；不设置时集成用例自动 skip |
+| `DB_MAX_OPEN_CONNS` | `10` | 连接池最大连接数 |
+| `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
+| `DB_CONN_MAX_LIFETIME` | `30m` | 连接最长存活时间 |
+| `POSTGRES_PASSWORD` | `neoblog` | 本地容器密码（compose 读 `.env`）；改动需同步 `DATABASE_URL` |
 
 ## 版本号
 
@@ -65,12 +74,29 @@ postsModule.Register(api)
 
 `app.go` 已配置读头 / 读 / 写 / 空闲超时；收到 SIGINT / SIGTERM 后停止接收新请求，等待在途请求完成（最多 10 秒）再退出。默认不信任任何代理头，将来放到反向代理后面时再在 `app.go` 配置真实代理 CIDR。
 
+## 数据库
+
+本地开发用 WSL 里的 Docker 起独立 Postgres 17 容器（端口 5434；5432 是 D 盘项目、5433 是 Neo 项目的库，互不干扰）：
+
+```bash
+bash scripts/db-up.sh   # 起容器并等到 healthy（容器名 neoblog-postgres）
+```
+
+在 WSL 终端里手动执行等价命令：
+
+```bash
+cd /mnt/f/protect/NeoBlog/backend && docker compose up -d
+```
+
+下一轮加第一张业务表时在此接入 ent 与 Atlas 版本化迁移（迁移文件放 `migrations/`；工具链与已真机验证的事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节）。
+
 ## 运行
 
 在 `backend/` 目录下：
 
 ```bash
-go run .                # 默认 :5732
+bash scripts/dev.sh     # 读取 .env 后启动（推荐）
+go run .                # 需自行 export DATABASE_URL；默认 :5732
 ADDR=:9090 go run .     # 自定义端口
 ```
 
