@@ -33,7 +33,7 @@
 | Cookie | 名 `session`、HttpOnly、SameSite=Lax、Path=/、`Secure` 仅当 `APP_ENV=production`；有效期默认 7 天（`SESSION_LIFETIME` 可覆盖） | 本轮 |
 | 会话固定防护 | 登录成功后 `RenewToken`；登出 `Destroy` | 本轮 |
 | 会话内容 | 只存 `userID`（键 `auth.user_id`）；不存邮箱昵称快照，避免过期数据 | 本轮 |
-| 数据访问 | ent（schema 在 `internal/database/ent/schema/`，生成代码在 `internal/database/ent/`）；用 `entsql.Open` 复用现有 `*sql.DB`；模块内 `repository.go` 为具体类型、不抽接口（对齐数据层设计「不隔仓储接口层」） | 本轮 |
+| 数据访问 | ent（schema 在 `internal/database/ent/schema/`，生成代码在 `internal/database/ent/`）；用 `entsql.OpenDB(dialect.Postgres, db)` 复用现有 `*sql.DB`（ent 官方的既有连接接法）；模块内 `repository.go` 为具体类型、不抽接口（对齐数据层设计「不隔仓储接口层」） | 本轮 |
 | users ID 方案 | Postgres `uuid` 类型、UUIDv7（`google/uuid`）；不可枚举、时间有序。与 Neo 的 cuid 形状不同但无实际影响：ID 不出现在 API，也无跨项目搬行需求 | 本轮 |
 | 迁移 | Atlas（官方 Windows 二进制，已装）+ 版本化 SQL 进 `migrations/`；流程按数据层设计 §6（diff → 人工审阅 SQL → apply → validate） | 本轮 |
 | 管理员创建 | 新工具 `cmd/create-admin`（应用入口仍在根 `main.go`）：读 `DATABASE_URL`，密码从 stdin 读（不进 shell 历史），bcrypt 后写 users | 本轮 |
@@ -47,7 +47,7 @@
 
 - `internal/modules/auth/`：dto / repository / service / controller / module 五件套。
 - `internal/common/guard/`：`RequireAuth` Gin 中间件（`internal/common` 目录由此建立）。
-- `internal/database`：新增 `Client *ent.Client`（在 `Open` 内构造，签名不变）；暴露底层 `*sql.DB` 供会话存储构造。
+- `internal/database`：新增 `Client *ent.Client`（在 `Open` 内构造，签名不变）；新增访问器 `SQL() *sql.DB`（供会话存储等构造使用）。
 - ent schema：`users`、`sessions`；生成代码与 `tools.go`（ent 生成依赖）。
 - 迁移：`migrations/` 首个迁移（users + sessions）。
 - 脚本：`scripts/db-generate.sh`、`scripts/db-migrate-diff.sh`、`scripts/db-migrate-apply.sh`。
