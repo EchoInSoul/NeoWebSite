@@ -11,24 +11,28 @@
 | `main.go` | `main.ts` | 启动引导：加载配置、创建应用、启动 |
 | `internal/app/app.go` | `app.module.ts` + `setGlobalPrefix` | 组装模块、全局前缀 `/api/v1`、HTTP 服务器（超时 / 优雅关闭） |
 | `internal/config` | `ConfigModule` | 读环境变量，产出 `Config` |
-| `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close`；下一轮在此长出 `*ent.Client` |
+| `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close` / `Client`（ent）/ `SQL` |
 | `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
 | `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
 | `scripts/db-up.sh` / `scripts/dev.sh` | — | 起本地 Postgres 容器（等到 healthy） / 启动后端（先定位到 `backend/` 再 `go run .`，可在任意目录执行） |
 | `docker-compose.yml` + `deploy/postgres/` | — | 本地 Postgres 容器定义与首次初始化（建 `neoblog_test`、`neoblog_atlas_dev`） |
+| `migrations/` + `scripts/db-generate.sh` / `db-migrate-diff.sh` / `db-migrate-apply.sh` | — | 版本化迁移：ent 代码生成、生成迁移（diff）、应用到 `neoblog` 与 `neoblog_test` |
 | `internal/modules/health/module.go` | `health.module.ts` | 装配本模块，`New` 返回 `*Module` 并暴露对外能力 |
 | `internal/modules/health/controller.go` | `health.controller.ts` | 本模块的路由声明与 HTTP 编解码（包内私有） |
 | `internal/modules/health/service.go` | `health.service.ts` | 业务逻辑，模块对外暴露的能力 |
 | `internal/modules/health/dto.go` | `dto/*.dto.ts` | 请求/响应数据结构 |
-| `internal/common`（待加） | `src/common` | guards 认证 / pipes 校验 / interceptors / filters 统一错误 |
+| `internal/modules/auth/*` | `auth.module.ts` 等 | 登录 / 登出 / 当前用户；`Register`（公开）与 `RegisterProtected`（受保护） |
+| `internal/common/guard` | `src/common`（Guards） | `RequireAuth` 会话守卫中间件；会话键常量 `auth.user_id` |
+| `cmd/create-admin` | — | 管理员账号创建工具（密码从 stdin 读） |
+| `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
 
 ## 硬性规则
 
 1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。
 2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。
-3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）和 app；service 一律不 import gin。
+3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app 和 `internal/common/guard`（中间件）；service 一律不 import gin。
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
-5. 模块只通过 `New(cfg)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。
+5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为工具与测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
 7. 模块禁止自建数据库连接（禁止 `sql.Open` 等），只能用注入进来的连接。
 8. `internal/database` 不得 import 任何业务模块。
@@ -55,6 +59,7 @@ postsModule.Register(api)
 | `DB_MAX_OPEN_CONNS` | `10` | 连接池最大连接数 |
 | `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
 | `DB_CONN_MAX_LIFETIME` | `30m` | 连接最长存活时间 |
+| `SESSION_LIFETIME` | `168h` | 会话有效期（浏览器 cookie 的 `Max-Age` 同此值） |
 | `POSTGRES_PASSWORD` | `neoblog` | 本地容器密码（compose 读 `.env`）；改动需同步 `DATABASE_URL` |
 
 ## 版本号
@@ -88,7 +93,34 @@ bash scripts/db-up.sh   # 起容器并等到 healthy（容器名 neoblog-postgre
 cd /mnt/f/protect/NeoBlog/backend && docker compose up -d
 ```
 
-下一轮加第一张业务表时在此接入 ent 与 Atlas 版本化迁移（迁移文件放 `migrations/`；工具链与已真机验证的事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节）。
+迁移工作流（Atlas，迁移文件在 `migrations/`，生成后**人工审阅 SQL** 再提交）：
+
+```bash
+bash scripts/db-up.sh                  # 起容器（等 healthy）
+export DATABASE_URL='postgresql://neoblog:neoblog@127.0.0.1:5434/neoblog?sslmode=disable'
+export DATABASE_URL_TEST='postgresql://neoblog:neoblog@127.0.0.1:5434/neoblog_test?sslmode=disable'
+bash scripts/db-migrate-apply.sh       # 把 migrations/ 应用到两个库（集成测试的前置）
+bash scripts/db-generate.sh            # ent schema 有变更后重新生成代码
+bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后人工审阅 + atlas migrate hash/validate）
+```
+
+应用启动绝不自动迁移；`ATLAS_DEV_URL` 缺省指向空的 `neoblog_atlas_dev`（脚本内默认值）。工具链细节与已验证事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节。
+
+## 认证
+
+第一版（层 1）：登录 / 登出 / 当前用户。账号只有管理员一个，用工具创建（密码从 stdin 读，不进 shell 历史）：
+
+```bash
+go run ./cmd/create-admin --email you@example.com --nickname yourname
+```
+
+| 方法 路径 | 认证 | 说明 |
+| --- | --- | --- |
+| `POST /api/v1/auth/login` | 公开 | body `{"identifier":"邮箱或昵称","password":"..."}` → 200 `{"email","nickname"}` + 会话 cookie；凭据错 401 `invalid_credentials`；请求不合法 400 `invalid_request` |
+| `POST /api/v1/auth/logout` | 需登录 | 销毁会话，返回 204 |
+| `GET /api/v1/auth/me` | 需登录 | 返回 `{"email","nickname"}`；未登录 401 `unauthorized` |
+
+会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当 `APP_ENV=production`；登录成功换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth` 挂载。
 
 ## 运行
 
@@ -100,4 +132,4 @@ bash scripts/dev.sh     # 同上（先定位到 backend/，可在任意目录执
 ADDR=:9090 go run .     # 自定义端口
 ```
 
-健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.1.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
+健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.2.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
