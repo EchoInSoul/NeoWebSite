@@ -66,3 +66,34 @@ func TestLoadRejectsIdleGreaterThanOpen(t *testing.T) {
 		t.Fatal("expected error when DB_MAX_IDLE_CONNS > DB_MAX_OPEN_CONNS")
 	}
 }
+
+func TestLoadSessionLifetimeDefaultsToSevenDays(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SessionLifetime != 168*time.Hour {
+		t.Fatalf("SessionLifetime = %v, want 168h", cfg.SessionLifetime)
+	}
+}
+
+func TestLoadReadsSessionLifetimeOverride(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("SESSION_LIFETIME", "1h")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SessionLifetime != time.Hour {
+		t.Fatalf("SessionLifetime = %v, want 1h", cfg.SessionLifetime)
+	}
+}
+
+func TestLoadRejectsInvalidSessionLifetime(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("SESSION_LIFETIME", "soon")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SESSION_LIFETIME") {
+		t.Fatalf("expected error mentioning SESSION_LIFETIME, got %v", err)
+	}
+}

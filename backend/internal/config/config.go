@@ -19,6 +19,7 @@ type Config struct {
 	DBMaxOpenConns    int
 	DBMaxIdleConns    int
 	DBConnMaxLifetime time.Duration
+	SessionLifetime   time.Duration
 }
 
 func Load() (Config, error) {
@@ -42,6 +43,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	sessionLifetime, err := getEnvDuration("SESSION_LIFETIME", 168*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+
 	if maxIdle > maxOpen {
 		return Config{}, fmt.Errorf("DB_MAX_IDLE_CONNS (%d) must not exceed DB_MAX_OPEN_CONNS (%d)", maxIdle, maxOpen)
 	}
@@ -55,6 +61,7 @@ func Load() (Config, error) {
 		DBMaxOpenConns:    maxOpen,
 		DBMaxIdleConns:    maxIdle,
 		DBConnMaxLifetime: lifetime,
+		SessionLifetime:   sessionLifetime,
 	}, nil
 }
 

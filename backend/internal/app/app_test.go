@@ -1,0 +1,254 @@
+package app
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+
+	"website/backend/internal/config"
+	"website/backend/internal/database"
+	"website/backend/internal/modules/auth"
+)
+
+func testConfig(t *testing.T, environment string) config.Config {
+	t.Helper()
+
+	url := os.Getenv("DATABASE_URL_TEST")
+	if url == "" {
+		t.Skip("SKIP: DATABASE_URL_TEST is not set")
+	}
+
+	return config.Config{
+		Addr:              ":0",
+		Environment:       environment,
+		ServiceName:       "website-backend-test",
+		DatabaseURL:       url,
+		DBMaxOpenConns:    10,
+		DBMaxIdleConns:    5,
+		DBConnMaxLifetime: 30 * time.Minute,
+		SessionLifetime:   time.Hour,
+	}
+}
+
+func newTestServer(t *testing.T, environment string) (*httptest.Server, *database.Database) {
+	t.Helper()
+
+	cfg := testConfig(t, environment)
+	db, err := database.Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ts := httptest.NewServer(New(cfg, db).Handler())
+	t.Cleanup(ts.Close)
+	return ts, db
+}
+
+func createTestUser(t *testing.T, db *database.Database) (auth.User, string) {
+	t.Helper()
+
+	tag := fmt.Sprintf("%d", time.Now().UnixNano())
+	password := "pass-" + tag
+	u, err := auth.CreateAdminUser(context.Background(), db, "admin+"+tag+"@test.local", "admin"+tag, password)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Client.User.DeleteOneID(uuid.MustParse(u.ID)).Exec(context.Background())
+	})
+	return u, password
+}
+
+func newClient(t *testing.T) *http.Client {
+	t.Helper()
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("jar: %v", err)
+	}
+	return &http.Client{Jar: jar}
+}
+
+func login(t *testing.T, client *http.Client, base, identifier, password string) *http.Response {
+	t.Helper()
+
+	payload, err := json.Marshal(map[string]string{"identifier": identifier, "password": password})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	resp, err := client.Post(base+"/api/v1/auth/login", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	return resp
+}
+
+func sessionCookie(resp *http.Response) *http.Cookie {
+	for _, c := range resp.Cookies() {
+		if c.Name == "session" {
+			return c
+		}
+	}
+	return nil
+}
+
+func TestAuthFlowEndToEnd(t *testing.T) {
+	ts, db := newTestServer(t, "development")
+	u, password := createTestUser(t, db)
+	client := newClient(t)
+
+	resp := login(t, client, ts.URL, u.Email, password)
+	cookie := sessionCookie(resp)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want 200", resp.StatusCode)
+	}
+	if cookie == nil {
+		t.Fatal("expected a session cookie on login")
+	}
+	if !cookie.HttpOnly {
+		t.Error("session cookie must be HttpOnly")
+	}
+	if cookie.SameSite != http.SameSiteLaxMode {
+		t.Errorf("SameSite = %v, want Lax", cookie.SameSite)
+	}
+	if cookie.Path != "/" {
+		t.Errorf("Path = %q, want /", cookie.Path)
+	}
+	if cookie.Secure {
+		t.Error("development cookie must not be Secure")
+	}
+
+	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	if me.StatusCode != http.StatusOK {
+		t.Fatalf("me status = %d, want 200", me.StatusCode)
+	}
+	var meBody auth.UserResponse
+	if err := json.NewDecoder(me.Body).Decode(&meBody); err != nil {
+		t.Fatalf("decode me: %v", err)
+	}
+	me.Body.Close()
+	if meBody.Email != u.Email {
+		t.Fatalf("me email = %q, want %q", meBody.Email, u.Email)
+	}
+
+	logoutReq, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	if err != nil {
+		t.Fatalf("build logout: %v", err)
+	}
+	logout, err := client.Do(logoutReq)
+	if err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	logout.Body.Close()
+	if logout.StatusCode != http.StatusNoContent {
+		t.Fatalf("logout status = %d, want 204", logout.StatusCode)
+	}
+
+	after, err := client.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me after logout: %v", err)
+	}
+	after.Body.Close()
+	if after.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("me after logout status = %d, want 401", after.StatusCode)
+	}
+}
+
+func TestMeRevokesSessionWhenUserDeleted(t *testing.T) {
+	ts, db := newTestServer(t, "development")
+	u, password := createTestUser(t, db)
+	client := newClient(t)
+
+	resp := login(t, client, ts.URL, u.Email, password)
+	resp.Body.Close()
+
+	if err := db.Client.User.DeleteOneID(uuid.MustParse(u.ID)).Exec(context.Background()); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+
+	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	defer me.Body.Close()
+	if me.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", me.StatusCode)
+	}
+
+	cleared := sessionCookie(me)
+	if cleared == nil {
+		t.Fatal("expected the session cookie to be cleared")
+	}
+	if cleared.MaxAge >= 0 {
+		t.Fatalf("session cookie MaxAge = %d, want negative", cleared.MaxAge)
+	}
+}
+
+func TestProductionCookieIsSecure(t *testing.T) {
+	ts, db := newTestServer(t, "production")
+	u, password := createTestUser(t, db)
+	client := newClient(t)
+
+	resp := login(t, client, ts.URL, u.Email, password)
+	cookie := sessionCookie(resp)
+	resp.Body.Close()
+	if cookie == nil {
+		t.Fatal("expected a session cookie on login")
+	}
+	if !cookie.Secure {
+		t.Error("production session cookie must be Secure")
+	}
+}
+
+func TestAnonymousLogoutRejected(t *testing.T) {
+	ts, _ := newTestServer(t, "development")
+	client := newClient(t)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	if err != nil {
+		t.Fatalf("build logout: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestHealthyEndpointStillWorks(t *testing.T) {
+	ts, _ := newTestServer(t, "development")
+
+	resp, err := http.Get(ts.URL + "/api/v1/healthy")
+	if err != nil {
+		t.Fatalf("healthy: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["database"] != "ok" {
+		t.Fatalf("database = %v, want ok", body["database"])
+	}
+}

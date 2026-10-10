@@ -9,10 +9,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alexedwards/scs/postgresstore"
+	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
 
+	"website/backend/internal/common/guard"
 	"website/backend/internal/config"
 	"website/backend/internal/database"
+	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/health"
 )
 
@@ -26,7 +30,7 @@ const (
 )
 
 type App struct {
-	engine *gin.Engine
+	handler http.Handler
 }
 
 func New(cfg config.Config, db *database.Database) *App {
@@ -38,18 +42,40 @@ func New(cfg config.Config, db *database.Database) *App {
 
 	_ = engine.SetTrustedProxies(nil)
 
+	sessions := newSessionManager(cfg, db)
+
 	api := engine.Group(apiPrefix)
 
 	healthModule := health.New(cfg, db)
 	healthModule.Register(api)
 
-	return &App{engine: engine}
+	authModule := auth.New(db, sessions)
+	authModule.Register(api)
+	authModule.RegisterProtected(api.Group("", guard.RequireAuth(sessions)))
+
+	return &App{handler: sessions.LoadAndSave(engine)}
+}
+
+func newSessionManager(cfg config.Config, db *database.Database) *scs.SessionManager {
+	sm := scs.New()
+	sm.Lifetime = cfg.SessionLifetime
+	sm.Store = postgresstore.New(db.SQL())
+	sm.Cookie.Name = "session"
+	sm.Cookie.HttpOnly = true
+	sm.Cookie.SameSite = http.SameSiteLaxMode
+	sm.Cookie.Path = "/"
+	sm.Cookie.Secure = cfg.Environment == "production"
+	return sm
+}
+
+func (a *App) Handler() http.Handler {
+	return a.handler
 }
 
 func (a *App) Run(addr string) error {
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           a.engine,
+		Handler:           a.handler,
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,
