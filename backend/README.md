@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.0.2
+当前版本：0.1.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -100,4 +100,4 @@ go run .                # 需自行 export DATABASE_URL；默认 :5732
 ADDR=:9090 go run .     # 自定义端口
 ```
 
-健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.0.2","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
+健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.1.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
