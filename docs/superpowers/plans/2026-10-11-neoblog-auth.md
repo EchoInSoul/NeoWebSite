@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-11-neoblog-auth-design.md`
 
+> **实施后修订（2026-10-11）：** 按用户要求收窄为后端 only——**Task 7（`cmd/create-admin`）与 Task 9（前端接线）不纳入本分支**（相关提交已从分支历史移除），这两节作废；Task 1–6、8、10 照常落地。首次建号方式另行决定。
+
 ## Global Constraints
 
 - 手写 Go 文件**零注释**（ent 生成物与 `//go:build`、`//go:embed` 这类工具链指令豁免）；`gofmt -l .` 必须为空。

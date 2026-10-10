@@ -23,7 +23,6 @@
 | `internal/modules/health/dto.go` | `dto/*.dto.ts` | 请求/响应数据结构 |
 | `internal/modules/auth/*` | `auth.module.ts` 等 | 登录 / 登出 / 当前用户；`Register`（公开）与 `RegisterProtected`（受保护） |
 | `internal/common/guard` | `src/common`（Guards） | `RequireAuth` 会话守卫中间件；会话键常量 `auth.user_id` |
-| `cmd/create-admin` | — | 管理员账号创建工具（密码从 stdin 读） |
 | `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
 
 ## 硬性规则
@@ -32,7 +31,7 @@
 2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。
 3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app 和 `internal/common/guard`（中间件）；service 一律不 import gin。
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
-5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为工具与测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。
+5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
 7. 模块禁止自建数据库连接（禁止 `sql.Open` 等），只能用注入进来的连接。
 8. `internal/database` 不得 import 任何业务模块。
@@ -108,11 +107,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 ## 认证
 
-第一版（层 1）：登录 / 登出 / 当前用户。账号只有管理员一个，用工具创建（密码从 stdin 读，不进 shell 历史）：
-
-```bash
-go run ./cmd/create-admin --email you@example.com --nickname yourname
-```
+第一版（层 1）：登录 / 登出 / 当前用户，只做后端。账号只有管理员一个；本轮不提供注册或建号入口，`auth.CreateAdminUser` 目前仅供测试使用（首次建号方式另行决定）。
 
 | 方法 路径 | 认证 | 说明 |
 | --- | --- | --- |
