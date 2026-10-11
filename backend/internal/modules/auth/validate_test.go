@@ -15,6 +15,8 @@ func TestValidEmail(t *testing.T) {
 		{"", false},
 		{"no-at", false},
 		{"a@@b", false},
+		{"Bob <bob@example.com>", false},
+		{"bob@example.com (comment)", false},
 		{strings.Repeat("a", 250) + "@b.com", false},
 	}
 	for _, tc := range cases {

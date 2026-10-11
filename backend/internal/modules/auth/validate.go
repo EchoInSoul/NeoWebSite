@@ -19,8 +19,8 @@ func validEmail(email string) bool {
 	if len(email) > 254 {
 		return false
 	}
-	_, err := mail.ParseAddress(email)
-	return err == nil
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Address == email
 }
 
 func validNickname(nickname string) bool {
