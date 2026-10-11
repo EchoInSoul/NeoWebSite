@@ -9,7 +9,11 @@ import (
 )
 
 func LoadDotEnv() error {
-	data, err := os.ReadFile(".env")
+	return LoadDotEnvFile(".env")
+}
+
+func LoadDotEnvFile(path string) error {
+	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -19,7 +23,7 @@ func LoadDotEnv() error {
 
 	values, err := parseDotEnv(string(data))
 	if err != nil {
-		return fmt.Errorf(".env: %w", err)
+		return fmt.Errorf("%s: %w", path, err)
 	}
 
 	for key, value := range values {

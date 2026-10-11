@@ -10,6 +10,19 @@ import (
 	"website/backend/internal/version"
 )
 
+type SMTPTLSMode string
+
+const (
+	SMTPTLSStartTLS SMTPTLSMode = "starttls"
+	SMTPTLSSSL      SMTPTLSMode = "ssl"
+)
+
+const (
+	defaultSMTPPort     = 587
+	defaultSMTPFromName = "NeoBlog"
+	maxSMTPPort         = 65535
+)
+
 type Config struct {
 	Addr              string
 	Environment       string
@@ -20,6 +33,13 @@ type Config struct {
 	DBMaxIdleConns    int
 	DBConnMaxLifetime time.Duration
 	SessionLifetime   time.Duration
+	SMTPHost          string
+	SMTPPort          int
+	SMTPTLS           SMTPTLSMode
+	SMTPUsername      string
+	SMTPPassword      string
+	SMTPFrom          string
+	SMTPFromName      string
 }
 
 func Load() (Config, error) {
@@ -48,6 +68,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	smtp, err := loadSMTP()
+	if err != nil {
+		return Config{}, err
+	}
+
 	if maxIdle > maxOpen {
 		return Config{}, fmt.Errorf("DB_MAX_IDLE_CONNS (%d) must not exceed DB_MAX_OPEN_CONNS (%d)", maxIdle, maxOpen)
 	}
@@ -62,6 +87,68 @@ func Load() (Config, error) {
 		DBMaxIdleConns:    maxIdle,
 		DBConnMaxLifetime: lifetime,
 		SessionLifetime:   sessionLifetime,
+		SMTPHost:          smtp.Host,
+		SMTPPort:          smtp.Port,
+		SMTPTLS:           smtp.TLS,
+		SMTPUsername:      smtp.Username,
+		SMTPPassword:      smtp.Password,
+		SMTPFrom:          smtp.From,
+		SMTPFromName:      smtp.FromName,
+	}, nil
+}
+
+type smtpConfig struct {
+	Host     string
+	Port     int
+	TLS      SMTPTLSMode
+	Username string
+	Password string
+	From     string
+	FromName string
+}
+
+func loadSMTP() (smtpConfig, error) {
+	host := os.Getenv("SMTP_HOST")
+	if host == "" {
+		return smtpConfig{
+			Port:     defaultSMTPPort,
+			TLS:      SMTPTLSStartTLS,
+			FromName: getEnv("SMTP_FROM_NAME", defaultSMTPFromName),
+		}, nil
+	}
+
+	port, err := getEnvInt("SMTP_PORT", defaultSMTPPort)
+	if err != nil {
+		return smtpConfig{}, err
+	}
+	if port > maxSMTPPort {
+		return smtpConfig{}, fmt.Errorf("SMTP_PORT must be at most %d, got %d", maxSMTPPort, port)
+	}
+
+	tlsMode := SMTPTLSMode(getEnv("SMTP_TLS", string(SMTPTLSStartTLS)))
+	if tlsMode != SMTPTLSStartTLS && tlsMode != SMTPTLSSSL {
+		return smtpConfig{}, fmt.Errorf("SMTP_TLS must be %q or %q, got %q", SMTPTLSStartTLS, SMTPTLSSSL, tlsMode)
+	}
+
+	username := os.Getenv("SMTP_USERNAME")
+	password := os.Getenv("SMTP_PASSWORD")
+	if username != "" && password == "" {
+		return smtpConfig{}, errors.New("SMTP_PASSWORD is required when SMTP_USERNAME is set")
+	}
+
+	from := os.Getenv("SMTP_FROM")
+	if from == "" {
+		return smtpConfig{}, errors.New("SMTP_FROM is required when SMTP_HOST is set")
+	}
+
+	return smtpConfig{
+		Host:     host,
+		Port:     port,
+		TLS:      tlsMode,
+		Username: username,
+		Password: password,
+		From:     from,
+		FromName: getEnv("SMTP_FROM_NAME", defaultSMTPFromName),
 	}, nil
 }
 

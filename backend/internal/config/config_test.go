@@ -97,3 +97,107 @@ func TestLoadRejectsInvalidSessionLifetime(t *testing.T) {
 		t.Fatalf("expected error mentioning SESSION_LIFETIME, got %v", err)
 	}
 }
+
+func clearSMTPEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{"SMTP_HOST", "SMTP_PORT", "SMTP_TLS", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_NAME"} {
+		t.Setenv(key, "")
+	}
+}
+
+func TestLoadSMTPDefaultsWhenHostUnset(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	clearSMTPEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SMTPHost != "" || cfg.SMTPPort != 587 || cfg.SMTPTLS != SMTPTLSStartTLS || cfg.SMTPUsername != "" || cfg.SMTPPassword != "" || cfg.SMTPFrom != "" {
+		t.Fatalf("unexpected SMTP defaults: %+v", cfg)
+	}
+	if cfg.SMTPFromName != "NeoBlog" {
+		t.Fatalf("SMTPFromName = %q, want NeoBlog", cfg.SMTPFromName)
+	}
+}
+
+func TestLoadSkipsSMTPValidationWhenHostUnset(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	clearSMTPEnv(t)
+	t.Setenv("SMTP_PORT", "abc")
+	t.Setenv("SMTP_TLS", "bogus")
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("expected no error when SMTP_HOST is unset, got %v", err)
+	}
+}
+
+func TestLoadRequiresSMTPFromWhenHostSet(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	clearSMTPEnv(t)
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_FROM") {
+		t.Fatalf("expected error mentioning SMTP_FROM, got %v", err)
+	}
+}
+
+func TestLoadRequiresSMTPPasswordWhenUsernameSet(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	clearSMTPEnv(t)
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_FROM", "noreply@example.com")
+	t.Setenv("SMTP_USERNAME", "noreply@example.com")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_PASSWORD") {
+		t.Fatalf("expected error mentioning SMTP_PASSWORD, got %v", err)
+	}
+}
+
+func TestLoadRejectsInvalidSMTPPort(t *testing.T) {
+	for _, value := range []string{"abc", "0", "70000"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+			clearSMTPEnv(t)
+			t.Setenv("SMTP_HOST", "smtp.example.com")
+			t.Setenv("SMTP_FROM", "noreply@example.com")
+			t.Setenv("SMTP_PORT", value)
+
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_PORT") {
+				t.Fatalf("expected error mentioning SMTP_PORT, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidSMTPTLS(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	clearSMTPEnv(t)
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_FROM", "noreply@example.com")
+	t.Setenv("SMTP_TLS", "bogus")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_TLS") {
+		t.Fatalf("expected error mentioning SMTP_TLS, got %v", err)
+	}
+}
+
+func TestLoadReadsSMTPConfiguration(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	clearSMTPEnv(t)
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "465")
+	t.Setenv("SMTP_TLS", "ssl")
+	t.Setenv("SMTP_USERNAME", "noreply@example.com")
+	t.Setenv("SMTP_PASSWORD", "secret")
+	t.Setenv("SMTP_FROM", "noreply@example.com")
+	t.Setenv("SMTP_FROM_NAME", "NeoBlog Mail")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SMTPHost != "smtp.example.com" || cfg.SMTPPort != 465 || cfg.SMTPTLS != SMTPTLSSSL || cfg.SMTPUsername != "noreply@example.com" || cfg.SMTPPassword != "secret" || cfg.SMTPFrom != "noreply@example.com" || cfg.SMTPFromName != "NeoBlog Mail" {
+		t.Fatalf("unexpected SMTP config: %+v", cfg)
+	}
+}

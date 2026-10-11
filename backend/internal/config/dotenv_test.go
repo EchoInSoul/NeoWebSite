@@ -115,3 +115,36 @@ func TestLoadDotEnvMissingFileIsNotAnError(t *testing.T) {
 		t.Fatalf("expected nil for missing .env, got %v", err)
 	}
 }
+
+func TestLoadDotEnvFileReadsGivenPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "custom.env")
+	if err := os.WriteFile(path, []byte("NEOBLOG_TEST_CUSTOM=value\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	const key = "NEOBLOG_TEST_CUSTOM"
+	original, hadOriginal := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if hadOriginal {
+			os.Setenv(key, original)
+		} else {
+			os.Unsetenv(key)
+		}
+	})
+
+	if err := LoadDotEnvFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := os.Getenv(key); got != "value" {
+		t.Fatalf("got %q, want value", got)
+	}
+}
+
+func TestLoadDotEnvFileMissingFileIsNotAnError(t *testing.T) {
+	if err := LoadDotEnvFile(filepath.Join(t.TempDir(), "absent.env")); err != nil {
+		t.Fatalf("expected nil for missing file, got %v", err)
+	}
+}
