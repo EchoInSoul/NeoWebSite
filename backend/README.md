@@ -22,8 +22,10 @@
 | `internal/modules/health/controller.go` | `health.controller.ts` | 本模块的路由声明与 HTTP 编解码（包内私有） |
 | `internal/modules/health/service.go` | `health.service.ts` | 业务逻辑，模块对外暴露的能力 |
 | `internal/modules/health/dto.go` | `dto/*.dto.ts` | 请求/响应数据结构 |
-| `internal/modules/auth/*` | `auth.module.ts` 等 | 登录 / 登出 / 当前用户；`Register`（公开）与 `RegisterProtected`（受保护） |
-| `internal/common/guard` | `src/common`（Guards） | `RequireAuth` 会话守卫中间件；会话键常量 `auth.user_id` |
+| `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录 / 登出 / 当前用户 / 改密；`Register`（公开）与 `RegisterProtected`（受保护） |
+| `internal/modules/access/*` | `access.module.ts` 等 | 用户组与权限：组 CRUD、用户管理接口、生效权限解析；全部挂在权限守卫下 |
+| `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）；常量 `auth.user_id` / `auth.identity` |
+| `internal/common/rbac` | `src/common`（权限目录） | 权限点目录与预设组常量（固定 UUID）；纯 Go，不依赖 gin / DB |
 | `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
 
 ## 硬性规则
@@ -112,7 +114,7 @@ bash scripts/db-generate.sh            # ent schema 有变更后重新生成代�
 bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后人工审阅 + atlas migrate hash/validate）
 ```
 
-应用启动绝不自动迁移；`ATLAS_DEV_URL` 缺省指向空的 `neoblog_atlas_dev`（脚本内默认值）。工具链细节与已验证事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节。
+应用启动绝不自动迁移；`ATLAS_DEV_URL` 缺省指向空的 `neoblog_atlas_dev`（脚本内默认值）。迁移文件里含数据（预设组 seed）或手工改造过 SQL 时，必须重算校验和：`atlas migrate hash --dir "file://migrations"` 再 `atlas migrate validate`（用户组与权限迁移是第一个带 seed 的）。工具链细节与已验证事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节。
 
 ## 认证
 
@@ -123,7 +125,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 | `POST /api/v1/auth/register` | 公开 | body `{"email","nickname","password"}` → 201 `{"email","nickname"}` + 会话 cookie（注册即登录）；400 `invalid_request` / `weak_password`；409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底） |
 | `POST /api/v1/auth/login` | 公开 | body `{"identifier":"邮箱或昵称","password":"..."}` → 200 + 会话 cookie；401 `invalid_credentials`；400 `invalid_request` |
 | `POST /api/v1/auth/logout` | 需登录 | 销毁会话，返回 204 |
-| `GET /api/v1/auth/me` | 需登录 | 返回 `{"email","nickname"}`；未登录 401 `unauthorized` |
+| `GET /api/v1/auth/me` | 需登录 | 返回 `{"email","nickname","group":{"id","system_key","name"},"permissions":["..."]}`（自建组 `system_key` 为 `null`，`permissions` 是展开后的生效权限）；未登录 401 `unauthorized` |
 | `POST /api/v1/auth/password` | 需登录 | body `{"currentPassword","newPassword"}` → 204；旧密码错 401 `invalid_credentials`；400 `weak_password` / `password_unchanged` / `invalid_request` |
 
 规则：
@@ -134,7 +136,34 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当 `APP_ENV=production`；登录与注册成功都会换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
 
-**已知缺口**：登录与注册**暂无限流**（防刷号 / 防撞库，计划下一轮优先补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效。所有登录用户当前权限等同（还没有管理员专属接口，角色区分留到需要时）。
+**已知缺口**：登录与注册**暂无限流**（防刷号 / 防撞库，计划下一轮优先补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效。
+
+### 用户组与权限
+
+三个预设组（不可删 / 不可改名 / 权限由代码计算，含以后新增的权限点）：`owner` 所有者 与 `admin` 管理员 = 全部权限，`user` 普通用户 = 空；自建组权限存库、可改名可删（有成员时不可删）。生效权限 = 所属组权限 ∪ 用户额外权限（两侧都做 `edit → view` 蕴含展开）；新用户由数据库默认值落「普通用户」，创建路径不显式设组。
+
+| 方法 路径 | 需要的权限 | 说明 |
+| --- | --- | --- |
+| `GET /api/v1/admin/permissions` | `system.groups.view` | 权限目录 `{"items":[{"key","name"}]}` |
+| `GET /api/v1/admin/groups` | `system.groups.view` | 组列表（`is_preset` / `member_count` / 展开后的 `permissions`） |
+| `POST /api/v1/admin/groups` | `system.groups.edit` | 新建自建组 → 201 |
+| `PATCH /api/v1/admin/groups/:id` | `system.groups.edit` | 改组名 / 组权限；预设组 → 403 `preset_group_locked` |
+| `DELETE /api/v1/admin/groups/:id` | `system.groups.edit` | 删自建组 → 204；有成员 → 409 `group_not_empty` |
+| `GET /api/v1/admin/users` | `system.users.view` | 用户列表（带所属组与额外权限） |
+| `GET /api/v1/admin/users/:id` | `system.users.view` | 用户详情（另含 `permissions` = 生效权限） |
+| `PATCH /api/v1/admin/users/:id` | `system.users.edit` | `{"group_id"?,"extra_permissions"?}`（额外权限为全量替换，`[]` 清空）；两个字段都不给 → 400 |
+
+权限点命名 `模块.动作`，动作只有 `view` / `edit`（`edit` 蕴含 `view`）；目录是代码常量（`internal/common/rbac`），随模块落地逐条增加，不存在「目录里没有检查点」的空权限。
+
+规则：
+
+- **只能授出自己持有的权限**：新建 / 改组、设用户组、加额外权限时，目标新增（按生效权限集的前后差集、同一请求合并计算）而操作者没有的点 → 403 `grant_forbidden`；**摘除不受限**（删权限不会提权）。
+- **不能改自己**（自己的组与额外权限都算）→ 403 `cannot_modify_self`；**owner / admin 组的成员只有 owner 能改** → 403 `owner_protected`。
+- **至少保留一个 owner**：并发双降级的第二个请求 → 409 `last_owner`（事务内 `FOR UPDATE` 锁 owner 成员行后计数；串行路径由上面两条规则挡住）。
+- 组名 trim 后 1–64 字符；权限数组先去重、目录外的 key → 400 `invalid_permission`；组名重复 → 409 `group_name_taken`。
+- 守卫链：`RequireAuth`（未登录 401）→ `LoadIdentity`（解析身份与生效权限放进 `auth.identity`；用户已删除则销毁会话 + 401）→ `RequirePermission`（权限不足 403 `forbidden`）。**原则变更**：守卫不再是「不查库」，而是「只依赖 `app.go` 注入进来的 resolver，不 import 业务模块」。
+- 权限改动**下一次请求即生效**（不吊销会话）；已在处理中的请求使用请求开始时的权限快照。
+- **首个 owner 只能手工指定**（迁移把存量用户全部回填为「普通用户」）：`UPDATE users SET group_id = '00000000-0000-4000-8000-000000000001' WHERE email = '你的邮箱';`——owner / admin / 普通用户的固定 UUID 依次是 `…0001` / `…0002` / `…0003`（与 `internal/common/rbac` 一致）。
 
 ## 邮件
 
@@ -162,4 +191,4 @@ bash scripts/dev.sh     # 同上（先定位到 backend/，可在任意目录执
 ADDR=:9090 go run .     # 自定义端口
 ```
 
-健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.3.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
+健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.5.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
