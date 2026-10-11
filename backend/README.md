@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.6.0
+当前版本：0.7.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -32,7 +32,7 @@
 
 1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。**无路由的能力模块（当前仅 `mail`）可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件。**
 2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。
-3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app 和 `internal/common/guard`（中间件）；service 一律不 import gin。
+3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app、`internal/common/guard`（中间件）和 `internal/common/apierror`（统一错误写出）；service 一律不 import gin。
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
 5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**另一个例外：无路由的能力模块由 `New` 直接返回能力接口（当前仅 `mail.New(cfg) Mailer`）；无状态的包级纯函数可直接导出（如 `mail.Render`）——都不算对外暴露内部实现。**
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
@@ -122,13 +122,15 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 只提供后端接口（前端由前端侧接线）。层 1：登录 / 登出 / 当前用户；层 2：公开注册与更改密码。
 
+所有端点的错误响应统一为 `{"error":{"type","code","param"}}`：HTTP 状态码照常；`code` 即下表中的 token；`type` 由状态码唯一决定（400 `invalid_request_error` / 401 `authentication_error` / 403 `permission_error` / 404 `not_found_error` / 409 `conflict_error` / 500 `server_error`）；`param` 指向出错字段或为 `null`；错误体不含任何文案。
+
 | 方法 路径 | 认证 | 说明 |
 | --- | --- | --- |
 | `POST /api/v1/auth/register` | 公开 | body `{"email","nickname","password"}` → 201 `{"email","nickname"}` + 会话 cookie（注册即登录）；400 `invalid_request` / `weak_password`；409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底） |
 | `POST /api/v1/auth/login` | 公开 | body `{"identifier":"邮箱或昵称","password":"..."}` → 200 + 会话 cookie；401 `invalid_credentials`；400 `invalid_request` |
-| `POST /api/v1/auth/logout` | 需登录 | 销毁会话，返回 204 |
+| `POST /api/v1/auth/logout` | 需登录 | 销毁会话，返回 200 `{}` |
 | `GET /api/v1/auth/me` | 需登录 | 返回 `{"email","nickname","group":{"id","system_key","name"},"permissions":["..."]}`（自建组 `system_key` 为 `null`，`permissions` 是展开后的生效权限）；未登录 401 `unauthorized` |
-| `POST /api/v1/auth/password` | 需登录 | body `{"currentPassword","newPassword"}` → 204；旧密码错 401 `invalid_credentials`；400 `weak_password` / `password_unchanged` / `invalid_request` |
+| `POST /api/v1/auth/password` | 需登录 | body `{"current_password","new_password"}` → 200 `{}`；旧密码错 401 `invalid_credentials`；400 `weak_password` / `password_unchanged` / `invalid_request` |
 
 规则：
 
@@ -151,8 +153,8 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 | `GET /api/v1/admin/permissions` | `system.groups.view` | 权限目录 `{"items":[{"key","name"}]}` |
 | `GET /api/v1/admin/groups` | `system.groups.view` | 组列表（`is_preset` / `member_count` / 展开后的 `permissions`） |
 | `POST /api/v1/admin/groups` | `system.groups.edit` | 新建自建组 → 201 |
-| `PATCH /api/v1/admin/groups/:id` | `system.groups.edit` | 改组名 / 组权限；预设组 → 403 `preset_group_locked` |
-| `DELETE /api/v1/admin/groups/:id` | `system.groups.edit` | 删自建组 → 204；有成员 → 409 `group_not_empty` |
+| `PATCH /api/v1/admin/groups/:id` | `system.groups.edit` | 改组名 / 组权限；预设组 → 409 `preset_group_locked` |
+| `DELETE /api/v1/admin/groups/:id` | `system.groups.edit` | 删自建组 → 200 `{"id","deleted":true}`；有成员 → 409 `group_not_empty` |
 | `GET /api/v1/admin/users` | `system.users.view` | 用户列表（带所属组与额外权限） |
 | `GET /api/v1/admin/users/:id` | `system.users.view` | 用户详情（另含 `permissions` = 生效权限） |
 | `PATCH /api/v1/admin/users/:id` | `system.users.edit` | `{"group_id"?,"extra_permissions"?}`（额外权限为全量替换，`[]` 清空）；两个字段都不给 → 400 |
