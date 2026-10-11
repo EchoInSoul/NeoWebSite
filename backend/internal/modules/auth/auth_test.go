@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 
 	"website/backend/internal/common/guard"
 	"website/backend/internal/database"
+	"website/backend/internal/database/ent/user"
 )
 
 func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Server, *scs.SessionManager) {
@@ -361,5 +363,230 @@ func TestLogoutFailsWhenSessionStoreDeleteFails(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("logout status = %d, want 500", resp.StatusCode)
+	}
+}
+
+func cleanupUserByEmail(t *testing.T, db *database.Database, email string) {
+	t.Helper()
+	t.Cleanup(func() {
+		_, _ = db.Client.User.Delete().Where(user.EmailEQ(email)).Exec(context.Background())
+	})
+}
+
+func TestRegisterSucceedsAndLogsIn(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	email := "New+" + tag + "@Example.COM"
+	cleanupUserByEmail(t, db, strings.ToLower(email))
+
+	resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: email, Nickname: "new" + tag, Password: "pass1234"})
+	cookie := sessionCookie(t, client.Jar, ts.URL)
+	if resp.StatusCode != http.StatusCreated {
+		resp.Body.Close()
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	var body UserResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	resp.Body.Close()
+	if body.Email != strings.ToLower(email) {
+		t.Fatalf("email = %q, want lowercased %q", body.Email, strings.ToLower(email))
+	}
+	if body.Nickname != "new"+tag {
+		t.Fatalf("nickname = %q, want %q", body.Nickname, "new"+tag)
+	}
+	if cookie == "" {
+		t.Fatal("expected a session cookie")
+	}
+
+	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	defer me.Body.Close()
+	if me.StatusCode != http.StatusOK {
+		t.Fatalf("me status = %d, want 200", me.StatusCode)
+	}
+	var meBody UserResponse
+	if err := json.NewDecoder(me.Body).Decode(&meBody); err != nil {
+		t.Fatalf("decode me: %v", err)
+	}
+	if meBody.Email != strings.ToLower(email) || meBody.Nickname != "new"+tag {
+		t.Fatalf("me = %+v, want %s / new%s", meBody, strings.ToLower(email), tag)
+	}
+
+	paddedEmail := "padded+" + tag + "@example.com"
+	cleanupUserByEmail(t, db, paddedEmail)
+	padded := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: " PADDED+" + tag + "@EXAMPLE.COM ", Nickname: "  pad" + tag + "  ", Password: "pass1234"})
+	paddedBody := UserResponse{}
+	if padded.StatusCode != http.StatusCreated {
+		padded.Body.Close()
+		t.Fatalf("padded status = %d, want 201", padded.StatusCode)
+	}
+	if err := json.NewDecoder(padded.Body).Decode(&paddedBody); err != nil {
+		t.Fatalf("decode padded: %v", err)
+	}
+	padded.Body.Close()
+	if paddedBody.Email != paddedEmail || paddedBody.Nickname != "pad"+tag {
+		t.Fatalf("padded = %+v, want %s / pad%s", paddedBody, paddedEmail, tag)
+	}
+}
+
+func TestRegisterRejectsDuplicateEmail(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, _ := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: strings.ToUpper(u.Email), Nickname: "other" + tag, Password: "pass1234"})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", resp.StatusCode)
+	}
+	if got := decodeError(t, resp); got != "email_taken" {
+		t.Fatalf("error = %q, want email_taken", got)
+	}
+}
+
+func TestRegisterRejectsDuplicateNickname(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, _ := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	email := "dup+" + tag + "@example.com"
+	cleanupUserByEmail(t, db, email)
+	resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: email, Nickname: u.Nickname, Password: "pass1234"})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", resp.StatusCode)
+	}
+	if got := decodeError(t, resp); got != "nickname_taken" {
+		t.Fatalf("error = %q, want nickname_taken", got)
+	}
+}
+
+func TestRegisterRejectsWeakPasswords(t *testing.T) {
+	db := testDB(t)
+	ts := newTestApp(t, db)
+
+	cases := []struct {
+		name     string
+		password string
+	}{
+		{"too short", "short1"},
+		{"letters only", "abcdefgh"},
+		{"digits only", "12345678"},
+		{"over 72 bytes", strings.Repeat("a", 72) + "1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := testClient(t)
+			tag := uniqueTag(t)
+			resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: "weak+" + tag + "@example.com", Nickname: "weak" + tag, Password: tc.password})
+			if resp.StatusCode != http.StatusBadRequest {
+				resp.Body.Close()
+				t.Fatalf("status = %d, want 400", resp.StatusCode)
+			}
+			if got := decodeError(t, resp); got != "weak_password" {
+				t.Fatalf("error = %q, want weak_password", got)
+			}
+		})
+	}
+}
+
+func TestRegisterRejectsInvalidFields(t *testing.T) {
+	db := testDB(t)
+	ts := newTestApp(t, db)
+
+	cases := []struct {
+		name     string
+		email    string
+		nickname string
+	}{
+		{"email without at", "no-at", "nick"},
+		{"email too long", strings.Repeat("a", 250) + "@b.com", "nick"},
+		{"nickname too short", "ok@example.com", "a"},
+		{"nickname with at", "ok@example.com", "a@b"},
+		{"nickname with space", "ok@example.com", "a b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := testClient(t)
+			resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: tc.email, Nickname: tc.nickname, Password: "pass1234"})
+			if resp.StatusCode != http.StatusBadRequest {
+				resp.Body.Close()
+				t.Fatalf("status = %d, want 400", resp.StatusCode)
+			}
+			if got := decodeError(t, resp); got != "invalid_request" {
+				t.Fatalf("error = %q, want invalid_request", got)
+			}
+		})
+	}
+}
+
+func TestRegisterRejectsMalformedBody(t *testing.T) {
+	db := testDB(t)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	resp := postRaw(t, client, ts.URL+"/api/v1/auth/register", "{not json")
+	if resp.StatusCode != http.StatusBadRequest {
+		resp.Body.Close()
+		t.Fatalf("broken json status = %d, want 400", resp.StatusCode)
+	}
+	if got := decodeError(t, resp); got != "invalid_request" {
+		t.Fatalf("broken json error = %q, want invalid_request", got)
+	}
+
+	resp = postRaw(t, client, ts.URL+"/api/v1/auth/register", `{"email":"someone@example.com"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("missing fields status = %d, want 400", resp.StatusCode)
+	}
+	if got := decodeError(t, resp); got != "invalid_request" {
+		t.Fatalf("missing fields error = %q, want invalid_request", got)
+	}
+}
+
+func TestRegisterWhileLoggedInSwitchesSession(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	firstEmail := "first+" + tag + "@example.com"
+	cleanupUserByEmail(t, db, firstEmail)
+	first := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: firstEmail, Nickname: "first" + tag, Password: "pass1234"})
+	first.Body.Close()
+	if first.StatusCode != http.StatusCreated {
+		t.Fatalf("first status = %d, want 201", first.StatusCode)
+	}
+
+	secondEmail := "second+" + tag + "@example.com"
+	cleanupUserByEmail(t, db, secondEmail)
+	second := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: secondEmail, Nickname: "second" + tag, Password: "pass1234"})
+	second.Body.Close()
+	if second.StatusCode != http.StatusCreated {
+		t.Fatalf("second status = %d, want 201", second.StatusCode)
+	}
+
+	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	defer me.Body.Close()
+	var body UserResponse
+	if err := json.NewDecoder(me.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Email != secondEmail {
+		t.Fatalf("me email = %q, want %q", body.Email, secondEmail)
 	}
 }

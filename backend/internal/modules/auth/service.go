@@ -9,11 +9,17 @@ import (
 
 	"website/backend/internal/common/guard"
 	"website/backend/internal/database"
+	"website/backend/internal/database/ent"
 )
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUnauthorized       = errors.New("unauthorized")
+	ErrInvalidRequest     = errors.New("invalid request")
+	ErrEmailTaken         = errors.New("email taken")
+	ErrNicknameTaken      = errors.New("nickname taken")
+	ErrAlreadyTaken       = errors.New("already taken")
+	ErrWeakPassword       = errors.New("weak password")
 )
 
 type Service struct {
@@ -32,6 +38,49 @@ func newService(db *database.Database, sessions *scs.SessionManager) *Service {
 		sessions:  sessions,
 		dummyHash: dummy,
 	}
+}
+
+func (s *Service) Register(ctx context.Context, email, nickname, password string) (User, error) {
+	email = normalizeEmail(email)
+	nickname = normalizeNickname(nickname)
+
+	if !validEmail(email) || !validNickname(nickname) {
+		return User{}, ErrInvalidRequest
+	}
+	if !validPassword(password) {
+		return User{}, ErrWeakPassword
+	}
+
+	if _, err := s.repo.findUserByIdentifier(ctx, email); err == nil {
+		return User{}, ErrEmailTaken
+	} else if !errors.Is(err, errUserNotFound) {
+		return User{}, err
+	}
+	if _, err := s.repo.findUserByIdentifier(ctx, nickname); err == nil {
+		return User{}, ErrNicknameTaken
+	} else if !errors.Is(err, errUserNotFound) {
+		return User{}, err
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return User{}, err
+	}
+
+	created, err := s.repo.createUser(ctx, email, nickname, string(hash))
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			return User{}, ErrAlreadyTaken
+		}
+		return User{}, err
+	}
+
+	if err := s.sessions.RenewToken(ctx); err != nil {
+		return User{}, err
+	}
+	s.sessions.Put(ctx, guard.SessionUserIDKey, created.ID.String())
+
+	return toUser(created), nil
 }
 
 func (s *Service) Login(ctx context.Context, identifier, password string) (User, error) {
