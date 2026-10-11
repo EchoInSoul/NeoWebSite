@@ -18,8 +18,8 @@ type RegisterRequest struct {
 }
 
 type PasswordChangeRequest struct {
-	CurrentPassword string `json:"currentPassword"`
-	NewPassword     string `json:"newPassword"`
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
 }
 
 type UserResponse struct {
@@ -38,8 +38,4 @@ type MeResponse struct {
 	Nickname    string        `json:"nickname"`
 	Group       GroupResponse `json:"group"`
 	Permissions []string      `json:"permissions"`
-}
-
-type ErrorResponse struct {
-	Error string `json:"error"`
 }

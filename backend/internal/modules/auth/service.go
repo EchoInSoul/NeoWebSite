@@ -7,20 +7,10 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"golang.org/x/crypto/bcrypt"
 
+	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
-)
-
-var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrUnauthorized       = errors.New("unauthorized")
-	ErrInvalidRequest     = errors.New("invalid request")
-	ErrEmailTaken         = errors.New("email taken")
-	ErrNicknameTaken      = errors.New("nickname taken")
-	ErrAlreadyTaken       = errors.New("already taken")
-	ErrWeakPassword       = errors.New("weak password")
-	ErrPasswordUnchanged  = errors.New("password unchanged")
 )
 
 type Service struct {
@@ -46,19 +36,19 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 	nickname = normalizeNickname(nickname)
 
 	if !validEmail(email) || !validNickname(nickname) {
-		return User{}, ErrInvalidRequest
+		return User{}, apierror.ErrInvalidRequest
 	}
 	if !validPassword(password) {
-		return User{}, ErrWeakPassword
+		return User{}, apierror.ErrWeakPassword
 	}
 
 	if _, err := s.repo.findUserByIdentifier(ctx, email); err == nil {
-		return User{}, ErrEmailTaken
+		return User{}, apierror.ErrEmailTaken
 	} else if !errors.Is(err, errUserNotFound) {
 		return User{}, err
 	}
 	if _, err := s.repo.findUserByIdentifier(ctx, nickname); err == nil {
-		return User{}, ErrNicknameTaken
+		return User{}, apierror.ErrNicknameTaken
 	} else if !errors.Is(err, errUserNotFound) {
 		return User{}, err
 	}
@@ -71,7 +61,7 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 	created, err := s.repo.createUser(ctx, email, nickname, string(hash))
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			return User{}, ErrAlreadyTaken
+			return User{}, apierror.ErrAlreadyTaken
 		}
 		return User{}, err
 	}
@@ -86,20 +76,20 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 
 func (s *Service) Login(ctx context.Context, identifier, password string) (User, error) {
 	if len(password) > maxPasswordBytes {
-		return User{}, ErrInvalidCredentials
+		return User{}, apierror.ErrInvalidCredentials
 	}
 
 	found, err := s.repo.findUserByIdentifier(ctx, identifier)
 	if err != nil {
 		if errors.Is(err, errUserNotFound) {
 			_ = bcrypt.CompareHashAndPassword(s.dummyHash, []byte(password))
-			return User{}, ErrInvalidCredentials
+			return User{}, apierror.ErrInvalidCredentials
 		}
 		return User{}, err
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(password)); err != nil {
-		return User{}, ErrInvalidCredentials
+		return User{}, apierror.ErrInvalidCredentials
 	}
 
 	if err := s.sessions.RenewToken(ctx); err != nil {
@@ -119,21 +109,21 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 	if err != nil {
 		if errors.Is(err, errUserNotFound) {
 			s.sessions.Destroy(ctx)
-			return ErrUnauthorized
+			return apierror.ErrUnauthorized
 		}
 		return err
 	}
 
 	if !validPassword(newPassword) {
-		return ErrWeakPassword
+		return apierror.ErrWeakPassword
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(currentPassword)); err != nil {
-		return ErrInvalidCredentials
+		return apierror.ErrInvalidCredentials
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(newPassword)); err == nil {
-		return ErrPasswordUnchanged
+		return apierror.ErrPasswordUnchanged
 	}
 
 	if err := s.revokeOtherSessions(ctx, userID, currentToken); err != nil {
@@ -187,7 +177,7 @@ func (s *Service) CurrentUser(ctx context.Context, userID string) (User, error) 
 	if err != nil {
 		if errors.Is(err, errUserNotFound) {
 			s.sessions.Destroy(ctx)
-			return User{}, ErrUnauthorized
+			return User{}, apierror.ErrUnauthorized
 		}
 		return User{}, err
 	}

@@ -1,11 +1,11 @@
 package auth
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
+	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/guard"
 )
 
@@ -31,17 +31,13 @@ func (c *controller) registerProtected(r *gin.RouterGroup) {
 func (c *controller) login(ctx *gin.Context) {
 	var req LoginRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Identifier == "" || req.Password == "" {
-		ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid_request"})
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 
 	user, err := c.service.Login(ctx.Request.Context(), req.Identifier, req.Password)
 	if err != nil {
-		if errors.Is(err, ErrInvalidCredentials) {
-			ctx.JSON(http.StatusUnauthorized, ErrorResponse{Error: "invalid_credentials"})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error"})
+		apierror.Write(ctx, err)
 		return
 	}
 
@@ -51,26 +47,13 @@ func (c *controller) login(ctx *gin.Context) {
 func (c *controller) signup(ctx *gin.Context) {
 	var req RegisterRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Email == "" || req.Nickname == "" || req.Password == "" {
-		ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid_request"})
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 
 	user, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password)
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrWeakPassword):
-			ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "weak_password"})
-		case errors.Is(err, ErrInvalidRequest):
-			ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid_request"})
-		case errors.Is(err, ErrEmailTaken):
-			ctx.JSON(http.StatusConflict, ErrorResponse{Error: "email_taken"})
-		case errors.Is(err, ErrNicknameTaken):
-			ctx.JSON(http.StatusConflict, ErrorResponse{Error: "nickname_taken"})
-		case errors.Is(err, ErrAlreadyTaken):
-			ctx.JSON(http.StatusConflict, ErrorResponse{Error: "already_taken"})
-		default:
-			ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error"})
-		}
+		apierror.Write(ctx, err)
 		return
 	}
 
@@ -79,26 +62,22 @@ func (c *controller) signup(ctx *gin.Context) {
 
 func (c *controller) logout(ctx *gin.Context) {
 	if err := c.service.Logout(ctx.Request.Context()); err != nil {
-		ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error"})
+		apierror.Write(ctx, err)
 		return
 	}
-	ctx.Status(http.StatusNoContent)
+	ctx.JSON(http.StatusOK, gin.H{})
 }
 
 func (c *controller) me(ctx *gin.Context) {
 	identity, ok := guard.IdentityFrom(ctx)
 	if !ok {
-		ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error"})
+		apierror.Write(ctx, apierror.ErrInternal)
 		return
 	}
 
 	user, err := c.service.CurrentUser(ctx.Request.Context(), identity.UserID)
 	if err != nil {
-		if errors.Is(err, ErrUnauthorized) {
-			ctx.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error"})
+		apierror.Write(ctx, err)
 		return
 	}
 
@@ -125,35 +104,22 @@ func (c *controller) me(ctx *gin.Context) {
 func (c *controller) changePassword(ctx *gin.Context) {
 	var req PasswordChangeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.CurrentPassword == "" || req.NewPassword == "" {
-		ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid_request"})
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 
 	userID := ctx.GetString(guard.SessionUserIDKey)
 	currentToken, err := ctx.Cookie("session")
 	if err != nil || currentToken == "" {
-		ctx.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		apierror.Write(ctx, apierror.ErrUnauthorized)
 		return
 	}
 
 	err = c.service.ChangePassword(ctx.Request.Context(), userID, currentToken, req.CurrentPassword, req.NewPassword)
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrUnauthorized):
-			ctx.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
-		case errors.Is(err, ErrInvalidCredentials):
-			ctx.JSON(http.StatusUnauthorized, ErrorResponse{Error: "invalid_credentials"})
-		case errors.Is(err, ErrWeakPassword):
-			ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "weak_password"})
-		case errors.Is(err, ErrPasswordUnchanged):
-			ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "password_unchanged"})
-		case errors.Is(err, ErrInvalidRequest):
-			ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid_request"})
-		default:
-			ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error"})
-		}
+		apierror.Write(ctx, err)
 		return
 	}
 
-	ctx.Status(http.StatusNoContent)
+	ctx.JSON(http.StatusOK, gin.H{})
 }

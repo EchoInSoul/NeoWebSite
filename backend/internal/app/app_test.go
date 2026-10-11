@@ -157,8 +157,8 @@ func TestAuthFlowEndToEnd(t *testing.T) {
 		t.Fatalf("logout: %v", err)
 	}
 	logout.Body.Close()
-	if logout.StatusCode != http.StatusNoContent {
-		t.Fatalf("logout status = %d, want 204", logout.StatusCode)
+	if logout.StatusCode != http.StatusOK {
+		t.Fatalf("logout status = %d, want 200", logout.StatusCode)
 	}
 
 	after, err := client.Get(ts.URL + "/api/v1/auth/me")
@@ -320,7 +320,7 @@ func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
 		_, _ = db.SQL().Exec("DELETE FROM sessions WHERE token = $1", junkToken)
 	})
 
-	payload, err := json.Marshal(map[string]string{"currentPassword": password, "newPassword": "new-pass-123"})
+	payload, err := json.Marshal(map[string]string{"current_password": password, "new_password": "new-pass-123"})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -329,8 +329,8 @@ func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
 		t.Fatalf("change password: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }
 

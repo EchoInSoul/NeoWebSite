@@ -89,11 +89,16 @@ func decodeError(t *testing.T, resp *http.Response) string {
 	t.Helper()
 	defer resp.Body.Close()
 
-	var body ErrorResponse
+	var body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode error body: %v", err)
 	}
-	return body.Error
+	errObj, ok := body["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error field = %v, want nested object with code", body["error"])
+	}
+	code, _ := errObj["code"].(string)
+	return code
 }
 
 func sessionCookie(t *testing.T, jar http.CookieJar, tsURL string) string {
@@ -305,8 +310,8 @@ func TestLogoutDestroysSession(t *testing.T) {
 		t.Fatalf("logout: %v", err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("logout status = %d, want 204", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("logout status = %d, want 200", resp.StatusCode)
 	}
 
 	me, err := client.Get(ts.URL + "/api/v1/auth/me")
@@ -618,8 +623,8 @@ func TestChangePasswordSucceedsAndSwapsCredentials(t *testing.T) {
 
 	change := postJSON(t, client, ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: oldPassword, NewPassword: "new-pass-123"})
 	change.Body.Close()
-	if change.StatusCode != http.StatusNoContent {
-		t.Fatalf("change status = %d, want 204", change.StatusCode)
+	if change.StatusCode != http.StatusOK {
+		t.Fatalf("change status = %d, want 200", change.StatusCode)
 	}
 
 	oldLogin := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: oldPassword})
@@ -749,8 +754,8 @@ func TestChangePasswordRevokesOtherSessions(t *testing.T) {
 
 	change := postJSON(t, clientA, ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
 	change.Body.Close()
-	if change.StatusCode != http.StatusNoContent {
-		t.Fatalf("change status = %d, want 204", change.StatusCode)
+	if change.StatusCode != http.StatusOK {
+		t.Fatalf("change status = %d, want 200", change.StatusCode)
 	}
 
 	meA, err := clientA.Get(ts.URL + "/api/v1/auth/me")
@@ -796,7 +801,7 @@ func TestChangePasswordRejectsMalformedBody(t *testing.T) {
 		t.Fatalf("broken json error = %q, want invalid_request", got)
 	}
 
-	resp = postRaw(t, client, ts.URL+"/api/v1/auth/password", `{"currentPassword":"`+password+`"}`)
+	resp = postRaw(t, client, ts.URL+"/api/v1/auth/password", `{"current_password":"`+password+`"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("missing fields status = %d, want 400", resp.StatusCode)
