@@ -86,9 +86,13 @@ func (c *controller) logout(ctx *gin.Context) {
 }
 
 func (c *controller) me(ctx *gin.Context) {
-	userID := ctx.GetString(guard.SessionUserIDKey)
+	identity, ok := guard.IdentityFrom(ctx)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error"})
+		return
+	}
 
-	user, err := c.service.CurrentUser(ctx.Request.Context(), userID)
+	user, err := c.service.CurrentUser(ctx.Request.Context(), identity.UserID)
 	if err != nil {
 		if errors.Is(err, ErrUnauthorized) {
 			ctx.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
@@ -98,7 +102,24 @@ func (c *controller) me(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname})
+	permissions := identity.Permissions
+	if permissions == nil {
+		permissions = []string{}
+	}
+	var systemKey *string
+	if identity.GroupKey != "" {
+		systemKey = &identity.GroupKey
+	}
+	ctx.JSON(http.StatusOK, MeResponse{
+		Email:    user.Email,
+		Nickname: user.Nickname,
+		Group: GroupResponse{
+			ID:        identity.GroupID,
+			SystemKey: systemKey,
+			Name:      identity.GroupName,
+		},
+		Permissions: permissions,
+	})
 }
 
 func (c *controller) changePassword(ctx *gin.Context) {

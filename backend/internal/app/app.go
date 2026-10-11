@@ -16,6 +16,7 @@ import (
 	"website/backend/internal/common/guard"
 	"website/backend/internal/config"
 	"website/backend/internal/database"
+	"website/backend/internal/modules/access"
 	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/health"
 	"website/backend/internal/modules/mail"
@@ -54,7 +55,11 @@ func New(cfg config.Config, db *database.Database) *App {
 
 	authModule := auth.New(db, sessions)
 	authModule.Register(api)
-	authModule.RegisterProtected(api.Group("", guard.RequireAuth(sessions)))
+
+	accessModule := access.New(db)
+	protected := api.Group("", guard.RequireAuth(sessions), guard.LoadIdentity(accessModule.Service, sessions))
+	authModule.RegisterProtected(protected)
+	accessModule.RegisterProtected(protected)
 
 	handler := sessions.LoadAndSave(engine)
 

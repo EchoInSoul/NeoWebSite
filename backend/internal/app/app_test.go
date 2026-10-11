@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"website/backend/internal/common/rbac"
 	"website/backend/internal/config"
 	"website/backend/internal/database"
 	"website/backend/internal/modules/auth"
@@ -325,5 +326,142 @@ func TestShutdownClosesMailer(t *testing.T) {
 	err = a.mailer.Send(context.Background(), mail.Message{To: "user@example.com", Subject: "s", Body: mail.Body{Text: "t"}})
 	if !errors.Is(err, mail.ErrClosed) {
 		t.Fatalf("send after shutdown = %v, want mail.ErrClosed", err)
+	}
+}
+
+func createGroupUser(t *testing.T, db *database.Database, groupID uuid.UUID) (auth.User, string) {
+	t.Helper()
+
+	u, password := createTestUser(t, db)
+	if err := db.Client.User.UpdateOneID(uuid.MustParse(u.ID)).SetGroupID(groupID).Exec(context.Background()); err != nil {
+		t.Fatalf("set group: %v", err)
+	}
+	return u, password
+}
+
+type meAccessBody struct {
+	Group struct {
+		SystemKey *string `json:"system_key"`
+		Name      string  `json:"name"`
+	} `json:"group"`
+	Permissions []string `json:"permissions"`
+}
+
+func TestAccessEndToEnd(t *testing.T) {
+	ts, db := newTestServer(t, "development")
+	tag := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	plainUser, plainPassword := createGroupUser(t, db, rbac.GroupIDUser)
+	ownerUser, ownerPassword := createGroupUser(t, db, rbac.GroupIDOwner)
+
+	anonymousResp, err := newClient(t).Get(ts.URL + "/api/v1/admin/users")
+	if err != nil {
+		t.Fatalf("anonymous admin get: %v", err)
+	}
+	anonymousResp.Body.Close()
+	if anonymousResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous status = %d, want 401", anonymousResp.StatusCode)
+	}
+
+	plainClient := newClient(t)
+	plainLogin := login(t, plainClient, ts.URL, plainUser.Email, plainPassword)
+	plainLogin.Body.Close()
+
+	plainAdmin, err := plainClient.Get(ts.URL + "/api/v1/admin/users")
+	if err != nil {
+		t.Fatalf("plain admin get: %v", err)
+	}
+	plainAdmin.Body.Close()
+	if plainAdmin.StatusCode != http.StatusForbidden {
+		t.Fatalf("plain admin status = %d, want 403", plainAdmin.StatusCode)
+	}
+
+	me, err := plainClient.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("plain me: %v", err)
+	}
+	var meBody meAccessBody
+	if err := json.NewDecoder(me.Body).Decode(&meBody); err != nil {
+		t.Fatalf("decode me: %v", err)
+	}
+	me.Body.Close()
+	if meBody.Group.SystemKey == nil || *meBody.Group.SystemKey != rbac.GroupKeyUser {
+		t.Fatalf("plain group = %+v, want user preset", meBody.Group)
+	}
+	if len(meBody.Permissions) != 0 {
+		t.Fatalf("plain permissions = %v, want empty", meBody.Permissions)
+	}
+
+	ownerClient := newClient(t)
+	ownerLogin := login(t, ownerClient, ts.URL, ownerUser.Email, ownerPassword)
+	ownerLogin.Body.Close()
+
+	ownerAdmin, err := ownerClient.Get(ts.URL + "/api/v1/admin/users")
+	if err != nil {
+		t.Fatalf("owner admin get: %v", err)
+	}
+	ownerAdmin.Body.Close()
+	if ownerAdmin.StatusCode != http.StatusOK {
+		t.Fatalf("owner admin status = %d, want 200", ownerAdmin.StatusCode)
+	}
+
+	groupPayload, err := json.Marshal(map[string]any{
+		"name":        "编辑-" + tag,
+		"permissions": []string{rbac.PermissionUsersView},
+	})
+	if err != nil {
+		t.Fatalf("marshal group: %v", err)
+	}
+	createResp, err := ownerClient.Post(ts.URL+"/api/v1/admin/groups", "application/json", bytes.NewReader(groupPayload))
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create group status = %d, want 201", createResp.StatusCode)
+	}
+	var groupBody struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&groupBody); err != nil {
+		t.Fatalf("decode group: %v", err)
+	}
+	createResp.Body.Close()
+	t.Cleanup(func() {
+		_ = db.Client.User.UpdateOneID(uuid.MustParse(plainUser.ID)).SetGroupID(rbac.GroupIDUser).Exec(context.Background())
+		_ = db.Client.Group.DeleteOneID(uuid.MustParse(groupBody.ID)).Exec(context.Background())
+	})
+
+	patchPayload, err := json.Marshal(map[string]any{"group_id": groupBody.ID})
+	if err != nil {
+		t.Fatalf("marshal patch: %v", err)
+	}
+	patchReq, err := http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/admin/users/"+plainUser.ID, bytes.NewReader(patchPayload))
+	if err != nil {
+		t.Fatalf("build patch: %v", err)
+	}
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchResp, err := ownerClient.Do(patchReq)
+	if err != nil {
+		t.Fatalf("patch user: %v", err)
+	}
+	patchResp.Body.Close()
+	if patchResp.StatusCode != http.StatusOK {
+		t.Fatalf("patch status = %d, want 200", patchResp.StatusCode)
+	}
+
+	afterMe, err := plainClient.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me after group change: %v", err)
+	}
+	var afterBody meAccessBody
+	if err := json.NewDecoder(afterMe.Body).Decode(&afterBody); err != nil {
+		t.Fatalf("decode me after: %v", err)
+	}
+	afterMe.Body.Close()
+	if afterBody.Group.SystemKey != nil {
+		t.Fatalf("custom group system key = %v, want null", *afterBody.Group.SystemKey)
+	}
+	if len(afterBody.Permissions) != 1 || afterBody.Permissions[0] != rbac.PermissionUsersView {
+		t.Fatalf("permissions after group change = %v, want [users.view]", afterBody.Permissions)
 	}
 }

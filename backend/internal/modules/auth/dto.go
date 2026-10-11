@@ -27,6 +27,19 @@ type UserResponse struct {
 	Nickname string `json:"nickname"`
 }
 
+type GroupResponse struct {
+	ID        string  `json:"id"`
+	SystemKey *string `json:"system_key"`
+	Name      string  `json:"name"`
+}
+
+type MeResponse struct {
+	Email       string        `json:"email"`
+	Nickname    string        `json:"nickname"`
+	Group       GroupResponse `json:"group"`
+	Permissions []string      `json:"permissions"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 }

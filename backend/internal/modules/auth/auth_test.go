@@ -20,6 +20,7 @@ import (
 	"website/backend/internal/common/guard"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent/user"
+	"website/backend/internal/modules/access"
 )
 
 func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Server, *scs.SessionManager) {
@@ -34,7 +35,8 @@ func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Serv
 
 	module := New(db, sm)
 	module.Register(api)
-	protected := api.Group("", guard.RequireAuth(sm))
+	accessModule := access.New(db)
+	protected := api.Group("", guard.RequireAuth(sm), guard.LoadIdentity(accessModule.Service, sm))
 	module.RegisterProtected(protected)
 
 	ts := httptest.NewServer(sm.LoadAndSave(engine))
@@ -266,12 +268,21 @@ func TestMeRequiresSessionAndReturnsUser(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var body UserResponse
+	var body MeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if body.Email != u.Email {
 		t.Fatalf("email = %q, want %q", body.Email, u.Email)
+	}
+	if body.Group.SystemKey == nil || *body.Group.SystemKey != "user" {
+		t.Fatalf("group system key = %v, want user", body.Group.SystemKey)
+	}
+	if body.Permissions == nil {
+		t.Fatal("permissions = null, want []")
+	}
+	if len(body.Permissions) != 0 {
+		t.Fatalf("permissions = %v, want empty", body.Permissions)
 	}
 }
 
