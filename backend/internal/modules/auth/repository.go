@@ -58,6 +58,20 @@ func (r *repository) createUser(ctx context.Context, email, nickname, passwordHa
 		Save(ctx)
 }
 
+func (r *repository) updatePasswordHash(ctx context.Context, id string, passwordHash string) error {
+	parsed, err := uuid.Parse(id)
+	if err != nil {
+		return errUserNotFound
+	}
+	if err := r.client.User.UpdateOneID(parsed).SetPasswordHash(passwordHash).Exec(ctx); err != nil {
+		if ent.IsNotFound(err) {
+			return errUserNotFound
+		}
+		return err
+	}
+	return nil
+}
+
 func toUser(u *ent.User) User {
 	return User{
 		ID:       u.ID.String(),

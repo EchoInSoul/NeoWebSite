@@ -166,3 +166,34 @@ func TestCreateAdminUserRejectsEmptyPassword(t *testing.T) {
 		t.Fatal("expected empty password to be rejected")
 	}
 }
+
+func TestUpdatePasswordHash(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, oldPassword := createTestUser(t, db, tag)
+	repo := newRepository(db)
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte("new-pass-123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if err := repo.updatePasswordHash(context.Background(), u.ID, string(newHash)); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	found, err := repo.findUserByID(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte("new-pass-123")); err != nil {
+		t.Fatalf("new password does not verify: %v", err)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(oldPassword)); err == nil {
+		t.Fatal("old password still verifies after update")
+	}
+
+	missing := uuid.Must(uuid.NewV7()).String()
+	if err := repo.updatePasswordHash(context.Background(), missing, string(newHash)); !errors.Is(err, errUserNotFound) {
+		t.Fatalf("missing user: err = %v, want errUserNotFound", err)
+	}
+}
