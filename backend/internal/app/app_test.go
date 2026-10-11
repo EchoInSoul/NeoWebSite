@@ -17,8 +17,8 @@ import (
 
 	"website/backend/internal/config"
 	"website/backend/internal/database"
-	"website/backend/internal/mail"
 	"website/backend/internal/modules/auth"
+	"website/backend/internal/modules/mail"
 )
 
 func testConfig(t *testing.T, environment string) config.Config {

@@ -16,9 +16,9 @@ import (
 	"website/backend/internal/common/guard"
 	"website/backend/internal/config"
 	"website/backend/internal/database"
-	"website/backend/internal/mail"
 	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/health"
+	"website/backend/internal/modules/mail"
 )
 
 const (

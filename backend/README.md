@@ -11,7 +11,7 @@
 | `main.go` | `main.ts` | 启动引导：加载配置、创建应用、启动 |
 | `internal/app/app.go` | `app.module.ts` + `setGlobalPrefix` | 组装模块、全局前缀 `/api/v1`、HTTP 服务器（超时 / 优雅关闭） |
 | `internal/config` | `ConfigModule` | 读环境变量，产出 `Config` |
-| `internal/mail` | `@nestjs-modules/mailer`（对照位） | 邮件发送基础设施：`Mailer` 接口（Send / Close）+ SMTP / 日志双实现 + `templates/` 模板；`SMTP_HOST` 为空时降级为日志 |
+| `internal/modules/mail` | `@nestjs-modules/mailer`（对照位） | 邮件发送基础设施：`Mailer` 接口（Send / Close）+ SMTP / 日志双实现 + `templates/` 模板；`SMTP_HOST` 为空时降级为日志 |
 | `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close` / `Client`（ent）/ `SQL` |
 | `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
 | `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
@@ -138,7 +138,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 ## 邮件
 
-只做后端基础设施，**当前没有任何模块消费它**（注册不验证邮箱）。`internal/mail` 对外只暴露 `Mailer` 接口与 `Render`：
+只做后端基础设施，**当前没有任何模块消费它**（注册不验证邮箱）。`internal/modules/mail` 对外只暴露 `Mailer` 接口与 `Render`：
 
 ```go
 body, err := mail.Render("example", map[string]string{"Time": "...", "Site": "NeoBlog"})
@@ -147,9 +147,9 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 
 - `Send` 只保证入队（缓冲 32），投递由后台 worker 串行执行：每封最多 3 次尝试、退避 1s / 5s、单次 20s 超时；**服务端 4xx 与连接类错误重试，5xx 不重试**，失败记结构化日志（`log/slog`）。
 - `Close(ctx)` 停收新消息并把队列投完（`app.Run` 关闭路径中先 `server.Shutdown` 再 `mailer.Close`，共用 10s 预算）；`Close` 之后 `Send` 返回 `mail.ErrClosed`。
-- 模板：`internal/mail/templates/<name>.html` 与 `<name>.txt` 成对（HTML 侧用 `html/template` 自动转义）；内置一封 `example`（邮件配置自检）。
+- 模板：`internal/modules/mail/templates/<name>.html` 与 `<name>.txt` 成对（HTML 侧用 `html/template` 自动转义）；内置一封 `example`（邮件配置自检）。
 - `SMTP_HOST` 为空时降级为日志实现：邮件全文写进日志但不发送，开发环境无需凭据即可跑通全流程。
-- 真实投递测试（可选）：`backend/.env` 填好 `SMTP_*` 与 `MAIL_TEST_RECIPIENT` 后跑 `go test ./internal/mail/ -run TestRealDelivery -v`。
+- 真实投递测试（可选）：`backend/.env` 填好 `SMTP_*` 与 `MAIL_TEST_RECIPIENT` 后跑 `go test ./internal/modules/mail/ -run TestRealDelivery -v`。
 - 上线前按所选服务商配好 SPF / DKIM / DMARC（域验类服务商侧签 DKIM）；发件域名必须与认证域名对齐，**不要用自有域名 From 搭配 QQ 个人邮箱认证**。细节见 `docs/superpowers/specs/2026-10-11-neoblog-mail-design.md` §11。
 
 ## 运行
