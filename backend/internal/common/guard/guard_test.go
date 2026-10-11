@@ -204,6 +204,9 @@ func TestLoadIdentityDestroysSessionWhenUserIsGone(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", resp.StatusCode)
 	}
+	if code := decodeErrorBody(t, resp); code != "unauthorized" {
+		t.Fatalf("error = %q, want unauthorized", code)
+	}
 
 	cleared := false
 	for _, cookie := range resp.Cookies() {

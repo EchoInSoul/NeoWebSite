@@ -43,7 +43,8 @@ func New(cfg config.Config, db *database.Database) *App {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	engine := gin.Default()
+	engine := gin.New()
+	engine.Use(gin.Logger(), recoveryHandler())
 
 	_ = engine.SetTrustedProxies(nil)
 
@@ -79,6 +80,12 @@ func New(cfg config.Config, db *database.Database) *App {
 		},
 		mailer: mail.New(cfg),
 	}
+}
+
+func recoveryHandler() gin.HandlerFunc {
+	return gin.CustomRecovery(func(c *gin.Context, _ any) {
+		apierror.Abort(c, apierror.ErrInternal)
+	})
 }
 
 func newSessionManager(cfg config.Config, db *database.Database) *scs.SessionManager {

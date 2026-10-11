@@ -91,11 +91,14 @@ func strPtr(value string) *string {
 }
 
 func WithParam(err error, param string) error {
-	target, ok := err.(*Error)
-	if !ok {
+	switch target := err.(type) {
+	case *Error:
+		return paramOverride{err: target, param: param}
+	case paramOverride:
+		return paramOverride{err: target.err, param: param}
+	default:
 		return err
 	}
-	return paramOverride{err: target, param: param}
 }
 
 func Body(err error) *Error {

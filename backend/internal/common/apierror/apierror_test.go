@@ -150,4 +150,45 @@ func TestWithParamOverrides(t *testing.T) {
 	if ErrWeakPassword.Param != nil {
 		t.Fatalf("sentinel param mutated: %v", *ErrWeakPassword.Param)
 	}
+
+	twice := WithParam(WithParam(ErrWeakPassword, "password"), "new_password")
+	if !errors.Is(twice, ErrWeakPassword) {
+		t.Fatal("double WithParam must keep errors.Is compatibility")
+	}
+	if overridden := Body(twice); overridden.Param == nil || *overridden.Param != "new_password" {
+		t.Fatalf("param = %v, want new_password (second override wins)", overridden.Param)
+	}
+}
+
+func TestRegistryIntegrity(t *testing.T) {
+	all := []*Error{
+		ErrInvalidRequest, ErrWeakPassword, ErrPasswordUnchanged, ErrInvalidPermission,
+		ErrInvalidCredentials, ErrUnauthorized, ErrForbidden, ErrGrantForbidden,
+		ErrOwnerProtected, ErrCannotModifySelf, ErrNotFound, ErrPresetGroupLocked,
+		ErrEmailTaken, ErrNicknameTaken, ErrAlreadyTaken, ErrGroupNameTaken,
+		ErrGroupNotEmpty, ErrLastOwner, ErrInternal,
+	}
+	if len(all) != 19 {
+		t.Fatalf("sentinel count = %d, want 19", len(all))
+	}
+	if len(statusByCode) != 19 {
+		t.Fatalf("statusByCode entries = %d, want 19", len(statusByCode))
+	}
+	statusTypes := map[int]Type{
+		http.StatusBadRequest:          TypeInvalidRequest,
+		http.StatusUnauthorized:        TypeAuthentication,
+		http.StatusForbidden:           TypePermission,
+		http.StatusNotFound:            TypeNotFound,
+		http.StatusConflict:            TypeConflict,
+		http.StatusInternalServerError: TypeServer,
+	}
+	for _, sentinel := range all {
+		status, ok := statusByCode[sentinel.Code]
+		if !ok {
+			t.Fatalf("code %q not registered in statusByCode; Body would silently degrade to internal_error", sentinel.Code)
+		}
+		if want := statusTypes[status]; want == "" || sentinel.Type != want {
+			t.Fatalf("code %q: type %q inconsistent with status %d (want %q)", sentinel.Code, sentinel.Type, status, want)
+		}
+	}
 }

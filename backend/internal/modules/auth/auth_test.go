@@ -309,9 +309,17 @@ func TestLogoutDestroysSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logout: %v", err)
 	}
-	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
 		t.Fatalf("logout status = %d, want 200", resp.StatusCode)
+	}
+	var logoutBody map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&logoutBody); err != nil {
+		t.Fatalf("decode logout body: %v", err)
+	}
+	resp.Body.Close()
+	if len(logoutBody) != 0 {
+		t.Fatalf("logout body = %v, want {}", logoutBody)
 	}
 
 	me, err := client.Get(ts.URL + "/api/v1/auth/me")
@@ -622,9 +630,17 @@ func TestChangePasswordSucceedsAndSwapsCredentials(t *testing.T) {
 	}
 
 	change := postJSON(t, client, ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: oldPassword, NewPassword: "new-pass-123"})
-	change.Body.Close()
 	if change.StatusCode != http.StatusOK {
+		change.Body.Close()
 		t.Fatalf("change status = %d, want 200", change.StatusCode)
+	}
+	var changeBody map[string]any
+	if err := json.NewDecoder(change.Body).Decode(&changeBody); err != nil {
+		t.Fatalf("decode change body: %v", err)
+	}
+	change.Body.Close()
+	if len(changeBody) != 0 {
+		t.Fatalf("change body = %v, want {}", changeBody)
 	}
 
 	oldLogin := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: oldPassword})

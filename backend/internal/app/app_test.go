@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"website/backend/internal/common/rbac"
@@ -274,6 +275,35 @@ func TestNoRouteReturnsErrorEnvelope(t *testing.T) {
 	}
 	if body.Error.Code != "not_found" {
 		t.Fatalf("error = %q, want not_found", body.Error.Code)
+	}
+}
+
+func TestPanicReturnsErrorEnvelope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(recoveryHandler())
+	engine.GET("/boom", func(c *gin.Context) { panic("boom") })
+	ts := httptest.NewServer(engine)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/boom")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", resp.StatusCode)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Error.Code != "internal_error" {
+		t.Fatalf("error = %q, want internal_error", body.Error.Code)
 	}
 }
 
