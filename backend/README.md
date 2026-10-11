@@ -107,15 +107,25 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 ## 认证
 
-第一版（层 1）：登录 / 登出 / 当前用户，只做后端。账号只有管理员一个；本轮不提供注册或建号入口，`auth.CreateAdminUser` 目前仅供测试使用（首次建号方式另行决定）。
+只提供后端接口（前端由前端侧接线）。层 1：登录 / 登出 / 当前用户；层 2：公开注册与更改密码。
 
 | 方法 路径 | 认证 | 说明 |
 | --- | --- | --- |
-| `POST /api/v1/auth/login` | 公开 | body `{"identifier":"邮箱或昵称","password":"..."}` → 200 `{"email","nickname"}` + 会话 cookie；凭据错 401 `invalid_credentials`；请求不合法 400 `invalid_request` |
+| `POST /api/v1/auth/register` | 公开 | body `{"email","nickname","password"}` → 201 `{"email","nickname"}` + 会话 cookie（注册即登录）；400 `invalid_request` / `weak_password`；409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底） |
+| `POST /api/v1/auth/login` | 公开 | body `{"identifier":"邮箱或昵称","password":"..."}` → 200 + 会话 cookie；401 `invalid_credentials`；400 `invalid_request` |
 | `POST /api/v1/auth/logout` | 需登录 | 销毁会话，返回 204 |
 | `GET /api/v1/auth/me` | 需登录 | 返回 `{"email","nickname"}`；未登录 401 `unauthorized` |
+| `POST /api/v1/auth/password` | 需登录 | body `{"currentPassword","newPassword"}` → 204；旧密码错 401 `invalid_credentials`；400 `weak_password` / `password_unchanged` / `invalid_request` |
 
-会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当 `APP_ENV=production`；登录成功换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth` 挂载。
+规则：
+
+- 注册**公开**、不验证邮箱（没有邮件基础设施，也没有找回密码）。
+- 邮箱：`net/mail` 可解析、≤254 字符、入库统一小写；昵称：trim 后 2–32 字符（按 rune）、不含空白（含全角空格）与 `@`；密码：≥8 字符（按 rune）、同时含 ASCII 字母与数字、≤72 字节（bcrypt 上限）。
+- **更改密码保留当前设备、吊销该用户其他所有设备的会话**（用 scs 的 `IterableStore.All()` + `Codec` 按会话中的 `auth.user_id` 定位删除；失败即 500 且密码不落盘，可用旧密码重试）。
+
+会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当 `APP_ENV=production`；登录与注册成功都会换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
+
+**已知缺口**：登录与注册**暂无限流**（防刷号 / 防撞库，计划下一轮优先补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效。所有登录用户当前权限等同（还没有管理员专属接口，角色区分留到需要时）。
 
 ## 运行
 
@@ -127,4 +137,4 @@ bash scripts/dev.sh     # 同上（先定位到 backend/，可在任意目录执
 ADDR=:9090 go run .     # 自定义端口
 ```
 
-健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.2.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
+健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.3.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
