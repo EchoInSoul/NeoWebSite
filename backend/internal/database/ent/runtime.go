@@ -9,6 +9,7 @@ import (
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/schema"
 	"website/backend/internal/database/ent/session"
+	"website/backend/internal/database/ent/settingvalue"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/database/ent/userpermission"
 
@@ -77,6 +78,26 @@ func init() {
 	sessionDescData := sessionFields[1].Descriptor()
 	// session.DataValidator is a validator for the "data" field. It is called by the builders before save.
 	session.DataValidator = sessionDescData.Validators[0].(func([]byte) error)
+	settingvalueFields := schema.SettingValue{}.Fields()
+	_ = settingvalueFields
+	// settingvalueDescSettingGroup is the schema descriptor for setting_group field.
+	settingvalueDescSettingGroup := settingvalueFields[1].Descriptor()
+	// settingvalue.SettingGroupValidator is a validator for the "setting_group" field. It is called by the builders before save.
+	settingvalue.SettingGroupValidator = settingvalueDescSettingGroup.Validators[0].(func(string) error)
+	// settingvalueDescName is the schema descriptor for name field.
+	settingvalueDescName := settingvalueFields[2].Descriptor()
+	// settingvalue.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	settingvalue.NameValidator = settingvalueDescName.Validators[0].(func(string) error)
+	// settingvalueDescUpdatedAt is the schema descriptor for updated_at field.
+	settingvalueDescUpdatedAt := settingvalueFields[4].Descriptor()
+	// settingvalue.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	settingvalue.DefaultUpdatedAt = settingvalueDescUpdatedAt.Default.(func() time.Time)
+	// settingvalue.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	settingvalue.UpdateDefaultUpdatedAt = settingvalueDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// settingvalueDescID is the schema descriptor for id field.
+	settingvalueDescID := settingvalueFields[0].Descriptor()
+	// settingvalue.DefaultID holds the default value on creation for the id field.
+	settingvalue.DefaultID = settingvalueDescID.Default.(func() uuid.UUID)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescEmail is the schema descriptor for email field.

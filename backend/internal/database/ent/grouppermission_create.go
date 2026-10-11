@@ -10,6 +10,8 @@ import (
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
@@ -20,6 +22,7 @@ type GroupPermissionCreate struct {
 	config
 	mutation *GroupPermissionMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetGroupID sets the "group_id" field.
@@ -162,6 +165,7 @@ func (_c *GroupPermissionCreate) createSpec() (*GroupPermission, *sqlgraph.Creat
 		_node = &GroupPermission{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(grouppermission.Table, sqlgraph.NewFieldSpec(grouppermission.FieldID, field.TypeUUID))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = &id
@@ -194,11 +198,202 @@ func (_c *GroupPermissionCreate) createSpec() (*GroupPermission, *sqlgraph.Creat
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.GroupPermission.Create().
+//		SetGroupID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.GroupPermissionUpsert) {
+//			SetGroupID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *GroupPermissionCreate) OnConflict(opts ...sql.ConflictOption) *GroupPermissionUpsertOne {
+	_c.conflict = opts
+	return &GroupPermissionUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.GroupPermission.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *GroupPermissionCreate) OnConflictColumns(columns ...string) *GroupPermissionUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &GroupPermissionUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// GroupPermissionUpsertOne is the builder for "upsert"-ing
+	//  one GroupPermission node.
+	GroupPermissionUpsertOne struct {
+		create *GroupPermissionCreate
+	}
+
+	// GroupPermissionUpsert is the "OnConflict" setter.
+	GroupPermissionUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetGroupID sets the "group_id" field.
+func (u *GroupPermissionUpsert) SetGroupID(v uuid.UUID) *GroupPermissionUpsert {
+	u.Set(grouppermission.FieldGroupID, v)
+	return u
+}
+
+// UpdateGroupID sets the "group_id" field to the value that was provided on create.
+func (u *GroupPermissionUpsert) UpdateGroupID() *GroupPermissionUpsert {
+	u.SetExcluded(grouppermission.FieldGroupID)
+	return u
+}
+
+// SetPermission sets the "permission" field.
+func (u *GroupPermissionUpsert) SetPermission(v string) *GroupPermissionUpsert {
+	u.Set(grouppermission.FieldPermission, v)
+	return u
+}
+
+// UpdatePermission sets the "permission" field to the value that was provided on create.
+func (u *GroupPermissionUpsert) UpdatePermission() *GroupPermissionUpsert {
+	u.SetExcluded(grouppermission.FieldPermission)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.GroupPermission.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(grouppermission.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *GroupPermissionUpsertOne) UpdateNewValues() *GroupPermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(grouppermission.FieldID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(grouppermission.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.GroupPermission.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *GroupPermissionUpsertOne) Ignore() *GroupPermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *GroupPermissionUpsertOne) DoNothing() *GroupPermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the GroupPermissionCreate.OnConflict
+// documentation for more info.
+func (u *GroupPermissionUpsertOne) Update(set func(*GroupPermissionUpsert)) *GroupPermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&GroupPermissionUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetGroupID sets the "group_id" field.
+func (u *GroupPermissionUpsertOne) SetGroupID(v uuid.UUID) *GroupPermissionUpsertOne {
+	return u.Update(func(s *GroupPermissionUpsert) {
+		s.SetGroupID(v)
+	})
+}
+
+// UpdateGroupID sets the "group_id" field to the value that was provided on create.
+func (u *GroupPermissionUpsertOne) UpdateGroupID() *GroupPermissionUpsertOne {
+	return u.Update(func(s *GroupPermissionUpsert) {
+		s.UpdateGroupID()
+	})
+}
+
+// SetPermission sets the "permission" field.
+func (u *GroupPermissionUpsertOne) SetPermission(v string) *GroupPermissionUpsertOne {
+	return u.Update(func(s *GroupPermissionUpsert) {
+		s.SetPermission(v)
+	})
+}
+
+// UpdatePermission sets the "permission" field to the value that was provided on create.
+func (u *GroupPermissionUpsertOne) UpdatePermission() *GroupPermissionUpsertOne {
+	return u.Update(func(s *GroupPermissionUpsert) {
+		s.UpdatePermission()
+	})
+}
+
+// Exec executes the query.
+func (u *GroupPermissionUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for GroupPermissionCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *GroupPermissionUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *GroupPermissionUpsertOne) ID(ctx context.Context) (id uuid.UUID, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: GroupPermissionUpsertOne.ID is not supported by MySQL driver. Use GroupPermissionUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *GroupPermissionUpsertOne) IDX(ctx context.Context) uuid.UUID {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // GroupPermissionCreateBulk is the builder for creating many GroupPermission entities in bulk.
 type GroupPermissionCreateBulk struct {
 	config
 	err      error
 	builders []*GroupPermissionCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the GroupPermission entities in the database.
@@ -228,6 +423,7 @@ func (_c *GroupPermissionCreateBulk) Save(ctx context.Context) ([]*GroupPermissi
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -274,6 +470,151 @@ func (_c *GroupPermissionCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *GroupPermissionCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.GroupPermission.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.GroupPermissionUpsert) {
+//			SetGroupID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *GroupPermissionCreateBulk) OnConflict(opts ...sql.ConflictOption) *GroupPermissionUpsertBulk {
+	_c.conflict = opts
+	return &GroupPermissionUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.GroupPermission.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *GroupPermissionCreateBulk) OnConflictColumns(columns ...string) *GroupPermissionUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &GroupPermissionUpsertBulk{
+		create: _c,
+	}
+}
+
+// GroupPermissionUpsertBulk is the builder for "upsert"-ing
+// a bulk of GroupPermission nodes.
+type GroupPermissionUpsertBulk struct {
+	create *GroupPermissionCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.GroupPermission.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(grouppermission.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *GroupPermissionUpsertBulk) UpdateNewValues() *GroupPermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(grouppermission.FieldID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(grouppermission.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.GroupPermission.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *GroupPermissionUpsertBulk) Ignore() *GroupPermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *GroupPermissionUpsertBulk) DoNothing() *GroupPermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the GroupPermissionCreateBulk.OnConflict
+// documentation for more info.
+func (u *GroupPermissionUpsertBulk) Update(set func(*GroupPermissionUpsert)) *GroupPermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&GroupPermissionUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetGroupID sets the "group_id" field.
+func (u *GroupPermissionUpsertBulk) SetGroupID(v uuid.UUID) *GroupPermissionUpsertBulk {
+	return u.Update(func(s *GroupPermissionUpsert) {
+		s.SetGroupID(v)
+	})
+}
+
+// UpdateGroupID sets the "group_id" field to the value that was provided on create.
+func (u *GroupPermissionUpsertBulk) UpdateGroupID() *GroupPermissionUpsertBulk {
+	return u.Update(func(s *GroupPermissionUpsert) {
+		s.UpdateGroupID()
+	})
+}
+
+// SetPermission sets the "permission" field.
+func (u *GroupPermissionUpsertBulk) SetPermission(v string) *GroupPermissionUpsertBulk {
+	return u.Update(func(s *GroupPermissionUpsert) {
+		s.SetPermission(v)
+	})
+}
+
+// UpdatePermission sets the "permission" field to the value that was provided on create.
+func (u *GroupPermissionUpsertBulk) UpdatePermission() *GroupPermissionUpsertBulk {
+	return u.Update(func(s *GroupPermissionUpsert) {
+		s.UpdatePermission()
+	})
+}
+
+// Exec executes the query.
+func (u *GroupPermissionUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the GroupPermissionCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for GroupPermissionCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *GroupPermissionUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

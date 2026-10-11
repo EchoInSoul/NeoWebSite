@@ -20,6 +20,8 @@ type Tx struct {
 	RecoveryCode *RecoveryCodeClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
+	// SettingValue is the client for interacting with the SettingValue builders.
+	SettingValue *SettingValueClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 	// UserPermission is the client for interacting with the UserPermission builders.
@@ -159,6 +161,7 @@ func (tx *Tx) init() {
 	tx.GroupPermission = NewGroupPermissionClient(tx.config)
 	tx.RecoveryCode = NewRecoveryCodeClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)
+	tx.SettingValue = NewSettingValueClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserPermission = NewUserPermissionClient(tx.config)
 }

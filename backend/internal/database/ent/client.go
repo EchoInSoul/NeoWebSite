@@ -15,6 +15,7 @@ import (
 	"website/backend/internal/database/ent/grouppermission"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/session"
+	"website/backend/internal/database/ent/settingvalue"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/database/ent/userpermission"
 
@@ -38,6 +39,8 @@ type Client struct {
 	RecoveryCode *RecoveryCodeClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
+	// SettingValue is the client for interacting with the SettingValue builders.
+	SettingValue *SettingValueClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 	// UserPermission is the client for interacting with the UserPermission builders.
@@ -57,6 +60,7 @@ func (c *Client) init() {
 	c.GroupPermission = NewGroupPermissionClient(c.config)
 	c.RecoveryCode = NewRecoveryCodeClient(c.config)
 	c.Session = NewSessionClient(c.config)
+	c.SettingValue = NewSettingValueClient(c.config)
 	c.User = NewUserClient(c.config)
 	c.UserPermission = NewUserPermissionClient(c.config)
 }
@@ -155,6 +159,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		GroupPermission: NewGroupPermissionClient(cfg),
 		RecoveryCode:    NewRecoveryCodeClient(cfg),
 		Session:         NewSessionClient(cfg),
+		SettingValue:    NewSettingValueClient(cfg),
 		User:            NewUserClient(cfg),
 		UserPermission:  NewUserPermissionClient(cfg),
 	}, nil
@@ -180,6 +185,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		GroupPermission: NewGroupPermissionClient(cfg),
 		RecoveryCode:    NewRecoveryCodeClient(cfg),
 		Session:         NewSessionClient(cfg),
+		SettingValue:    NewSettingValueClient(cfg),
 		User:            NewUserClient(cfg),
 		UserPermission:  NewUserPermissionClient(cfg),
 	}, nil
@@ -211,7 +217,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.Group, c.GroupPermission, c.RecoveryCode, c.Session, c.User, c.UserPermission,
+		c.Group, c.GroupPermission, c.RecoveryCode, c.Session, c.SettingValue, c.User,
+		c.UserPermission,
 	} {
 		n.Use(hooks...)
 	}
@@ -221,7 +228,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.Group, c.GroupPermission, c.RecoveryCode, c.Session, c.User, c.UserPermission,
+		c.Group, c.GroupPermission, c.RecoveryCode, c.Session, c.SettingValue, c.User,
+		c.UserPermission,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -238,6 +246,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.RecoveryCode.mutate(ctx, m)
 	case *SessionMutation:
 		return c.Session.mutate(ctx, m)
+	case *SettingValueMutation:
+		return c.SettingValue.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
 	case *UserPermissionMutation:
@@ -843,6 +853,139 @@ func (c *SessionClient) mutate(ctx context.Context, m *SessionMutation) (Value, 
 	}
 }
 
+// SettingValueClient is a client for the SettingValue schema.
+type SettingValueClient struct {
+	config
+}
+
+// NewSettingValueClient returns a client for the SettingValue from the given config.
+func NewSettingValueClient(c config) *SettingValueClient {
+	return &SettingValueClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `settingvalue.Hooks(f(g(h())))`.
+func (c *SettingValueClient) Use(hooks ...Hook) {
+	c.hooks.SettingValue = append(c.hooks.SettingValue, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `settingvalue.Intercept(f(g(h())))`.
+func (c *SettingValueClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SettingValue = append(c.inters.SettingValue, interceptors...)
+}
+
+// Create returns a builder for creating a SettingValue entity.
+func (c *SettingValueClient) Create() *SettingValueCreate {
+	mutation := newSettingValueMutation(c.config, OpCreate)
+	return &SettingValueCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SettingValue entities.
+func (c *SettingValueClient) CreateBulk(builders ...*SettingValueCreate) *SettingValueCreateBulk {
+	return &SettingValueCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SettingValueClient) MapCreateBulk(slice any, setFunc func(*SettingValueCreate, int)) *SettingValueCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SettingValueCreateBulk{err: fmt.Errorf("calling to SettingValueClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SettingValueCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SettingValueCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SettingValue.
+func (c *SettingValueClient) Update() *SettingValueUpdate {
+	mutation := newSettingValueMutation(c.config, OpUpdate)
+	return &SettingValueUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SettingValueClient) UpdateOne(_m *SettingValue) *SettingValueUpdateOne {
+	mutation := newSettingValueMutation(c.config, OpUpdateOne, withSettingValue(_m))
+	return &SettingValueUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SettingValueClient) UpdateOneID(id uuid.UUID) *SettingValueUpdateOne {
+	mutation := newSettingValueMutation(c.config, OpUpdateOne, withSettingValueID(id))
+	return &SettingValueUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SettingValue.
+func (c *SettingValueClient) Delete() *SettingValueDelete {
+	mutation := newSettingValueMutation(c.config, OpDelete)
+	return &SettingValueDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SettingValueClient) DeleteOne(_m *SettingValue) *SettingValueDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SettingValueClient) DeleteOneID(id uuid.UUID) *SettingValueDeleteOne {
+	builder := c.Delete().Where(settingvalue.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SettingValueDeleteOne{builder}
+}
+
+// Query returns a query builder for SettingValue.
+func (c *SettingValueClient) Query() *SettingValueQuery {
+	return &SettingValueQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSettingValue},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SettingValue entity by its id.
+func (c *SettingValueClient) Get(ctx context.Context, id uuid.UUID) (*SettingValue, error) {
+	return c.Query().Where(settingvalue.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SettingValueClient) GetX(ctx context.Context, id uuid.UUID) *SettingValue {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SettingValueClient) Hooks() []Hook {
+	return c.hooks.SettingValue
+}
+
+// Interceptors returns the client interceptors.
+func (c *SettingValueClient) Interceptors() []Interceptor {
+	return c.inters.SettingValue
+}
+
+func (c *SettingValueClient) mutate(ctx context.Context, m *SettingValueMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SettingValueCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SettingValueUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SettingValueUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SettingValueDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SettingValue mutation op: %q", m.Op())
+	}
+}
+
 // UserClient is a client for the User schema.
 type UserClient struct {
 	config
@@ -1176,10 +1319,11 @@ func (c *UserPermissionClient) mutate(ctx context.Context, m *UserPermissionMuta
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Group, GroupPermission, RecoveryCode, Session, User, UserPermission []ent.Hook
+		Group, GroupPermission, RecoveryCode, Session, SettingValue, User,
+		UserPermission []ent.Hook
 	}
 	inters struct {
-		Group, GroupPermission, RecoveryCode, Session, User,
+		Group, GroupPermission, RecoveryCode, Session, SettingValue, User,
 		UserPermission []ent.Interceptor
 	}
 )

@@ -12,6 +12,7 @@ import (
 	"website/backend/internal/database/ent/grouppermission"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/session"
+	"website/backend/internal/database/ent/settingvalue"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/database/ent/userpermission"
 
@@ -82,6 +83,7 @@ func checkColumn(t, c string) error {
 			grouppermission.Table: grouppermission.ValidColumn,
 			recoverycode.Table:    recoverycode.ValidColumn,
 			session.Table:         session.ValidColumn,
+			settingvalue.Table:    settingvalue.ValidColumn,
 			user.Table:            user.ValidColumn,
 			userpermission.Table:  userpermission.ValidColumn,
 		})

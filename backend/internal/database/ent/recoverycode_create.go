@@ -10,6 +10,8 @@ import (
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/user"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
@@ -20,6 +22,7 @@ type RecoveryCodeCreate struct {
 	config
 	mutation *RecoveryCodeMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetUserID sets the "user_id" field.
@@ -176,6 +179,7 @@ func (_c *RecoveryCodeCreate) createSpec() (*RecoveryCode, *sqlgraph.CreateSpec)
 		_node = &RecoveryCode{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(recoverycode.Table, sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeUUID))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = &id
@@ -212,11 +216,241 @@ func (_c *RecoveryCodeCreate) createSpec() (*RecoveryCode, *sqlgraph.CreateSpec)
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.RecoveryCode.Create().
+//		SetUserID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.RecoveryCodeUpsert) {
+//			SetUserID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *RecoveryCodeCreate) OnConflict(opts ...sql.ConflictOption) *RecoveryCodeUpsertOne {
+	_c.conflict = opts
+	return &RecoveryCodeUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.RecoveryCode.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *RecoveryCodeCreate) OnConflictColumns(columns ...string) *RecoveryCodeUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &RecoveryCodeUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// RecoveryCodeUpsertOne is the builder for "upsert"-ing
+	//  one RecoveryCode node.
+	RecoveryCodeUpsertOne struct {
+		create *RecoveryCodeCreate
+	}
+
+	// RecoveryCodeUpsert is the "OnConflict" setter.
+	RecoveryCodeUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetUserID sets the "user_id" field.
+func (u *RecoveryCodeUpsert) SetUserID(v uuid.UUID) *RecoveryCodeUpsert {
+	u.Set(recoverycode.FieldUserID, v)
+	return u
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *RecoveryCodeUpsert) UpdateUserID() *RecoveryCodeUpsert {
+	u.SetExcluded(recoverycode.FieldUserID)
+	return u
+}
+
+// SetCodeHash sets the "code_hash" field.
+func (u *RecoveryCodeUpsert) SetCodeHash(v string) *RecoveryCodeUpsert {
+	u.Set(recoverycode.FieldCodeHash, v)
+	return u
+}
+
+// UpdateCodeHash sets the "code_hash" field to the value that was provided on create.
+func (u *RecoveryCodeUpsert) UpdateCodeHash() *RecoveryCodeUpsert {
+	u.SetExcluded(recoverycode.FieldCodeHash)
+	return u
+}
+
+// SetUsedAt sets the "used_at" field.
+func (u *RecoveryCodeUpsert) SetUsedAt(v time.Time) *RecoveryCodeUpsert {
+	u.Set(recoverycode.FieldUsedAt, v)
+	return u
+}
+
+// UpdateUsedAt sets the "used_at" field to the value that was provided on create.
+func (u *RecoveryCodeUpsert) UpdateUsedAt() *RecoveryCodeUpsert {
+	u.SetExcluded(recoverycode.FieldUsedAt)
+	return u
+}
+
+// ClearUsedAt clears the value of the "used_at" field.
+func (u *RecoveryCodeUpsert) ClearUsedAt() *RecoveryCodeUpsert {
+	u.SetNull(recoverycode.FieldUsedAt)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.RecoveryCode.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(recoverycode.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *RecoveryCodeUpsertOne) UpdateNewValues() *RecoveryCodeUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(recoverycode.FieldID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(recoverycode.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.RecoveryCode.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *RecoveryCodeUpsertOne) Ignore() *RecoveryCodeUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *RecoveryCodeUpsertOne) DoNothing() *RecoveryCodeUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the RecoveryCodeCreate.OnConflict
+// documentation for more info.
+func (u *RecoveryCodeUpsertOne) Update(set func(*RecoveryCodeUpsert)) *RecoveryCodeUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&RecoveryCodeUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetUserID sets the "user_id" field.
+func (u *RecoveryCodeUpsertOne) SetUserID(v uuid.UUID) *RecoveryCodeUpsertOne {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.SetUserID(v)
+	})
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *RecoveryCodeUpsertOne) UpdateUserID() *RecoveryCodeUpsertOne {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.UpdateUserID()
+	})
+}
+
+// SetCodeHash sets the "code_hash" field.
+func (u *RecoveryCodeUpsertOne) SetCodeHash(v string) *RecoveryCodeUpsertOne {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.SetCodeHash(v)
+	})
+}
+
+// UpdateCodeHash sets the "code_hash" field to the value that was provided on create.
+func (u *RecoveryCodeUpsertOne) UpdateCodeHash() *RecoveryCodeUpsertOne {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.UpdateCodeHash()
+	})
+}
+
+// SetUsedAt sets the "used_at" field.
+func (u *RecoveryCodeUpsertOne) SetUsedAt(v time.Time) *RecoveryCodeUpsertOne {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.SetUsedAt(v)
+	})
+}
+
+// UpdateUsedAt sets the "used_at" field to the value that was provided on create.
+func (u *RecoveryCodeUpsertOne) UpdateUsedAt() *RecoveryCodeUpsertOne {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.UpdateUsedAt()
+	})
+}
+
+// ClearUsedAt clears the value of the "used_at" field.
+func (u *RecoveryCodeUpsertOne) ClearUsedAt() *RecoveryCodeUpsertOne {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.ClearUsedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *RecoveryCodeUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for RecoveryCodeCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *RecoveryCodeUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *RecoveryCodeUpsertOne) ID(ctx context.Context) (id uuid.UUID, err error) {
+	if u.create.driver.Dialect() == dialect.MySQL {
+		// In case of "ON CONFLICT", there is no way to get back non-numeric ID
+		// fields from the database since MySQL does not support the RETURNING clause.
+		return id, errors.New("ent: RecoveryCodeUpsertOne.ID is not supported by MySQL driver. Use RecoveryCodeUpsertOne.Exec instead")
+	}
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *RecoveryCodeUpsertOne) IDX(ctx context.Context) uuid.UUID {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // RecoveryCodeCreateBulk is the builder for creating many RecoveryCode entities in bulk.
 type RecoveryCodeCreateBulk struct {
 	config
 	err      error
 	builders []*RecoveryCodeCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the RecoveryCode entities in the database.
@@ -246,6 +480,7 @@ func (_c *RecoveryCodeCreateBulk) Save(ctx context.Context) ([]*RecoveryCode, er
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -292,6 +527,172 @@ func (_c *RecoveryCodeCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *RecoveryCodeCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.RecoveryCode.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.RecoveryCodeUpsert) {
+//			SetUserID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *RecoveryCodeCreateBulk) OnConflict(opts ...sql.ConflictOption) *RecoveryCodeUpsertBulk {
+	_c.conflict = opts
+	return &RecoveryCodeUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.RecoveryCode.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *RecoveryCodeCreateBulk) OnConflictColumns(columns ...string) *RecoveryCodeUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &RecoveryCodeUpsertBulk{
+		create: _c,
+	}
+}
+
+// RecoveryCodeUpsertBulk is the builder for "upsert"-ing
+// a bulk of RecoveryCode nodes.
+type RecoveryCodeUpsertBulk struct {
+	create *RecoveryCodeCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.RecoveryCode.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(recoverycode.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *RecoveryCodeUpsertBulk) UpdateNewValues() *RecoveryCodeUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(recoverycode.FieldID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(recoverycode.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.RecoveryCode.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *RecoveryCodeUpsertBulk) Ignore() *RecoveryCodeUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *RecoveryCodeUpsertBulk) DoNothing() *RecoveryCodeUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the RecoveryCodeCreateBulk.OnConflict
+// documentation for more info.
+func (u *RecoveryCodeUpsertBulk) Update(set func(*RecoveryCodeUpsert)) *RecoveryCodeUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&RecoveryCodeUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetUserID sets the "user_id" field.
+func (u *RecoveryCodeUpsertBulk) SetUserID(v uuid.UUID) *RecoveryCodeUpsertBulk {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.SetUserID(v)
+	})
+}
+
+// UpdateUserID sets the "user_id" field to the value that was provided on create.
+func (u *RecoveryCodeUpsertBulk) UpdateUserID() *RecoveryCodeUpsertBulk {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.UpdateUserID()
+	})
+}
+
+// SetCodeHash sets the "code_hash" field.
+func (u *RecoveryCodeUpsertBulk) SetCodeHash(v string) *RecoveryCodeUpsertBulk {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.SetCodeHash(v)
+	})
+}
+
+// UpdateCodeHash sets the "code_hash" field to the value that was provided on create.
+func (u *RecoveryCodeUpsertBulk) UpdateCodeHash() *RecoveryCodeUpsertBulk {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.UpdateCodeHash()
+	})
+}
+
+// SetUsedAt sets the "used_at" field.
+func (u *RecoveryCodeUpsertBulk) SetUsedAt(v time.Time) *RecoveryCodeUpsertBulk {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.SetUsedAt(v)
+	})
+}
+
+// UpdateUsedAt sets the "used_at" field to the value that was provided on create.
+func (u *RecoveryCodeUpsertBulk) UpdateUsedAt() *RecoveryCodeUpsertBulk {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.UpdateUsedAt()
+	})
+}
+
+// ClearUsedAt clears the value of the "used_at" field.
+func (u *RecoveryCodeUpsertBulk) ClearUsedAt() *RecoveryCodeUpsertBulk {
+	return u.Update(func(s *RecoveryCodeUpsert) {
+		s.ClearUsedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *RecoveryCodeUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the RecoveryCodeCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for RecoveryCodeCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *RecoveryCodeUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

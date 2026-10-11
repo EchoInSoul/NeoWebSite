@@ -18,6 +18,9 @@ type RecoveryCode func(*sql.Selector)
 // Session is the predicate function for session builders.
 type Session func(*sql.Selector)
 
+// SettingValue is the predicate function for settingvalue builders.
+type SettingValue func(*sql.Selector)
+
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
 

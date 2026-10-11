@@ -99,6 +99,27 @@ var (
 			},
 		},
 	}
+	// SettingValuesColumns holds the columns for the "setting_values" table.
+	SettingValuesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "setting_group", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "value", Type: field.TypeJSON},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// SettingValuesTable holds the schema information for the "setting_values" table.
+	SettingValuesTable = &schema.Table{
+		Name:       "setting_values",
+		Columns:    SettingValuesColumns,
+		PrimaryKey: []*schema.Column{SettingValuesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "settingvalue_setting_group_name",
+				Unique:  true,
+				Columns: []*schema.Column{SettingValuesColumns[1], SettingValuesColumns[2]},
+			},
+		},
+	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -171,6 +192,7 @@ var (
 		GroupPermissionsTable,
 		RecoveryCodesTable,
 		SessionsTable,
+		SettingValuesTable,
 		UsersTable,
 		UserPermissionsTable,
 	}
