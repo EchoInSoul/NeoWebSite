@@ -187,6 +187,27 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 - 真实投递测试（可选）：`backend/.env` 填好 `SMTP_*` 与 `MAIL_TEST_RECIPIENT` 后跑 `go test ./internal/modules/mail/ -run TestRealDelivery -v`（测试会从包目录向上查找 `.env`，深度上限 5，不写死相对路径）。
 - 上线前按所选服务商配好 SPF / DKIM / DMARC（域验类服务商侧签 DKIM）；发件域名必须与认证域名对齐，**不要用自有域名 From 搭配 QQ 个人邮箱认证**。细节见 `docs/superpowers/specs/2026-10-11-neoblog-mail-design.md` §11。
 
+## 设置
+
+无路由模块 `internal/modules/settings/`：一张 `setting_values` 表只存"被显式写入过的值"，"有哪些设置"全部定义在代码内清单（`registry.go` 的 `builtinRegistry`）。构造入口 `settings.New(db) (*Service, error)`——清单自检不过启动即失败；错误哨兵 `ErrUnknownGroup` / `ErrUnknownItem` / `ErrTypeMismatch` / `ErrMethodMismatch`。三种类型（文字 / 数字 int64 / 开关）读写各按类型分方法，用错方法即报错；`GetGroup` 整组读取（默认值 ⊕ 覆盖逐项合并）；`ResetItem` 删行恢复默认。清单为空 = 全默认；本轮清单不含任何真实设置。
+
+**怎么加一个设置**：在 `internal/modules/settings/registry.go` 的 `builtinRegistry` 里添加（组不存在就新增一个 `Group` 字面量）：
+
+```go
+var builtinRegistry = []Group{
+	{
+		Name: "site",
+		Items: []Definition{
+			{Name: "title", Type: FieldTypeString, Default: "我的博客"},
+			{Name: "port", Type: FieldTypeNumber, Default: int64(8080)},
+			{Name: "maintenance", Type: FieldTypeBool, Default: false},
+		},
+	},
+}
+```
+
+保存后重启即生效：新设置立刻可读（默认值），**不需要任何数据库操作**。名字规则 `^[a-z][a-z0-9_]*$`；数字默认值必须写 `int64(...)`。防漂移测试 `TestRegistryRecipeShape` 按本配方字面形状把关，配方改了它就红。
+
 ## 运行
 
 在 `backend/` 目录下：
