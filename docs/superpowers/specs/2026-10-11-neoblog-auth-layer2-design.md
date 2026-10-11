@@ -44,13 +44,14 @@
 
 | 方法 路径 | 认证 | 请求 | 成功 | 失败 |
 | --- | --- | --- | --- | --- |
-| `POST /api/v1/auth/register` | 公开 | `{"email":"...","nickname":"...","password":"..."}` | 201 `{"email":"...","nickname":"..."}` + `Set-Cookie` | 400 `invalid_request`（JSON 畸形 / 缺字段 / 邮箱或昵称规则不符）；400 `weak_password`（密码规则不符）；409 `email_taken`；409 `nickname_taken` |
+| `POST /api/v1/auth/register` | 公开 | `{"email":"...","nickname":"...","password":"..."}` | 201 `{"email":"...","nickname":"..."}` + `Set-Cookie` | 400 `invalid_request`（JSON 畸形 / 缺字段 / 邮箱或昵称规则不符）；400 `weak_password`（密码规则不符）；409 `email_taken`；409 `nickname_taken`；409 `already_taken`（并发竞态兜底） |
 | `POST /api/v1/auth/password` | 需登录 | `{"currentPassword":"...","newPassword":"..."}` | 204 | 401 `unauthorized`（无会话）；401 `invalid_credentials`（旧密码错）；400 `invalid_request`；400 `weak_password`；400 `password_unchanged` |
 
 说明：
 - 注册接口**区分**「邮箱已占用 / 昵称已占用」（注册场景的常规 UX，且用户需要知道换哪个）；登录接口维持层 1 的**不区分**（不泄露账号是否存在）。
 - 错误形状沿用 `{"error":"..."}`；表外的服务端故障沿用 500 `internal_error`。
 - 本层不新增环境变量。
+- 注册与改密码沿用层 1 的同一个会话管理器：cookie 名与 HttpOnly / SameSite / Path / Secure 等属性完全一致，无新增配置。
 - 已登录状态下调用 `register`：照常注册，并把当前会话切换为**新账号**（`RenewToken` + `Put` 新 userID），不做特殊拦截。
 - 已登录但**账号已被删除**时调用 `password`：按「用户不存在」处理——销毁会话并返回 401 `unauthorized`（与 `/auth/me` 的删号路径一致）。
 
@@ -59,10 +60,10 @@
 - `internal/modules/auth/dto.go`：新增 `RegisterRequest`、`PasswordChangeRequest`；复用 `UserResponse` / `ErrorResponse`。
 - `internal/modules/auth/repository.go`：复用 `createUser` / `findUserByIdentifier` / `findUserByID`（层 1 已有）；新增 `updatePasswordHash(ctx, id, hash)`。
 - `internal/modules/auth/service.go`：
-  - `Register(ctx, email, nickname, password) (User, error)`：规范化（email 小写、trim）→ 校验规则 → 唯一性预查 → bcrypt → `createUser`（约束冲突映射为 `ErrEmailTaken` / `ErrNicknameTaken`）→ 写会话（`RenewToken` + `Put`）。
+  - `Register(ctx, email, nickname, password) (User, error)`：规范化（email 小写、trim）→ 校验规则 → 唯一性预查（命中 → `ErrEmailTaken` / `ErrNicknameTaken`）→ bcrypt → `createUser`；唯一索引兜住并发竞态，冲突时统一返回 `ErrAlreadyTaken`（对应 409 `already_taken`，不做索引名解析）→ 写会话（`RenewToken` + `Put`）。
   - `ChangePassword(ctx, userID, currentToken, currentPassword, newPassword) error`：取用户（不存在 → `ErrUnauthorized` 并销毁会话）→ 校验新密码（规则 + 不得与旧相同）→ 用 bcrypt 比旧密码（错则 `ErrInvalidCredentials`）→ 生成新哈希并更新 → `revokeOtherSessions(ctx, userID, currentToken)`。
   - `revokeOtherSessions(ctx, userID, currentToken)`：`store.All()` → 逐个 `Codec.Decode` → `values[guard.SessionUserIDKey]` 等于该 userID 且 token ≠ currentToken → `store.Delete(token)`；解码失败的行跳过（不因单行异常中断吊销）。
-  - 新增哨兵错误：`ErrEmailTaken`、`ErrNicknameTaken`、`ErrWeakPassword`、`ErrPasswordUnchanged`。
+  - 新增哨兵错误：`ErrInvalidRequest`、`ErrEmailTaken`、`ErrNicknameTaken`、`ErrAlreadyTaken`、`ErrWeakPassword`、`ErrPasswordUnchanged`。
 - `internal/modules/auth/controller.go`：注册两个新路由；`/auth/password` 从 guard 取 `userID`、从 `c.Cookie("session")` 取当前 token 传给 service（service 不碰 HTTP）；错误 → 状态码/错误码映射见第 3 节。
 - `internal/modules/auth/module.go`：`Register` 增加 `POST /auth/register`；`RegisterProtected` 增加 `POST /auth/password`。
 - `internal/app/app.go`：**无需改动**（两条路由都经由既有 `Register` / `RegisterProtected`）。
@@ -79,7 +80,7 @@
 3. 弱密码分支：<8 位、纯字母、纯数字、>72 字节 → 400 `weak_password`；
 4. 邮箱非法（无 `@` / `net/mail` 拒绝）、昵称含 `@` / 含空白 / 超长 → 400 `invalid_request`；
 5. 畸形 JSON / 缺字段 → 400 `invalid_request`；
-6. 邮箱大小写：`A@B.com` 与 `a@b.com` 视为同一账号（第二次 409）。
+6. 邮箱大小写：`A@B.com` 注册后，用 `a@b.com`（换一个不同昵称）再注册 → 第二次 409 `email_taken`。
 
 改密码：
 7. 成功 → 204；随后**新密码可登录**、**旧密码 401**；
