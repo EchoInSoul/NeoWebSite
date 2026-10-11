@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"website/backend/internal/database/ent/group"
+	"website/backend/internal/database/ent/grouppermission"
 	"website/backend/internal/database/ent/session"
 	"website/backend/internal/database/ent/user"
+	"website/backend/internal/database/ent/userpermission"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
@@ -74,8 +77,11 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			session.Table: session.ValidColumn,
-			user.Table:    user.ValidColumn,
+			group.Table:           group.ValidColumn,
+			grouppermission.Table: grouppermission.ValidColumn,
+			session.Table:         session.ValidColumn,
+			user.Table:            user.ValidColumn,
+			userpermission.Table:  userpermission.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

@@ -4,9 +4,12 @@ package ent
 
 import (
 	"time"
+	"website/backend/internal/database/ent/group"
+	"website/backend/internal/database/ent/grouppermission"
 	"website/backend/internal/database/ent/schema"
 	"website/backend/internal/database/ent/session"
 	"website/backend/internal/database/ent/user"
+	"website/backend/internal/database/ent/userpermission"
 
 	"github.com/google/uuid"
 )
@@ -15,6 +18,40 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	groupFields := schema.Group{}.Fields()
+	_ = groupFields
+	// groupDescName is the schema descriptor for name field.
+	groupDescName := groupFields[2].Descriptor()
+	// group.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	group.NameValidator = groupDescName.Validators[0].(func(string) error)
+	// groupDescCreatedAt is the schema descriptor for created_at field.
+	groupDescCreatedAt := groupFields[3].Descriptor()
+	// group.DefaultCreatedAt holds the default value on creation for the created_at field.
+	group.DefaultCreatedAt = groupDescCreatedAt.Default.(func() time.Time)
+	// groupDescUpdatedAt is the schema descriptor for updated_at field.
+	groupDescUpdatedAt := groupFields[4].Descriptor()
+	// group.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	group.DefaultUpdatedAt = groupDescUpdatedAt.Default.(func() time.Time)
+	// group.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	group.UpdateDefaultUpdatedAt = groupDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// groupDescID is the schema descriptor for id field.
+	groupDescID := groupFields[0].Descriptor()
+	// group.DefaultID holds the default value on creation for the id field.
+	group.DefaultID = groupDescID.Default.(func() uuid.UUID)
+	grouppermissionFields := schema.GroupPermission{}.Fields()
+	_ = grouppermissionFields
+	// grouppermissionDescPermission is the schema descriptor for permission field.
+	grouppermissionDescPermission := grouppermissionFields[2].Descriptor()
+	// grouppermission.PermissionValidator is a validator for the "permission" field. It is called by the builders before save.
+	grouppermission.PermissionValidator = grouppermissionDescPermission.Validators[0].(func(string) error)
+	// grouppermissionDescCreatedAt is the schema descriptor for created_at field.
+	grouppermissionDescCreatedAt := grouppermissionFields[3].Descriptor()
+	// grouppermission.DefaultCreatedAt holds the default value on creation for the created_at field.
+	grouppermission.DefaultCreatedAt = grouppermissionDescCreatedAt.Default.(func() time.Time)
+	// grouppermissionDescID is the schema descriptor for id field.
+	grouppermissionDescID := grouppermissionFields[0].Descriptor()
+	// grouppermission.DefaultID holds the default value on creation for the id field.
+	grouppermission.DefaultID = grouppermissionDescID.Default.(func() uuid.UUID)
 	sessionFields := schema.Session{}.Fields()
 	_ = sessionFields
 	// sessionDescToken is the schema descriptor for token field.
@@ -39,12 +76,16 @@ func init() {
 	userDescPasswordHash := userFields[3].Descriptor()
 	// user.PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
 	user.PasswordHashValidator = userDescPasswordHash.Validators[0].(func(string) error)
+	// userDescGroupID is the schema descriptor for group_id field.
+	userDescGroupID := userFields[4].Descriptor()
+	// user.DefaultGroupID holds the default value on creation for the group_id field.
+	user.DefaultGroupID = userDescGroupID.Default.(func() uuid.UUID)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[4].Descriptor()
+	userDescCreatedAt := userFields[5].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[5].Descriptor()
+	userDescUpdatedAt := userFields[6].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -53,4 +94,18 @@ func init() {
 	userDescID := userFields[0].Descriptor()
 	// user.DefaultID holds the default value on creation for the id field.
 	user.DefaultID = userDescID.Default.(func() uuid.UUID)
+	userpermissionFields := schema.UserPermission{}.Fields()
+	_ = userpermissionFields
+	// userpermissionDescPermission is the schema descriptor for permission field.
+	userpermissionDescPermission := userpermissionFields[2].Descriptor()
+	// userpermission.PermissionValidator is a validator for the "permission" field. It is called by the builders before save.
+	userpermission.PermissionValidator = userpermissionDescPermission.Validators[0].(func(string) error)
+	// userpermissionDescCreatedAt is the schema descriptor for created_at field.
+	userpermissionDescCreatedAt := userpermissionFields[3].Descriptor()
+	// userpermission.DefaultCreatedAt holds the default value on creation for the created_at field.
+	userpermission.DefaultCreatedAt = userpermissionDescCreatedAt.Default.(func() time.Time)
+	// userpermissionDescID is the schema descriptor for id field.
+	userpermissionDescID := userpermissionFields[0].Descriptor()
+	// userpermission.DefaultID holds the default value on creation for the id field.
+	userpermission.DefaultID = userpermissionDescID.Default.(func() uuid.UUID)
 }

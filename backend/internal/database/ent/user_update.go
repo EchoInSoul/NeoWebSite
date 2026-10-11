@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/predicate"
 	"website/backend/internal/database/ent/user"
+	"website/backend/internal/database/ent/userpermission"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/google/uuid"
 )
 
 // UserUpdate is the builder for updating User entities.
@@ -70,15 +73,76 @@ func (_u *UserUpdate) SetNillablePasswordHash(v *string) *UserUpdate {
 	return _u
 }
 
+// SetGroupID sets the "group_id" field.
+func (_u *UserUpdate) SetGroupID(v uuid.UUID) *UserUpdate {
+	_u.mutation.SetGroupID(v)
+	return _u
+}
+
+// SetNillableGroupID sets the "group_id" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableGroupID(v *uuid.UUID) *UserUpdate {
+	if v != nil {
+		_u.SetGroupID(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *UserUpdate) SetUpdatedAt(v time.Time) *UserUpdate {
 	_u.mutation.SetUpdatedAt(v)
 	return _u
 }
 
+// SetGroup sets the "group" edge to the Group entity.
+func (_u *UserUpdate) SetGroup(v *Group) *UserUpdate {
+	return _u.SetGroupID(v.ID)
+}
+
+// AddPermissionIDs adds the "permissions" edge to the UserPermission entity by IDs.
+func (_u *UserUpdate) AddPermissionIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddPermissionIDs(ids...)
+	return _u
+}
+
+// AddPermissions adds the "permissions" edges to the UserPermission entity.
+func (_u *UserUpdate) AddPermissions(v ...*UserPermission) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPermissionIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
+}
+
+// ClearGroup clears the "group" edge to the Group entity.
+func (_u *UserUpdate) ClearGroup() *UserUpdate {
+	_u.mutation.ClearGroup()
+	return _u
+}
+
+// ClearPermissions clears all "permissions" edges to the UserPermission entity.
+func (_u *UserUpdate) ClearPermissions() *UserUpdate {
+	_u.mutation.ClearPermissions()
+	return _u
+}
+
+// RemovePermissionIDs removes the "permissions" edge to UserPermission entities by IDs.
+func (_u *UserUpdate) RemovePermissionIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemovePermissionIDs(ids...)
+	return _u
+}
+
+// RemovePermissions removes "permissions" edges to UserPermission entities.
+func (_u *UserUpdate) RemovePermissions(v ...*UserPermission) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePermissionIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -134,6 +198,9 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
+	if _u.mutation.GroupCleared() && len(_u.mutation.GroupIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "User.group"`)
+	}
 	return nil
 }
 
@@ -160,6 +227,80 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.GroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.GroupTable,
+			Columns: []string{user.GroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.GroupTable,
+			Columns: []string{user.GroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PermissionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PermissionsTable,
+			Columns: []string{user.PermissionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPermissionsIDs(); len(nodes) > 0 && !_u.mutation.PermissionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PermissionsTable,
+			Columns: []string{user.PermissionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PermissionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PermissionsTable,
+			Columns: []string{user.PermissionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -223,15 +364,76 @@ func (_u *UserUpdateOne) SetNillablePasswordHash(v *string) *UserUpdateOne {
 	return _u
 }
 
+// SetGroupID sets the "group_id" field.
+func (_u *UserUpdateOne) SetGroupID(v uuid.UUID) *UserUpdateOne {
+	_u.mutation.SetGroupID(v)
+	return _u
+}
+
+// SetNillableGroupID sets the "group_id" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableGroupID(v *uuid.UUID) *UserUpdateOne {
+	if v != nil {
+		_u.SetGroupID(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *UserUpdateOne) SetUpdatedAt(v time.Time) *UserUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
 	return _u
 }
 
+// SetGroup sets the "group" edge to the Group entity.
+func (_u *UserUpdateOne) SetGroup(v *Group) *UserUpdateOne {
+	return _u.SetGroupID(v.ID)
+}
+
+// AddPermissionIDs adds the "permissions" edge to the UserPermission entity by IDs.
+func (_u *UserUpdateOne) AddPermissionIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddPermissionIDs(ids...)
+	return _u
+}
+
+// AddPermissions adds the "permissions" edges to the UserPermission entity.
+func (_u *UserUpdateOne) AddPermissions(v ...*UserPermission) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPermissionIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
+}
+
+// ClearGroup clears the "group" edge to the Group entity.
+func (_u *UserUpdateOne) ClearGroup() *UserUpdateOne {
+	_u.mutation.ClearGroup()
+	return _u
+}
+
+// ClearPermissions clears all "permissions" edges to the UserPermission entity.
+func (_u *UserUpdateOne) ClearPermissions() *UserUpdateOne {
+	_u.mutation.ClearPermissions()
+	return _u
+}
+
+// RemovePermissionIDs removes the "permissions" edge to UserPermission entities by IDs.
+func (_u *UserUpdateOne) RemovePermissionIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemovePermissionIDs(ids...)
+	return _u
+}
+
+// RemovePermissions removes "permissions" edges to UserPermission entities.
+func (_u *UserUpdateOne) RemovePermissions(v ...*UserPermission) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePermissionIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -300,6 +502,9 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
+	if _u.mutation.GroupCleared() && len(_u.mutation.GroupIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "User.group"`)
+	}
 	return nil
 }
 
@@ -343,6 +548,80 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.GroupCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.GroupTable,
+			Columns: []string{user.GroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.GroupTable,
+			Columns: []string{user.GroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PermissionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PermissionsTable,
+			Columns: []string{user.PermissionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPermissionsIDs(); len(nodes) > 0 && !_u.mutation.PermissionsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PermissionsTable,
+			Columns: []string{user.PermissionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PermissionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PermissionsTable,
+			Columns: []string{user.PermissionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &User{config: _u.config}
 	_spec.Assign = _node.assignValues

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/user"
+	"website/backend/internal/database/ent/userpermission"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
@@ -36,6 +38,20 @@ func (_c *UserCreate) SetNickname(v string) *UserCreate {
 // SetPasswordHash sets the "password_hash" field.
 func (_c *UserCreate) SetPasswordHash(v string) *UserCreate {
 	_c.mutation.SetPasswordHash(v)
+	return _c
+}
+
+// SetGroupID sets the "group_id" field.
+func (_c *UserCreate) SetGroupID(v uuid.UUID) *UserCreate {
+	_c.mutation.SetGroupID(v)
+	return _c
+}
+
+// SetNillableGroupID sets the "group_id" field if the given value is not nil.
+func (_c *UserCreate) SetNillableGroupID(v *uuid.UUID) *UserCreate {
+	if v != nil {
+		_c.SetGroupID(*v)
+	}
 	return _c
 }
 
@@ -81,6 +97,26 @@ func (_c *UserCreate) SetNillableID(v *uuid.UUID) *UserCreate {
 	return _c
 }
 
+// SetGroup sets the "group" edge to the Group entity.
+func (_c *UserCreate) SetGroup(v *Group) *UserCreate {
+	return _c.SetGroupID(v.ID)
+}
+
+// AddPermissionIDs adds the "permissions" edge to the UserPermission entity by IDs.
+func (_c *UserCreate) AddPermissionIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddPermissionIDs(ids...)
+	return _c
+}
+
+// AddPermissions adds the "permissions" edges to the UserPermission entity.
+func (_c *UserCreate) AddPermissions(v ...*UserPermission) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPermissionIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_c *UserCreate) Mutation() *UserMutation {
 	return _c.mutation
@@ -116,6 +152,10 @@ func (_c *UserCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *UserCreate) defaults() {
+	if _, ok := _c.mutation.GroupID(); !ok {
+		v := user.DefaultGroupID()
+		_c.mutation.SetGroupID(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := user.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -156,11 +196,17 @@ func (_c *UserCreate) check() error {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.GroupID(); !ok {
+		return &ValidationError{Name: "group_id", err: errors.New(`ent: missing required field "User.group_id"`)}
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "User.created_at"`)}
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "User.updated_at"`)}
+	}
+	if len(_c.mutation.GroupIDs()) == 0 {
+		return &ValidationError{Name: "group", err: errors.New(`ent: missing required edge "User.group"`)}
 	}
 	return nil
 }
@@ -216,6 +262,39 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if nodes := _c.mutation.GroupIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   user.GroupTable,
+			Columns: []string{user.GroupColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.GroupID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PermissionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PermissionsTable,
+			Columns: []string{user.PermissionsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }

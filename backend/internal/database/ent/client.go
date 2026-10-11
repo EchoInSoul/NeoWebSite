@@ -11,12 +11,16 @@ import (
 
 	"website/backend/internal/database/ent/migrate"
 
+	"website/backend/internal/database/ent/group"
+	"website/backend/internal/database/ent/grouppermission"
 	"website/backend/internal/database/ent/session"
 	"website/backend/internal/database/ent/user"
+	"website/backend/internal/database/ent/userpermission"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/google/uuid"
 )
 
@@ -25,10 +29,16 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// Group is the client for interacting with the Group builders.
+	Group *GroupClient
+	// GroupPermission is the client for interacting with the GroupPermission builders.
+	GroupPermission *GroupPermissionClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// UserPermission is the client for interacting with the UserPermission builders.
+	UserPermission *UserPermissionClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -40,8 +50,11 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.Group = NewGroupClient(c.config)
+	c.GroupPermission = NewGroupPermissionClient(c.config)
 	c.Session = NewSessionClient(c.config)
 	c.User = NewUserClient(c.config)
+	c.UserPermission = NewUserPermissionClient(c.config)
 }
 
 type (
@@ -132,10 +145,13 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:     ctx,
-		config:  cfg,
-		Session: NewSessionClient(cfg),
-		User:    NewUserClient(cfg),
+		ctx:             ctx,
+		config:          cfg,
+		Group:           NewGroupClient(cfg),
+		GroupPermission: NewGroupPermissionClient(cfg),
+		Session:         NewSessionClient(cfg),
+		User:            NewUserClient(cfg),
+		UserPermission:  NewUserPermissionClient(cfg),
 	}, nil
 }
 
@@ -153,17 +169,20 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:     ctx,
-		config:  cfg,
-		Session: NewSessionClient(cfg),
-		User:    NewUserClient(cfg),
+		ctx:             ctx,
+		config:          cfg,
+		Group:           NewGroupClient(cfg),
+		GroupPermission: NewGroupPermissionClient(cfg),
+		Session:         NewSessionClient(cfg),
+		User:            NewUserClient(cfg),
+		UserPermission:  NewUserPermissionClient(cfg),
 	}, nil
 }
 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		Session.
+//		Group.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -185,26 +204,352 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
+	c.Group.Use(hooks...)
+	c.GroupPermission.Use(hooks...)
 	c.Session.Use(hooks...)
 	c.User.Use(hooks...)
+	c.UserPermission.Use(hooks...)
 }
 
 // Intercept adds the query interceptors to all the entity clients.
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
+	c.Group.Intercept(interceptors...)
+	c.GroupPermission.Intercept(interceptors...)
 	c.Session.Intercept(interceptors...)
 	c.User.Intercept(interceptors...)
+	c.UserPermission.Intercept(interceptors...)
 }
 
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *GroupMutation:
+		return c.Group.mutate(ctx, m)
+	case *GroupPermissionMutation:
+		return c.GroupPermission.mutate(ctx, m)
 	case *SessionMutation:
 		return c.Session.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
+	case *UserPermissionMutation:
+		return c.UserPermission.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// GroupClient is a client for the Group schema.
+type GroupClient struct {
+	config
+}
+
+// NewGroupClient returns a client for the Group from the given config.
+func NewGroupClient(c config) *GroupClient {
+	return &GroupClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `group.Hooks(f(g(h())))`.
+func (c *GroupClient) Use(hooks ...Hook) {
+	c.hooks.Group = append(c.hooks.Group, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `group.Intercept(f(g(h())))`.
+func (c *GroupClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Group = append(c.inters.Group, interceptors...)
+}
+
+// Create returns a builder for creating a Group entity.
+func (c *GroupClient) Create() *GroupCreate {
+	mutation := newGroupMutation(c.config, OpCreate)
+	return &GroupCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Group entities.
+func (c *GroupClient) CreateBulk(builders ...*GroupCreate) *GroupCreateBulk {
+	return &GroupCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GroupClient) MapCreateBulk(slice any, setFunc func(*GroupCreate, int)) *GroupCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GroupCreateBulk{err: fmt.Errorf("calling to GroupClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GroupCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GroupCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Group.
+func (c *GroupClient) Update() *GroupUpdate {
+	mutation := newGroupMutation(c.config, OpUpdate)
+	return &GroupUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GroupClient) UpdateOne(_m *Group) *GroupUpdateOne {
+	mutation := newGroupMutation(c.config, OpUpdateOne, withGroup(_m))
+	return &GroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GroupClient) UpdateOneID(id uuid.UUID) *GroupUpdateOne {
+	mutation := newGroupMutation(c.config, OpUpdateOne, withGroupID(id))
+	return &GroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Group.
+func (c *GroupClient) Delete() *GroupDelete {
+	mutation := newGroupMutation(c.config, OpDelete)
+	return &GroupDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GroupClient) DeleteOne(_m *Group) *GroupDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GroupClient) DeleteOneID(id uuid.UUID) *GroupDeleteOne {
+	builder := c.Delete().Where(group.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GroupDeleteOne{builder}
+}
+
+// Query returns a query builder for Group.
+func (c *GroupClient) Query() *GroupQuery {
+	return &GroupQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGroup},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Group entity by its id.
+func (c *GroupClient) Get(ctx context.Context, id uuid.UUID) (*Group, error) {
+	return c.Query().Where(group.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GroupClient) GetX(ctx context.Context, id uuid.UUID) *Group {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUsers queries the users edge of a Group.
+func (c *GroupClient) QueryUsers(_m *Group) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, group.UsersTable, group.UsersColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryPermissions queries the permissions edge of a Group.
+func (c *GroupClient) QueryPermissions(_m *Group) *GroupPermissionQuery {
+	query := (&GroupPermissionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, id),
+			sqlgraph.To(grouppermission.Table, grouppermission.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, group.PermissionsTable, group.PermissionsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *GroupClient) Hooks() []Hook {
+	return c.hooks.Group
+}
+
+// Interceptors returns the client interceptors.
+func (c *GroupClient) Interceptors() []Interceptor {
+	return c.inters.Group
+}
+
+func (c *GroupClient) mutate(ctx context.Context, m *GroupMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GroupCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GroupUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Group mutation op: %q", m.Op())
+	}
+}
+
+// GroupPermissionClient is a client for the GroupPermission schema.
+type GroupPermissionClient struct {
+	config
+}
+
+// NewGroupPermissionClient returns a client for the GroupPermission from the given config.
+func NewGroupPermissionClient(c config) *GroupPermissionClient {
+	return &GroupPermissionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `grouppermission.Hooks(f(g(h())))`.
+func (c *GroupPermissionClient) Use(hooks ...Hook) {
+	c.hooks.GroupPermission = append(c.hooks.GroupPermission, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `grouppermission.Intercept(f(g(h())))`.
+func (c *GroupPermissionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GroupPermission = append(c.inters.GroupPermission, interceptors...)
+}
+
+// Create returns a builder for creating a GroupPermission entity.
+func (c *GroupPermissionClient) Create() *GroupPermissionCreate {
+	mutation := newGroupPermissionMutation(c.config, OpCreate)
+	return &GroupPermissionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GroupPermission entities.
+func (c *GroupPermissionClient) CreateBulk(builders ...*GroupPermissionCreate) *GroupPermissionCreateBulk {
+	return &GroupPermissionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GroupPermissionClient) MapCreateBulk(slice any, setFunc func(*GroupPermissionCreate, int)) *GroupPermissionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GroupPermissionCreateBulk{err: fmt.Errorf("calling to GroupPermissionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GroupPermissionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GroupPermissionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GroupPermission.
+func (c *GroupPermissionClient) Update() *GroupPermissionUpdate {
+	mutation := newGroupPermissionMutation(c.config, OpUpdate)
+	return &GroupPermissionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GroupPermissionClient) UpdateOne(_m *GroupPermission) *GroupPermissionUpdateOne {
+	mutation := newGroupPermissionMutation(c.config, OpUpdateOne, withGroupPermission(_m))
+	return &GroupPermissionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GroupPermissionClient) UpdateOneID(id uuid.UUID) *GroupPermissionUpdateOne {
+	mutation := newGroupPermissionMutation(c.config, OpUpdateOne, withGroupPermissionID(id))
+	return &GroupPermissionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GroupPermission.
+func (c *GroupPermissionClient) Delete() *GroupPermissionDelete {
+	mutation := newGroupPermissionMutation(c.config, OpDelete)
+	return &GroupPermissionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GroupPermissionClient) DeleteOne(_m *GroupPermission) *GroupPermissionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GroupPermissionClient) DeleteOneID(id uuid.UUID) *GroupPermissionDeleteOne {
+	builder := c.Delete().Where(grouppermission.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GroupPermissionDeleteOne{builder}
+}
+
+// Query returns a query builder for GroupPermission.
+func (c *GroupPermissionClient) Query() *GroupPermissionQuery {
+	return &GroupPermissionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGroupPermission},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GroupPermission entity by its id.
+func (c *GroupPermissionClient) Get(ctx context.Context, id uuid.UUID) (*GroupPermission, error) {
+	return c.Query().Where(grouppermission.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GroupPermissionClient) GetX(ctx context.Context, id uuid.UUID) *GroupPermission {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryGroup queries the group edge of a GroupPermission.
+func (c *GroupPermissionClient) QueryGroup(_m *GroupPermission) *GroupQuery {
+	query := (&GroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(grouppermission.Table, grouppermission.FieldID, id),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, grouppermission.GroupTable, grouppermission.GroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *GroupPermissionClient) Hooks() []Hook {
+	return c.hooks.GroupPermission
+}
+
+// Interceptors returns the client interceptors.
+func (c *GroupPermissionClient) Interceptors() []Interceptor {
+	return c.inters.GroupPermission
+}
+
+func (c *GroupPermissionClient) mutate(ctx context.Context, m *GroupPermissionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GroupPermissionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GroupPermissionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GroupPermissionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GroupPermissionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GroupPermission mutation op: %q", m.Op())
 	}
 }
 
@@ -449,6 +794,38 @@ func (c *UserClient) GetX(ctx context.Context, id uuid.UUID) *User {
 	return obj
 }
 
+// QueryGroup queries the group edge of a User.
+func (c *UserClient) QueryGroup(_m *User) *GroupQuery {
+	query := (&GroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, user.GroupTable, user.GroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryPermissions queries the permissions edge of a User.
+func (c *UserClient) QueryPermissions(_m *User) *UserPermissionQuery {
+	query := (&UserPermissionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(userpermission.Table, userpermission.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.PermissionsTable, user.PermissionsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *UserClient) Hooks() []Hook {
 	return c.hooks.User
@@ -474,12 +851,161 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 	}
 }
 
+// UserPermissionClient is a client for the UserPermission schema.
+type UserPermissionClient struct {
+	config
+}
+
+// NewUserPermissionClient returns a client for the UserPermission from the given config.
+func NewUserPermissionClient(c config) *UserPermissionClient {
+	return &UserPermissionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `userpermission.Hooks(f(g(h())))`.
+func (c *UserPermissionClient) Use(hooks ...Hook) {
+	c.hooks.UserPermission = append(c.hooks.UserPermission, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `userpermission.Intercept(f(g(h())))`.
+func (c *UserPermissionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UserPermission = append(c.inters.UserPermission, interceptors...)
+}
+
+// Create returns a builder for creating a UserPermission entity.
+func (c *UserPermissionClient) Create() *UserPermissionCreate {
+	mutation := newUserPermissionMutation(c.config, OpCreate)
+	return &UserPermissionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UserPermission entities.
+func (c *UserPermissionClient) CreateBulk(builders ...*UserPermissionCreate) *UserPermissionCreateBulk {
+	return &UserPermissionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserPermissionClient) MapCreateBulk(slice any, setFunc func(*UserPermissionCreate, int)) *UserPermissionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserPermissionCreateBulk{err: fmt.Errorf("calling to UserPermissionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserPermissionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UserPermissionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UserPermission.
+func (c *UserPermissionClient) Update() *UserPermissionUpdate {
+	mutation := newUserPermissionMutation(c.config, OpUpdate)
+	return &UserPermissionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UserPermissionClient) UpdateOne(_m *UserPermission) *UserPermissionUpdateOne {
+	mutation := newUserPermissionMutation(c.config, OpUpdateOne, withUserPermission(_m))
+	return &UserPermissionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UserPermissionClient) UpdateOneID(id uuid.UUID) *UserPermissionUpdateOne {
+	mutation := newUserPermissionMutation(c.config, OpUpdateOne, withUserPermissionID(id))
+	return &UserPermissionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UserPermission.
+func (c *UserPermissionClient) Delete() *UserPermissionDelete {
+	mutation := newUserPermissionMutation(c.config, OpDelete)
+	return &UserPermissionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UserPermissionClient) DeleteOne(_m *UserPermission) *UserPermissionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UserPermissionClient) DeleteOneID(id uuid.UUID) *UserPermissionDeleteOne {
+	builder := c.Delete().Where(userpermission.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UserPermissionDeleteOne{builder}
+}
+
+// Query returns a query builder for UserPermission.
+func (c *UserPermissionClient) Query() *UserPermissionQuery {
+	return &UserPermissionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUserPermission},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UserPermission entity by its id.
+func (c *UserPermissionClient) Get(ctx context.Context, id uuid.UUID) (*UserPermission, error) {
+	return c.Query().Where(userpermission.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UserPermissionClient) GetX(ctx context.Context, id uuid.UUID) *UserPermission {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a UserPermission.
+func (c *UserPermissionClient) QueryUser(_m *UserPermission) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(userpermission.Table, userpermission.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, userpermission.UserTable, userpermission.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *UserPermissionClient) Hooks() []Hook {
+	return c.hooks.UserPermission
+}
+
+// Interceptors returns the client interceptors.
+func (c *UserPermissionClient) Interceptors() []Interceptor {
+	return c.inters.UserPermission
+}
+
+func (c *UserPermissionClient) mutate(ctx context.Context, m *UserPermissionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UserPermissionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UserPermissionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UserPermissionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UserPermissionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UserPermission mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Session, User []ent.Hook
+		Group, GroupPermission, Session, User, UserPermission []ent.Hook
 	}
 	inters struct {
-		Session, User []ent.Interceptor
+		Group, GroupPermission, Session, User, UserPermission []ent.Interceptor
 	}
 )

@@ -8,6 +8,48 @@ import (
 )
 
 var (
+	// GroupsColumns holds the columns for the "groups" table.
+	GroupsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "system_key", Type: field.TypeString, Unique: true, Nullable: true},
+		{Name: "name", Type: field.TypeString, Unique: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// GroupsTable holds the schema information for the "groups" table.
+	GroupsTable = &schema.Table{
+		Name:       "groups",
+		Columns:    GroupsColumns,
+		PrimaryKey: []*schema.Column{GroupsColumns[0]},
+	}
+	// GroupPermissionsColumns holds the columns for the "group_permissions" table.
+	GroupPermissionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "permission", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "group_id", Type: field.TypeUUID},
+	}
+	// GroupPermissionsTable holds the schema information for the "group_permissions" table.
+	GroupPermissionsTable = &schema.Table{
+		Name:       "group_permissions",
+		Columns:    GroupPermissionsColumns,
+		PrimaryKey: []*schema.Column{GroupPermissionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "group_permissions_groups_permissions",
+				Columns:    []*schema.Column{GroupPermissionsColumns[3]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "grouppermission_group_id_permission",
+				Unique:  true,
+				Columns: []*schema.Column{GroupPermissionsColumns[3], GroupPermissionsColumns[1]},
+			},
+		},
+	}
 	// SessionsColumns holds the columns for the "sessions" table.
 	SessionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -36,26 +78,74 @@ var (
 		{Name: "password_hash", Type: field.TypeString},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "group_id", Type: field.TypeUUID},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
 		Name:       "users",
 		Columns:    UsersColumns,
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "users_groups_users",
+				Columns:    []*schema.Column{UsersColumns[6]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "user_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{UsersColumns[4]},
 			},
+			{
+				Name:    "user_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[6]},
+			},
+		},
+	}
+	// UserPermissionsColumns holds the columns for the "user_permissions" table.
+	UserPermissionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "permission", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// UserPermissionsTable holds the schema information for the "user_permissions" table.
+	UserPermissionsTable = &schema.Table{
+		Name:       "user_permissions",
+		Columns:    UserPermissionsColumns,
+		PrimaryKey: []*schema.Column{UserPermissionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "user_permissions_users_permissions",
+				Columns:    []*schema.Column{UserPermissionsColumns[3]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "userpermission_user_id_permission",
+				Unique:  true,
+				Columns: []*schema.Column{UserPermissionsColumns[3], UserPermissionsColumns[1]},
+			},
 		},
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		GroupsTable,
+		GroupPermissionsTable,
 		SessionsTable,
 		UsersTable,
+		UserPermissionsTable,
 	}
 )
 
 func init() {
+	GroupPermissionsTable.ForeignKeys[0].RefTable = GroupsTable
+	UsersTable.ForeignKeys[0].RefTable = GroupsTable
+	UserPermissionsTable.ForeignKeys[0].RefTable = UsersTable
 }

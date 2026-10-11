@@ -12,10 +12,16 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// Group is the client for interacting with the Group builders.
+	Group *GroupClient
+	// GroupPermission is the client for interacting with the GroupPermission builders.
+	GroupPermission *GroupPermissionClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// UserPermission is the client for interacting with the UserPermission builders.
+	UserPermission *UserPermissionClient
 
 	// lazily loaded.
 	client     *Client
@@ -147,8 +153,11 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.Group = NewGroupClient(tx.config)
+	tx.GroupPermission = NewGroupPermissionClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)
 	tx.User = NewUserClient(tx.config)
+	tx.UserPermission = NewUserPermissionClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
@@ -158,7 +167,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: Session.QueryXXX(), the query will be executed
+// applies a query, for example: Group.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.
