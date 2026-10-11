@@ -11,6 +11,7 @@
 | `main.go` | `main.ts` | 启动引导：加载配置、创建应用、启动 |
 | `internal/app/app.go` | `app.module.ts` + `setGlobalPrefix` | 组装模块、全局前缀 `/api/v1`、HTTP 服务器（超时 / 优雅关闭） |
 | `internal/config` | `ConfigModule` | 读环境变量，产出 `Config` |
+| `internal/mail` | `@nestjs-modules/mailer`（对照位） | 邮件发送基础设施：`Mailer` 接口（Send / Close）+ SMTP / 日志双实现 + `templates/` 模板；`SMTP_HOST` 为空时降级为日志 |
 | `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close` / `Client`（ent）/ `SQL` |
 | `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
 | `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
@@ -59,6 +60,14 @@ postsModule.Register(api)
 | `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
 | `DB_CONN_MAX_LIFETIME` | `30m` | 连接最长存活时间 |
 | `SESSION_LIFETIME` | `168h` | 会话有效期（浏览器 cookie 的 `Max-Age` 同此值） |
+| `SMTP_HOST` | 空 | SMTP 服务器；**为空时邮件只写日志、不影响启动** |
+| `SMTP_PORT` | `587` | SMTP 端口（正整数 ≤ 65535；**25 不受支持**——会被 go-mail 视为未设置并改写成 587/465） |
+| `SMTP_TLS` | `starttls` | `starttls`（配 587）或 `ssl`（配 465） |
+| `SMTP_USERNAME` | 空 | 认证用户名；为空则不做 AUTH（自建中继场景） |
+| `SMTP_PASSWORD` | 空 | 认证密码（QQ/163 为授权码）；用户名非空时必填 |
+| `SMTP_FROM` | 无 | 发件地址；`SMTP_HOST` 非空时必填 |
+| `SMTP_FROM_NAME` | `NeoBlog` | 发件人显示名 |
+| `MAIL_TEST_RECIPIENT` | 空 | 仅测试用：与 `SMTP_*` 齐备时真实投递用例会向它发一封自检邮件 |
 | `POSTGRES_PASSWORD` | `neoblog` | 本地容器密码（compose 读 `.env`）；改动需同步 `DATABASE_URL` |
 
 ## 版本号
@@ -119,13 +128,29 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 规则：
 
-- 注册**公开**、不验证邮箱（没有邮件基础设施，也没有找回密码）。
+- 注册**公开**、不验证邮箱（邮件基础设施见「邮件」章节，注册流程尚未接入；也没有找回密码）。
 - 邮箱：`net/mail` 可解析、≤254 字符、入库统一小写；昵称：trim 后 2–32 字符（按 rune）、不含空白（含全角空格）与 `@`；密码：≥8 字符（按 rune）、同时含 ASCII 字母与数字、≤72 字节（bcrypt 上限）。
 - **更改密码保留当前设备、吊销该用户其他所有设备的会话**（用 scs 的 `IterableStore.All()` + `Codec` 按会话中的 `auth.user_id` 定位删除；失败即 500 且密码不落盘，可用旧密码重试）。
 
 会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当 `APP_ENV=production`；登录与注册成功都会换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
 
 **已知缺口**：登录与注册**暂无限流**（防刷号 / 防撞库，计划下一轮优先补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效。所有登录用户当前权限等同（还没有管理员专属接口，角色区分留到需要时）。
+
+## 邮件
+
+只做后端基础设施，**当前没有任何模块消费它**（注册不验证邮箱）。`internal/mail` 对外只暴露 `Mailer` 接口与 `Render`：
+
+```go
+body, err := mail.Render("example", map[string]string{"Time": "...", "Site": "NeoBlog"})
+mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", Body: body})
+```
+
+- `Send` 只保证入队（缓冲 32），投递由后台 worker 串行执行：每封最多 3 次尝试、退避 1s / 5s、单次 20s 超时；**服务端 4xx 与连接类错误重试，5xx 不重试**，失败记结构化日志（`log/slog`）。
+- `Close(ctx)` 停收新消息并把队列投完（`app.Run` 关闭路径中先 `server.Shutdown` 再 `mailer.Close`，共用 10s 预算）；`Close` 之后 `Send` 返回 `mail.ErrClosed`。
+- 模板：`internal/mail/templates/<name>.html` 与 `<name>.txt` 成对（HTML 侧用 `html/template` 自动转义）；内置一封 `example`（邮件配置自检）。
+- `SMTP_HOST` 为空时降级为日志实现：邮件全文写进日志但不发送，开发环境无需凭据即可跑通全流程。
+- 真实投递测试（可选）：`backend/.env` 填好 `SMTP_*` 与 `MAIL_TEST_RECIPIENT` 后跑 `go test ./internal/mail/ -run TestRealDelivery -v`。
+- 上线前按所选服务商配好 SPF / DKIM / DMARC（域验类服务商侧签 DKIM）；发件域名必须与认证域名对齐，**不要用自有域名 From 搭配 QQ 个人邮箱认证**。细节见 `docs/superpowers/specs/2026-10-11-neoblog-mail-design.md` §11。
 
 ## 运行
 
