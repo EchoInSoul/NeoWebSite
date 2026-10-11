@@ -214,6 +214,24 @@ func TestProductionCookieIsSecure(t *testing.T) {
 	}
 }
 
+func TestSessionCookieMaxAgeMatchesLifetime(t *testing.T) {
+	ts, db := newTestServer(t, "development")
+	u, password := createTestUser(t, db)
+	client := newClient(t)
+
+	resp := login(t, client, ts.URL, u.Email, password)
+	cookie := sessionCookie(resp)
+	resp.Body.Close()
+	if cookie == nil {
+		t.Fatal("expected a session cookie on login")
+	}
+
+	want := int(time.Hour.Seconds())
+	if cookie.MaxAge != want {
+		t.Fatalf("cookie MaxAge = %d, want %d (SessionLifetime set in testConfig)", cookie.MaxAge, want)
+	}
+}
+
 func TestAnonymousLogoutRejected(t *testing.T) {
 	ts, _ := newTestServer(t, "development")
 	client := newClient(t)
