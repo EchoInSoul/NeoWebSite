@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.5.1
+当前版本：0.6.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -116,6 +116,8 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 应用启动绝不自动迁移；`ATLAS_DEV_URL` 缺省指向空的 `neoblog_atlas_dev`（脚本内默认值）。迁移文件里含数据（预设组 seed）或手工改造过 SQL 时，必须重算校验和：`atlas migrate hash --dir "file://migrations"` 再 `atlas migrate validate`（用户组与权限迁移是第一个带 seed 的）。工具链细节与已验证事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节。
 
+当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）。
+
 ## 认证
 
 只提供后端接口（前端由前端侧接线）。层 1：登录 / 登出 / 当前用户；层 2：公开注册与更改密码。
@@ -137,6 +139,8 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当 `APP_ENV=production`；登录与注册成功都会换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
 
 **已知缺口**：登录与注册**暂无限流**（防刷号 / 防撞库，计划下一轮优先补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效。
+
+**两步验证（TOTP + 自管恢复码）**：表结构已预留（见上方迁移清单），接口与登录分叉下一轮（spec：`docs/superpowers/specs/2026-10-11-neoblog-2fa-schema-design.md`）；当前无用户启用、无任何写入路径。
 
 ### 用户组与权限
 
