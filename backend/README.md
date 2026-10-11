@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.7.0
+当前版本：0.8.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -24,17 +24,18 @@
 | `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录 / 登出 / 当前用户 / 改密；`Register`（公开）与 `RegisterProtected`（受保护） |
 | `internal/modules/access/*` | `access.module.ts` 等 | 用户组与权限：组 CRUD、用户管理接口、生效权限解析；全部挂在权限守卫下 |
 | `internal/modules/mail` | `@nestjs-modules/mailer`（对照位） | 无路由模块（无 controller / dto / Register，对外入口 `New(cfg) Mailer` 与 `Render`）：`Mailer` 接口（Send / Close）+ SMTP / 日志双实现 + `templates/` 模板；`SMTP_HOST` 为空时降级为日志 |
+| `internal/modules/settings` | `@nestjs/config`（存储对照位） | 无路由模块（无 controller / dto / Register，对外入口 `New(db) (*Service, error)`）：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；清单为空 = 全默认，加设置见「设置」章节配方 |
 | `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）；常量 `auth.user_id` / `auth.identity` |
 | `internal/common/rbac` | `src/common`（权限目录） | 权限点目录与预设组常量（固定 UUID）；纯 Go，不依赖 gin / DB |
 | `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
 
 ## 硬性规则
 
-1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。**无路由的能力模块（当前仅 `mail`）可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件。**
+1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。**无路由的能力模块（当前 `mail`、`settings`）可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件。**
 2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。
 3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app、`internal/common/guard`（中间件）和 `internal/common/apierror`（统一错误写出）；service 一律不 import gin。
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
-5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**另一个例外：无路由的能力模块由 `New` 直接返回能力接口（当前仅 `mail.New(cfg) Mailer`）；无状态的包级纯函数可直接导出（如 `mail.Render`）——都不算对外暴露内部实现。**
+5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**另一个例外：无路由的能力模块由 `New` 直接返回能力接口（当前 `mail.New(cfg) Mailer` 与 `settings.New(db) (*Service, error)`，后者是唯一返回 error 的模块构造器，错误沿启动链返回）；无状态的包级纯函数可直接导出（如 `mail.Render`）——都不算对外暴露内部实现。**
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
 7. 模块禁止自建数据库连接（禁止 `sql.Open` 等），只能用注入进来的连接；**同理禁止自建 SMTP 客户端，发信一律用注入的 `mail.Mailer`**。
 8. `internal/database` 不得 import 任何业务模块。
@@ -116,7 +117,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 应用启动绝不自动迁移；`ATLAS_DEV_URL` 缺省指向空的 `neoblog_atlas_dev`（脚本内默认值）。迁移文件里含数据（预设组 seed）或手工改造过 SQL 时，必须重算校验和：`atlas migrate hash --dir "file://migrations"` 再 `atlas migrate validate`（用户组与权限迁移是第一个带 seed 的）。工具链细节与已验证事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节。
 
-当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）。
+当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）。
 
 ## 认证
 

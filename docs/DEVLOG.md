@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-10-11 · 设置组存储机制（内部能力，无路由）
+
+**版本**：0.7.0 → **0.8.0**（minor：新能力域）
+
+### 做了什么
+
+- spec v2 全落：`setting_values` 单表（复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）；模块 `internal/modules/settings/`（types / registry / repository / service 四文件，无路由无 controller / dto）；三种类型读写按类型分方法（用错即 `ErrMethodMismatch`）、整组读逐项合并坏行只回退该项、整组写单事务零落库、删项恢复默认（幂等只指"清单内但库里没有这行"）；清单定义在代码内（初始为空），构造自检不过启动失败。
+- `settings.New(db) (*Service, error)` 是仓库第一个返回 error 的模块构造器；`app.New` 随之改 `(*App, error)`，三处调用点同步（`main.go` 拆链式调用、`app_test.go` 两处判错）。
+- upsert 冲突分支显式 `SetUpdatedAt(time.Now())`（不赌 ent 的 `UpdateDefault` 是否作用于 `ON CONFLICT` 路径），集成用例⑧断言同项二次写入后时间变大。
+- 测试：清单自检与配方防漂移（单测，无库）+ 集成①–⑧（`DATABASE_URL_TEST` 缺省 skip）；README 四处同步（目录对照表加行、硬性规则 1 / 5 措辞、迁移清单、「设置」章节 + 加设置配方——配方防漂移测试 `TestRegistryRecipeShape` 把关）。
+
+### 过程中的坑
+
+- **jsonb 归一化**：`1e3` 落库即被 Postgres 存成 `1000`，读取侧永远见不到指数记法原文；数字边界的真身（`3.5` / 超 int64）照拒，`1e3` 的拒绝由内核 `TestDecodeNumberBoundary`（`UseNumber` + `ParseInt`）在原始 JSON 文本上钉死。
+- `.env` 直接 `source` 只设 shell 变量、不导出，`go test` 子进程看不到 `DATABASE_URL_TEST`——要 `set -a; source .env; set +a`。
+- `gofmt -l` 退出码恒为 0（列出问题文件也不报错），门禁必须用 `test -z "$(gofmt -l .)"` 判定。
+
+### 已知缺口
+
+- 清单为空、无消费方：模块上线即休眠（与 2FA 轮同性质）；首次真实使用（加组 + 消费方）只改代码不动库。
+- 孤儿行：清单删项后旧行滞留并占着复合键，需人工 SQL 清理（spec §9）。
+- 密钥类加密、接口 / 公开读取、导入导出：见 spec §10 插槽。
+
+---
+
 ## 2026-10-11 · 两步验证表结构预留（TOTP，仅落库）
 
 **版本**：0.5.1 → **0.6.0**（minor：新能力域的数据插槽）

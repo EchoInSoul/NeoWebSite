@@ -105,7 +105,7 @@ func (SettingValue) Indexes() []ent.Index {
 
 写入方式：按复合键的 upsert（`INSERT ... ON CONFLICT DO UPDATE`）。依赖 `ent generate --feature sql/upsert`（§7）。
 
-- **`updated_at` 在冲突分支必须刷新**（要求，不是假设）：schema 的 `UpdateDefault(time.Now)` 是否作用到 `ON CONFLICT DO UPDATE` 路径未经实测。实施计划第一步生成后即核对生成物；冲突分支不刷新就在 `repository.go` 的 upsert 上显式赋值（自定义 SET）兜底，并由集成用例断言"同一项二次写入后 `updated_at` 变大"。
+- **`updated_at` 在冲突分支必须刷新**（要求，不是假设）：schema 的 `UpdateDefault(time.Now)` 是否作用到 `ON CONFLICT DO UPDATE` 路径未经实测。实施计划第一步生成后即核对生成物；冲突分支不刷新就在 `repository.go` 的 upsert 上显式赋值（自定义 SET）兜底，并由集成用例断言"同一项二次写入后 `updated_at` 变大"。**实施记录（2026-10-11）**：实现直接采用显式 `SetUpdatedAt(time.Now())`（`repository.go` 的 `upsert` / `upsertMany`，后者为整组单事务新增），不依赖 `UpdateDefault` 的冲突分支行为；集成用例⑧实测通过。
 
 ## 5. 清单（代码内注册表）
 
