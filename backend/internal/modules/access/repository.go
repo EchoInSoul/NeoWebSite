@@ -211,6 +211,14 @@ func (r *repository) replaceGroupPermissions(ctx context.Context, id uuid.UUID, 
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	locked, err := tx.Group.Query().Where(group.IDEQ(id)).ForUpdate().All(ctx)
+	if err != nil {
+		return err
+	}
+	if len(locked) == 0 {
+		return ErrNotFound
+	}
+
 	if _, err := tx.GroupPermission.Delete().Where(grouppermission.GroupIDEQ(id)).Exec(ctx); err != nil {
 		return err
 	}
@@ -255,6 +263,17 @@ func (r *repository) updateUser(ctx context.Context, params updateUserParams) er
 		}
 		if len(owners) < 2 {
 			return ErrLastOwner
+		}
+	} else {
+		locked, err := tx.User.Query().
+			Where(user.IDEQ(params.UserID)).
+			ForUpdate().
+			All(ctx)
+		if err != nil {
+			return err
+		}
+		if len(locked) == 0 {
+			return ErrNotFound
 		}
 	}
 

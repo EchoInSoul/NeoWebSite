@@ -457,6 +457,80 @@ func TestEditImpliesViewOnEndpoints(t *testing.T) {
 	}
 }
 
+func TestConcurrentReplaceKeepsBothWritesServing(t *testing.T) {
+	db := testDB(t)
+	ts := newAccessTestApp(t, db)
+	_, ownerID := createOwnerIdentity(t, db)
+	owner := seedClient(t, ts, ownerID)
+	tag := uniqueTag(t)
+	groupID := createTestGroup(t, db, "race-"+tag, []string{rbac.PermissionUsersView})
+	userID := createTestUser(t, db, rbac.GroupIDUser)
+
+	patch := func(endpoint string, payload map[string]any) int {
+		body, err := json.Marshal(payload)
+		if err != nil {
+			return -1
+		}
+		request, err := http.NewRequest(http.MethodPatch, endpoint, bytes.NewReader(body))
+		if err != nil {
+			return -2
+		}
+		request.Header.Set("Content-Type", "application/json")
+		resp, err := owner.Do(request)
+		if err != nil {
+			return -3
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	for round := 0; round < 5; round++ {
+		statuses := make([]int, 2)
+		var waitGroup sync.WaitGroup
+		waitGroup.Add(2)
+		go func() {
+			defer waitGroup.Done()
+			statuses[0] = patch(ts.URL+"/api/v1/admin/groups/"+groupID.String(), map[string]any{
+				"permissions": []string{rbac.PermissionGroupsEdit},
+			})
+		}()
+		go func() {
+			defer waitGroup.Done()
+			statuses[1] = patch(ts.URL+"/api/v1/admin/groups/"+groupID.String(), map[string]any{
+				"permissions": []string{rbac.PermissionGroupsEdit, rbac.PermissionUsersView},
+			})
+		}()
+		waitGroup.Wait()
+		for _, status := range statuses {
+			if status != http.StatusOK {
+				t.Fatalf("round %d: concurrent group replace status = %d, want 200 (all: %v)", round, status, statuses)
+			}
+		}
+
+		userStatuses := make([]int, 2)
+		var userWaitGroup sync.WaitGroup
+		userWaitGroup.Add(2)
+		go func() {
+			defer userWaitGroup.Done()
+			userStatuses[0] = patch(ts.URL+"/api/v1/admin/users/"+userID.String(), map[string]any{
+				"extra_permissions": []string{rbac.PermissionUsersView},
+			})
+		}()
+		go func() {
+			defer userWaitGroup.Done()
+			userStatuses[1] = patch(ts.URL+"/api/v1/admin/users/"+userID.String(), map[string]any{
+				"extra_permissions": []string{rbac.PermissionUsersView, rbac.PermissionGroupsView},
+			})
+		}()
+		userWaitGroup.Wait()
+		for _, status := range userStatuses {
+			if status != http.StatusOK {
+				t.Fatalf("round %d: concurrent user replace status = %d, want 200 (all: %v)", round, status, userStatuses)
+			}
+		}
+	}
+}
+
 func TestGroupCreateConcurrentSameName(t *testing.T) {
 	db := testDB(t)
 	ts := newAccessTestApp(t, db)
