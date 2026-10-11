@@ -19,6 +19,13 @@
 - ent 命名转换不保留缩写词大写：`totp_secret` 生成的 Go 字段是 `TotpSecret`（不是 `TOTPSecret`）；计划原写法有误，以生成物为准。
 - auth 包测试 helper 已有同签名 `testDB` / `uniqueTag`（`repository_test.go`），新测试文件重复声明直接编译失败——删重复声明、复用既有 helper。
 
+### 终审
+
+独立子代理整分支终审（fresh context）：**0 Critical / 1 Important / 4 Minor**，Review Focus 五条（级联方向、Nillable、迁移无 NOT NULL/回填、索引、两库一致）与 spec §10 五条验收逐条实测通过；go.mod/go.sum 确认未动，业务模块 grep `totp|recovery` 零匹配。
+
+- **已修**：README 已引用本轮 spec 路径而 plan/spec 两份文档此前未入库（悬空引用、违背前四轮存档惯例）——两份文档随本提交补交存档；spec §10.5 的既有路由计数同步更正（auth 5 + access 8 = 13 条 + healthy）。
+- **延后小项（待定）**：迁移后置断言可选加固——`used_at` 改为从 DB 重查后再断言 nil、`TotpEnabledAt` 补值相等校验（当前由迁移 SQL 人工审阅 + `atlas migrate validate` 把关）。
+
 ### 已知缺口
 
 - `recovery_codes` 在下一轮接口落地前是死表；`code_hash` 暂不设长度校验（写入方下一轮实现时钉 64 位 hex）。
