@@ -13,6 +13,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
 
+	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/config"
 	"website/backend/internal/database"
@@ -60,6 +61,10 @@ func New(cfg config.Config, db *database.Database) *App {
 	protected := api.Group("", guard.RequireAuth(sessions), guard.LoadIdentity(accessModule.Service, sessions))
 	authModule.RegisterProtected(protected)
 	accessModule.RegisterProtected(protected)
+
+	engine.NoRoute(func(c *gin.Context) {
+		apierror.Write(c, apierror.ErrNotFound)
+	})
 
 	handler := sessions.LoadAndSave(engine)
 

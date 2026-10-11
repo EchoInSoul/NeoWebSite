@@ -3,10 +3,11 @@ package guard
 import (
 	"context"
 	"errors"
-	"net/http"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
+
+	"website/backend/internal/common/apierror"
 )
 
 const SessionIdentityKey = "auth.identity"
@@ -29,7 +30,7 @@ func LoadIdentity(resolver IdentityResolver, sessions *scs.SessionManager) gin.H
 	return func(c *gin.Context) {
 		userID := sessions.GetString(c.Request.Context(), SessionUserIDKey)
 		if userID == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			apierror.Abort(c, apierror.ErrUnauthorized)
 			return
 		}
 
@@ -37,10 +38,10 @@ func LoadIdentity(resolver IdentityResolver, sessions *scs.SessionManager) gin.H
 		if err != nil {
 			if errors.Is(err, ErrUserNotFound) {
 				_ = sessions.Destroy(c.Request.Context())
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+				apierror.Abort(c, apierror.ErrUnauthorized)
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+			apierror.Abort(c, apierror.ErrInternal)
 			return
 		}
 
@@ -53,7 +54,7 @@ func RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		identity, ok := IdentityFrom(c)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+			apierror.Abort(c, apierror.ErrInternal)
 			return
 		}
 		for _, held := range identity.Permissions {
@@ -62,7 +63,7 @@ func RequirePermission(permission string) gin.HandlerFunc {
 				return
 			}
 		}
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		apierror.Abort(c, apierror.ErrForbidden)
 	}
 }
 

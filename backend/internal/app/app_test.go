@@ -253,6 +253,30 @@ func TestAnonymousLogoutRejected(t *testing.T) {
 	}
 }
 
+func TestNoRouteReturnsErrorEnvelope(t *testing.T) {
+	ts, _ := newTestServer(t, "development")
+
+	resp, err := http.Get(ts.URL + "/api/v1/nope")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Error.Code != "not_found" {
+		t.Fatalf("error = %q, want not_found", body.Error.Code)
+	}
+}
+
 func TestHealthyEndpointStillWorks(t *testing.T) {
 	ts, _ := newTestServer(t, "development")
 

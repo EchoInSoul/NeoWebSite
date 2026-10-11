@@ -47,13 +47,8 @@ func TestRequireAuthRejectsAnonymous(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", resp.StatusCode)
 	}
-
-	var body map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if body["error"] != "unauthorized" {
-		t.Fatalf("error = %q, want unauthorized", body["error"])
+	if code := decodeErrorBody(t, resp); code != "unauthorized" {
+		t.Fatalf("error = %q, want unauthorized", code)
 	}
 }
 
@@ -165,11 +160,16 @@ func seededClient(t *testing.T, ts *httptest.Server) *http.Client {
 func decodeErrorBody(t *testing.T, resp *http.Response) string {
 	t.Helper()
 
-	var body map[string]string
+	var body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	return body["error"]
+	errObj, ok := body["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error field = %v, want nested object with code", body["error"])
+	}
+	code, _ := errObj["code"].(string)
+	return code
 }
 
 func TestLoadIdentityRejectsSessionlessRequest(t *testing.T) {
