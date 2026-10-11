@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -613,6 +614,43 @@ func TestRegisterWhileLoggedInSwitchesSession(t *testing.T) {
 	}
 	if body.Email != secondEmail {
 		t.Fatalf("me email = %q, want %q", body.Email, secondEmail)
+	}
+}
+
+func TestRegisterConcurrentSameEmail(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	ts := newTestApp(t, db)
+
+	email := "race+" + tag + "@example.com"
+	cleanupUserByEmail(t, db, email)
+
+	statuses := make([]int, 2)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(2)
+	for i := range statuses {
+		go func(index int) {
+			defer waitGroup.Done()
+			resp := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/register", RegisterRequest{Email: email, Nickname: "race" + tag, Password: "pass1234"})
+			statuses[index] = resp.StatusCode
+			resp.Body.Close()
+		}(i)
+	}
+	waitGroup.Wait()
+
+	created, conflicted := 0, 0
+	for _, status := range statuses {
+		switch status {
+		case http.StatusCreated:
+			created++
+		case http.StatusConflict:
+			conflicted++
+		default:
+			t.Fatalf("unexpected status %d (all: %v)", status, statuses)
+		}
+	}
+	if created != 1 || conflicted != 1 {
+		t.Fatalf("created/conflicted = %d/%d, want 1/1", created, conflicted)
 	}
 }
 
