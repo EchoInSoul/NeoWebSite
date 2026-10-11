@@ -3,6 +3,7 @@ package settings
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -24,6 +25,35 @@ func (r *repository) upsert(ctx context.Context, group, name string, value json.
 		OnConflict(sql.ConflictColumns("setting_group", "name")).
 		UpdateNewValues().
 		Exec(ctx)
+}
+
+func (r *repository) upsertMany(ctx context.Context, group string, values map[string]json.RawMessage) error {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	now := time.Now()
+	for _, name := range names {
+		if err := tx.SettingValue.Create().
+			SetSettingGroup(group).
+			SetName(name).
+			SetValue(values[name]).
+			SetUpdatedAt(now).
+			OnConflict(sql.ConflictColumns("setting_group", "name")).
+			UpdateNewValues().
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (r *repository) get(ctx context.Context, group, name string) (json.RawMessage, bool, error) {
