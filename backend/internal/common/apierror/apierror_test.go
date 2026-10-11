@@ -160,6 +160,17 @@ func TestWithParamOverrides(t *testing.T) {
 	}
 }
 
+func TestBodyCopyDoesNotAliasSentinelParam(t *testing.T) {
+	body := Body(ErrEmailTaken)
+	if body.Param == nil {
+		t.Fatal("email_taken must carry its default param")
+	}
+	*body.Param = "hacked"
+	if *ErrEmailTaken.Param != "email" {
+		t.Fatalf("sentinel param polluted through Body copy: %q", *ErrEmailTaken.Param)
+	}
+}
+
 func TestRegistryIntegrity(t *testing.T) {
 	all := []*Error{
 		ErrInvalidRequest, ErrWeakPassword, ErrPasswordUnchanged, ErrInvalidPermission,

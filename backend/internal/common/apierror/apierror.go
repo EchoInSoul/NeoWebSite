@@ -110,6 +110,9 @@ func Body(err error) *Error {
 		return internalBody()
 	}
 	out := *target
+	if target.Param != nil {
+		out.Param = strPtr(*target.Param)
+	}
 	var override paramOverride
 	if errors.As(err, &override) {
 		out.Param = strPtr(override.param)
@@ -119,6 +122,9 @@ func Body(err error) *Error {
 
 func internalBody() *Error {
 	out := *ErrInternal
+	if ErrInternal.Param != nil {
+		out.Param = strPtr(*ErrInternal.Param)
+	}
 	return &out
 }
 
