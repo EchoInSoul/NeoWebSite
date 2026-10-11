@@ -219,7 +219,7 @@ v1 只有 4 个点（目录里每个 key 都必须有真实检查点，不预埋
 - `app.go`：
   - `accessModule := access.New(db)`；
   - 保护组：`protected := api.Group("", guard.RequireAuth(sessions), guard.LoadIdentity(accessModule.Service, sessions))`；
-  - `authModule.RegisterProtected(protected)`（登出、me）+ `accessModule.RegisterProtected(protected)`（admin 路由）。
+  - `authModule.RegisterProtected(protected)`（登出、me、改密码）+ `accessModule.RegisterProtected(protected)`（admin 路由）。
 - 模块边界：`access` 模块同时承载组 CRUD 与用户管理接口，经共享 ent client 读写 users（对齐数据层设计「不隔仓储接口层、边界靠 DTO」）；不引入 auth ↔ access 双向依赖。
 - `/auth/me` 的 group / permissions 从 gin context（`auth.identity`）取，controller 已 import guard，无新增模块依赖。
 - `internal/common/rbac` 是纯 Go 包（不 import gin、不 import 业务模块）：ent schema 与 auth 模块都可能需要预设常量（`internal/database` 不得 import 业务模块）。

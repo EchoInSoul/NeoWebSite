@@ -140,7 +140,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 ### 用户组与权限
 
-三个预设组（不可删 / 不可改名 / 权限由代码计算，含以后新增的权限点）：`owner` 所有者 与 `admin` 管理员 = 全部权限，`user` 普通用户 = 空；自建组权限存库、可改名可删（有成员时不可删）。生效权限 = 所属组权限 ∪ 用户额外权限（两侧都做 `edit → view` 蕴含展开）；新用户由数据库默认值落「普通用户」，创建路径不显式设组。
+三个预设组（不可删 / 不可改名 / 权限由代码计算，含以后新增的权限点）：`owner` 所有者 与 `admin` 管理员 = 全部权限，`user` 普通用户 = 空；自建组权限存库、可改名可删（有成员时不可删）。生效权限 = 所属组权限 ∪ 用户额外权限（两侧都做 `edit → view` 蕴含展开）；新用户由 ent 的字段级默认值落「普通用户」（迁移无 DB DEFAULT 子句，绕过 ent 的裸 SQL 建号不会自动落组），创建路径不显式设组。
 
 | 方法 路径 | 需要的权限 | 说明 |
 | --- | --- | --- |
@@ -167,7 +167,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 ## 邮件
 
-只做后端发信能力（无路由模块，无 controller / dto），**当前没有任何模块消费它**（注册不验证邮箱）。`internal/modules/mail` 对外只暴露 `Mailer` 接口与 `Render`：
+只做后端发信能力（无路由模块，无 controller / dto），**当前没有任何模块消费它**（注册不验证邮箱）。`internal/modules/mail` 对外暴露 `Mailer` 接口与 `Render`，以及 `Message` / `Body` 数据结构、构造入口 `New` 和哨兵 `ErrClosed`：
 
 ```go
 body, err := mail.Render("example", map[string]string{"Time": "...", "Site": "NeoBlog"})
