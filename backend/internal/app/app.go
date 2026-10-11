@@ -16,6 +16,7 @@ import (
 	"website/backend/internal/common/guard"
 	"website/backend/internal/config"
 	"website/backend/internal/database"
+	"website/backend/internal/mail"
 	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/health"
 )
@@ -31,6 +32,8 @@ const (
 
 type App struct {
 	handler http.Handler
+	server  *http.Server
+	mailer  mail.Mailer
 }
 
 func New(cfg config.Config, db *database.Database) *App {
@@ -53,7 +56,19 @@ func New(cfg config.Config, db *database.Database) *App {
 	authModule.Register(api)
 	authModule.RegisterProtected(api.Group("", guard.RequireAuth(sessions)))
 
-	return &App{handler: sessions.LoadAndSave(engine)}
+	handler := sessions.LoadAndSave(engine)
+
+	return &App{
+		handler: handler,
+		server: &http.Server{
+			Handler:           handler,
+			ReadHeaderTimeout: readHeaderTimeout,
+			ReadTimeout:       readTimeout,
+			WriteTimeout:      writeTimeout,
+			IdleTimeout:       idleTimeout,
+		},
+		mailer: mail.New(cfg),
+	}
 }
 
 func newSessionManager(cfg config.Config, db *database.Database) *scs.SessionManager {
@@ -73,14 +88,7 @@ func (a *App) Handler() http.Handler {
 }
 
 func (a *App) Run(addr string) error {
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           a.handler,
-		ReadHeaderTimeout: readHeaderTimeout,
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
-		IdleTimeout:       idleTimeout,
-	}
+	a.server.Addr = addr
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -88,7 +96,7 @@ func (a *App) Run(addr string) error {
 	errCh := make(chan error, 1)
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 	}()
@@ -102,5 +110,13 @@ func (a *App) Run(addr string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	return server.Shutdown(shutdownCtx)
+	return a.shutdown(shutdownCtx)
+}
+
+func (a *App) shutdown(ctx context.Context) error {
+	err := a.server.Shutdown(ctx)
+	if closeErr := a.mailer.Close(ctx); err == nil {
+		err = closeErr
+	}
+	return err
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -16,6 +17,7 @@ import (
 
 	"website/backend/internal/config"
 	"website/backend/internal/database"
+	"website/backend/internal/mail"
 	"website/backend/internal/modules/auth"
 )
 
@@ -304,5 +306,24 @@ func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+}
+
+func TestShutdownClosesMailer(t *testing.T) {
+	cfg := testConfig(t, "development")
+	db, err := database.Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	a := New(cfg, db)
+	if err := a.shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+
+	err = a.mailer.Send(context.Background(), mail.Message{To: "user@example.com", Subject: "s", Body: mail.Body{Text: "t"}})
+	if !errors.Is(err, mail.ErrClosed) {
+		t.Fatalf("send after shutdown = %v, want mail.ErrClosed", err)
 	}
 }
