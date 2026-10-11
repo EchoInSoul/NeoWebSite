@@ -23,6 +23,10 @@ const (
 	FieldPasswordHash = "password_hash"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
+	// FieldTotpSecret holds the string denoting the totp_secret field in the database.
+	FieldTotpSecret = "totp_secret"
+	// FieldTotpEnabledAt holds the string denoting the totp_enabled_at field in the database.
+	FieldTotpEnabledAt = "totp_enabled_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -31,6 +35,8 @@ const (
 	EdgeGroup = "group"
 	// EdgePermissions holds the string denoting the permissions edge name in mutations.
 	EdgePermissions = "permissions"
+	// EdgeRecoveryCodes holds the string denoting the recoverycodes edge name in mutations.
+	EdgeRecoveryCodes = "recoveryCodes"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// GroupTable is the table that holds the group relation/edge.
@@ -47,6 +53,13 @@ const (
 	PermissionsInverseTable = "user_permissions"
 	// PermissionsColumn is the table column denoting the permissions relation/edge.
 	PermissionsColumn = "user_id"
+	// RecoveryCodesTable is the table that holds the recoveryCodes relation/edge.
+	RecoveryCodesTable = "recovery_codes"
+	// RecoveryCodesInverseTable is the table name for the RecoveryCode entity.
+	// It exists in this package in order to avoid circular dependency with the "recoverycode" package.
+	RecoveryCodesInverseTable = "recovery_codes"
+	// RecoveryCodesColumn is the table column denoting the recoveryCodes relation/edge.
+	RecoveryCodesColumn = "user_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -56,6 +69,8 @@ var Columns = []string{
 	FieldNickname,
 	FieldPasswordHash,
 	FieldGroupID,
+	FieldTotpSecret,
+	FieldTotpEnabledAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -117,6 +132,16 @@ func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGroupID, opts...).ToFunc()
 }
 
+// ByTotpSecret orders the results by the totp_secret field.
+func ByTotpSecret(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotpSecret, opts...).ToFunc()
+}
+
+// ByTotpEnabledAt orders the results by the totp_enabled_at field.
+func ByTotpEnabledAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotpEnabledAt, opts...).ToFunc()
+}
+
 // ByCreatedAt orders the results by the created_at field.
 func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
@@ -147,6 +172,20 @@ func ByPermissions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newPermissionsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByRecoveryCodesCount orders the results by recoveryCodes count.
+func ByRecoveryCodesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newRecoveryCodesStep(), opts...)
+	}
+}
+
+// ByRecoveryCodes orders the results by recoveryCodes terms.
+func ByRecoveryCodes(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newRecoveryCodesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newGroupStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -159,5 +198,12 @@ func newPermissionsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(PermissionsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, PermissionsTable, PermissionsColumn),
+	)
+}
+func newRecoveryCodesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(RecoveryCodesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, RecoveryCodesTable, RecoveryCodesColumn),
 	)
 }

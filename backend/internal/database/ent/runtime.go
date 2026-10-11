@@ -6,6 +6,7 @@ import (
 	"time"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/schema"
 	"website/backend/internal/database/ent/session"
 	"website/backend/internal/database/ent/user"
@@ -52,6 +53,20 @@ func init() {
 	grouppermissionDescID := grouppermissionFields[0].Descriptor()
 	// grouppermission.DefaultID holds the default value on creation for the id field.
 	grouppermission.DefaultID = grouppermissionDescID.Default.(func() uuid.UUID)
+	recoverycodeFields := schema.RecoveryCode{}.Fields()
+	_ = recoverycodeFields
+	// recoverycodeDescCodeHash is the schema descriptor for code_hash field.
+	recoverycodeDescCodeHash := recoverycodeFields[2].Descriptor()
+	// recoverycode.CodeHashValidator is a validator for the "code_hash" field. It is called by the builders before save.
+	recoverycode.CodeHashValidator = recoverycodeDescCodeHash.Validators[0].(func(string) error)
+	// recoverycodeDescCreatedAt is the schema descriptor for created_at field.
+	recoverycodeDescCreatedAt := recoverycodeFields[3].Descriptor()
+	// recoverycode.DefaultCreatedAt holds the default value on creation for the created_at field.
+	recoverycode.DefaultCreatedAt = recoverycodeDescCreatedAt.Default.(func() time.Time)
+	// recoverycodeDescID is the schema descriptor for id field.
+	recoverycodeDescID := recoverycodeFields[0].Descriptor()
+	// recoverycode.DefaultID holds the default value on creation for the id field.
+	recoverycode.DefaultID = recoverycodeDescID.Default.(func() uuid.UUID)
 	sessionFields := schema.Session{}.Fields()
 	_ = sessionFields
 	// sessionDescToken is the schema descriptor for token field.
@@ -81,11 +96,11 @@ func init() {
 	// user.DefaultGroupID holds the default value on creation for the group_id field.
 	user.DefaultGroupID = userDescGroupID.Default.(func() uuid.UUID)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[5].Descriptor()
+	userDescCreatedAt := userFields[7].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[6].Descriptor()
+	userDescUpdatedAt := userFields[8].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

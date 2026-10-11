@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 	"website/backend/internal/database/ent/group"
+	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/database/ent/userpermission"
 
@@ -51,6 +52,34 @@ func (_c *UserCreate) SetGroupID(v uuid.UUID) *UserCreate {
 func (_c *UserCreate) SetNillableGroupID(v *uuid.UUID) *UserCreate {
 	if v != nil {
 		_c.SetGroupID(*v)
+	}
+	return _c
+}
+
+// SetTotpSecret sets the "totp_secret" field.
+func (_c *UserCreate) SetTotpSecret(v string) *UserCreate {
+	_c.mutation.SetTotpSecret(v)
+	return _c
+}
+
+// SetNillableTotpSecret sets the "totp_secret" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTotpSecret(v *string) *UserCreate {
+	if v != nil {
+		_c.SetTotpSecret(*v)
+	}
+	return _c
+}
+
+// SetTotpEnabledAt sets the "totp_enabled_at" field.
+func (_c *UserCreate) SetTotpEnabledAt(v time.Time) *UserCreate {
+	_c.mutation.SetTotpEnabledAt(v)
+	return _c
+}
+
+// SetNillableTotpEnabledAt sets the "totp_enabled_at" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTotpEnabledAt(v *time.Time) *UserCreate {
+	if v != nil {
+		_c.SetTotpEnabledAt(*v)
 	}
 	return _c
 }
@@ -115,6 +144,21 @@ func (_c *UserCreate) AddPermissions(v ...*UserPermission) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddPermissionIDs(ids...)
+}
+
+// AddRecoveryCodeIDs adds the "recoveryCodes" edge to the RecoveryCode entity by IDs.
+func (_c *UserCreate) AddRecoveryCodeIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddRecoveryCodeIDs(ids...)
+	return _c
+}
+
+// AddRecoveryCodes adds the "recoveryCodes" edges to the RecoveryCode entity.
+func (_c *UserCreate) AddRecoveryCodes(v ...*RecoveryCode) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddRecoveryCodeIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -255,6 +299,14 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 		_node.PasswordHash = value
 	}
+	if value, ok := _c.mutation.TotpSecret(); ok {
+		_spec.SetField(user.FieldTotpSecret, field.TypeString, value)
+		_node.TotpSecret = &value
+	}
+	if value, ok := _c.mutation.TotpEnabledAt(); ok {
+		_spec.SetField(user.FieldTotpEnabledAt, field.TypeTime, value)
+		_node.TotpEnabledAt = &value
+	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(user.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
@@ -289,6 +341,22 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.RecoveryCodesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RecoveryCodesTable,
+			Columns: []string{user.RecoveryCodesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

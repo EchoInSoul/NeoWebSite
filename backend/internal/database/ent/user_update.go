@@ -9,6 +9,7 @@ import (
 	"time"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/predicate"
+	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/database/ent/userpermission"
 
@@ -87,6 +88,46 @@ func (_u *UserUpdate) SetNillableGroupID(v *uuid.UUID) *UserUpdate {
 	return _u
 }
 
+// SetTotpSecret sets the "totp_secret" field.
+func (_u *UserUpdate) SetTotpSecret(v string) *UserUpdate {
+	_u.mutation.SetTotpSecret(v)
+	return _u
+}
+
+// SetNillableTotpSecret sets the "totp_secret" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTotpSecret(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetTotpSecret(*v)
+	}
+	return _u
+}
+
+// ClearTotpSecret clears the value of the "totp_secret" field.
+func (_u *UserUpdate) ClearTotpSecret() *UserUpdate {
+	_u.mutation.ClearTotpSecret()
+	return _u
+}
+
+// SetTotpEnabledAt sets the "totp_enabled_at" field.
+func (_u *UserUpdate) SetTotpEnabledAt(v time.Time) *UserUpdate {
+	_u.mutation.SetTotpEnabledAt(v)
+	return _u
+}
+
+// SetNillableTotpEnabledAt sets the "totp_enabled_at" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTotpEnabledAt(v *time.Time) *UserUpdate {
+	if v != nil {
+		_u.SetTotpEnabledAt(*v)
+	}
+	return _u
+}
+
+// ClearTotpEnabledAt clears the value of the "totp_enabled_at" field.
+func (_u *UserUpdate) ClearTotpEnabledAt() *UserUpdate {
+	_u.mutation.ClearTotpEnabledAt()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *UserUpdate) SetUpdatedAt(v time.Time) *UserUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -111,6 +152,21 @@ func (_u *UserUpdate) AddPermissions(v ...*UserPermission) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddPermissionIDs(ids...)
+}
+
+// AddRecoveryCodeIDs adds the "recoveryCodes" edge to the RecoveryCode entity by IDs.
+func (_u *UserUpdate) AddRecoveryCodeIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddRecoveryCodeIDs(ids...)
+	return _u
+}
+
+// AddRecoveryCodes adds the "recoveryCodes" edges to the RecoveryCode entity.
+func (_u *UserUpdate) AddRecoveryCodes(v ...*RecoveryCode) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddRecoveryCodeIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -143,6 +199,27 @@ func (_u *UserUpdate) RemovePermissions(v ...*UserPermission) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePermissionIDs(ids...)
+}
+
+// ClearRecoveryCodes clears all "recoveryCodes" edges to the RecoveryCode entity.
+func (_u *UserUpdate) ClearRecoveryCodes() *UserUpdate {
+	_u.mutation.ClearRecoveryCodes()
+	return _u
+}
+
+// RemoveRecoveryCodeIDs removes the "recoveryCodes" edge to RecoveryCode entities by IDs.
+func (_u *UserUpdate) RemoveRecoveryCodeIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveRecoveryCodeIDs(ids...)
+	return _u
+}
+
+// RemoveRecoveryCodes removes "recoveryCodes" edges to RecoveryCode entities.
+func (_u *UserUpdate) RemoveRecoveryCodes(v ...*RecoveryCode) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveRecoveryCodeIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -225,6 +302,18 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.TotpSecret(); ok {
+		_spec.SetField(user.FieldTotpSecret, field.TypeString, value)
+	}
+	if _u.mutation.TotpSecretCleared() {
+		_spec.ClearField(user.FieldTotpSecret, field.TypeString)
+	}
+	if value, ok := _u.mutation.TotpEnabledAt(); ok {
+		_spec.SetField(user.FieldTotpEnabledAt, field.TypeTime, value)
+	}
+	if _u.mutation.TotpEnabledAtCleared() {
+		_spec.ClearField(user.FieldTotpEnabledAt, field.TypeTime)
+	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
 	}
@@ -295,6 +384,51 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.RecoveryCodesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RecoveryCodesTable,
+			Columns: []string{user.RecoveryCodesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedRecoveryCodesIDs(); len(nodes) > 0 && !_u.mutation.RecoveryCodesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RecoveryCodesTable,
+			Columns: []string{user.RecoveryCodesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RecoveryCodesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RecoveryCodesTable,
+			Columns: []string{user.RecoveryCodesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {
@@ -378,6 +512,46 @@ func (_u *UserUpdateOne) SetNillableGroupID(v *uuid.UUID) *UserUpdateOne {
 	return _u
 }
 
+// SetTotpSecret sets the "totp_secret" field.
+func (_u *UserUpdateOne) SetTotpSecret(v string) *UserUpdateOne {
+	_u.mutation.SetTotpSecret(v)
+	return _u
+}
+
+// SetNillableTotpSecret sets the "totp_secret" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTotpSecret(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetTotpSecret(*v)
+	}
+	return _u
+}
+
+// ClearTotpSecret clears the value of the "totp_secret" field.
+func (_u *UserUpdateOne) ClearTotpSecret() *UserUpdateOne {
+	_u.mutation.ClearTotpSecret()
+	return _u
+}
+
+// SetTotpEnabledAt sets the "totp_enabled_at" field.
+func (_u *UserUpdateOne) SetTotpEnabledAt(v time.Time) *UserUpdateOne {
+	_u.mutation.SetTotpEnabledAt(v)
+	return _u
+}
+
+// SetNillableTotpEnabledAt sets the "totp_enabled_at" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTotpEnabledAt(v *time.Time) *UserUpdateOne {
+	if v != nil {
+		_u.SetTotpEnabledAt(*v)
+	}
+	return _u
+}
+
+// ClearTotpEnabledAt clears the value of the "totp_enabled_at" field.
+func (_u *UserUpdateOne) ClearTotpEnabledAt() *UserUpdateOne {
+	_u.mutation.ClearTotpEnabledAt()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *UserUpdateOne) SetUpdatedAt(v time.Time) *UserUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -402,6 +576,21 @@ func (_u *UserUpdateOne) AddPermissions(v ...*UserPermission) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.AddPermissionIDs(ids...)
+}
+
+// AddRecoveryCodeIDs adds the "recoveryCodes" edge to the RecoveryCode entity by IDs.
+func (_u *UserUpdateOne) AddRecoveryCodeIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddRecoveryCodeIDs(ids...)
+	return _u
+}
+
+// AddRecoveryCodes adds the "recoveryCodes" edges to the RecoveryCode entity.
+func (_u *UserUpdateOne) AddRecoveryCodes(v ...*RecoveryCode) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddRecoveryCodeIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -434,6 +623,27 @@ func (_u *UserUpdateOne) RemovePermissions(v ...*UserPermission) *UserUpdateOne 
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePermissionIDs(ids...)
+}
+
+// ClearRecoveryCodes clears all "recoveryCodes" edges to the RecoveryCode entity.
+func (_u *UserUpdateOne) ClearRecoveryCodes() *UserUpdateOne {
+	_u.mutation.ClearRecoveryCodes()
+	return _u
+}
+
+// RemoveRecoveryCodeIDs removes the "recoveryCodes" edge to RecoveryCode entities by IDs.
+func (_u *UserUpdateOne) RemoveRecoveryCodeIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveRecoveryCodeIDs(ids...)
+	return _u
+}
+
+// RemoveRecoveryCodes removes "recoveryCodes" edges to RecoveryCode entities.
+func (_u *UserUpdateOne) RemoveRecoveryCodes(v ...*RecoveryCode) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveRecoveryCodeIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -546,6 +756,18 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.TotpSecret(); ok {
+		_spec.SetField(user.FieldTotpSecret, field.TypeString, value)
+	}
+	if _u.mutation.TotpSecretCleared() {
+		_spec.ClearField(user.FieldTotpSecret, field.TypeString)
+	}
+	if value, ok := _u.mutation.TotpEnabledAt(); ok {
+		_spec.SetField(user.FieldTotpEnabledAt, field.TypeTime, value)
+	}
+	if _u.mutation.TotpEnabledAtCleared() {
+		_spec.ClearField(user.FieldTotpEnabledAt, field.TypeTime)
+	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
 	}
@@ -616,6 +838,51 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(userpermission.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.RecoveryCodesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RecoveryCodesTable,
+			Columns: []string{user.RecoveryCodesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedRecoveryCodesIDs(); len(nodes) > 0 && !_u.mutation.RecoveryCodesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RecoveryCodesTable,
+			Columns: []string{user.RecoveryCodesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RecoveryCodesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RecoveryCodesTable,
+			Columns: []string{user.RecoveryCodesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

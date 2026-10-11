@@ -27,6 +27,10 @@ type User struct {
 	PasswordHash string `json:"password_hash,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID uuid.UUID `json:"group_id,omitempty"`
+	// TotpSecret holds the value of the "totp_secret" field.
+	TotpSecret *string `json:"totp_secret,omitempty"`
+	// TotpEnabledAt holds the value of the "totp_enabled_at" field.
+	TotpEnabledAt *time.Time `json:"totp_enabled_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -43,9 +47,11 @@ type UserEdges struct {
 	Group *Group `json:"group,omitempty"`
 	// Permissions holds the value of the permissions edge.
 	Permissions []*UserPermission `json:"permissions,omitempty"`
+	// RecoveryCodes holds the value of the recoveryCodes edge.
+	RecoveryCodes []*RecoveryCode `json:"recoveryCodes,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // GroupOrErr returns the Group value or an error if the edge
@@ -68,14 +74,23 @@ func (e UserEdges) PermissionsOrErr() ([]*UserPermission, error) {
 	return nil, &NotLoadedError{edge: "permissions"}
 }
 
+// RecoveryCodesOrErr returns the RecoveryCodes value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) RecoveryCodesOrErr() ([]*RecoveryCode, error) {
+	if e.loadedTypes[2] {
+		return e.RecoveryCodes, nil
+	}
+	return nil, &NotLoadedError{edge: "recoveryCodes"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldEmail, user.FieldNickname, user.FieldPasswordHash:
+		case user.FieldEmail, user.FieldNickname, user.FieldPasswordHash, user.FieldTotpSecret:
 			values[i] = new(sql.NullString)
-		case user.FieldCreatedAt, user.FieldUpdatedAt:
+		case user.FieldTotpEnabledAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		case user.FieldID, user.FieldGroupID:
 			values[i] = new(uuid.UUID)
@@ -124,6 +139,20 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value != nil {
 				_m.GroupID = *value
 			}
+		case user.FieldTotpSecret:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field totp_secret", values[i])
+			} else if value.Valid {
+				_m.TotpSecret = new(string)
+				*_m.TotpSecret = value.String
+			}
+		case user.FieldTotpEnabledAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field totp_enabled_at", values[i])
+			} else if value.Valid {
+				_m.TotpEnabledAt = new(time.Time)
+				*_m.TotpEnabledAt = value.Time
+			}
 		case user.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -157,6 +186,11 @@ func (_m *User) QueryGroup() *GroupQuery {
 // QueryPermissions queries the "permissions" edge of the User entity.
 func (_m *User) QueryPermissions() *UserPermissionQuery {
 	return NewUserClient(_m.config).QueryPermissions(_m)
+}
+
+// QueryRecoveryCodes queries the "recoveryCodes" edge of the User entity.
+func (_m *User) QueryRecoveryCodes() *RecoveryCodeQuery {
+	return NewUserClient(_m.config).QueryRecoveryCodes(_m)
 }
 
 // Update returns a builder for updating this User.
@@ -193,6 +227,16 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("group_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GroupID))
+	builder.WriteString(", ")
+	if v := _m.TotpSecret; v != nil {
+		builder.WriteString("totp_secret=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TotpEnabledAt; v != nil {
+		builder.WriteString("totp_enabled_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/session"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/database/ent/userpermission"
@@ -79,6 +80,7 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			group.Table:           group.ValidColumn,
 			grouppermission.Table: grouppermission.ValidColumn,
+			recoverycode.Table:    recoverycode.ValidColumn,
 			session.Table:         session.ValidColumn,
 			user.Table:            user.ValidColumn,
 			userpermission.Table:  userpermission.ValidColumn,

@@ -50,6 +50,35 @@ var (
 			},
 		},
 	}
+	// RecoveryCodesColumns holds the columns for the "recovery_codes" table.
+	RecoveryCodesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "code_hash", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "used_at", Type: field.TypeTime, Nullable: true},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// RecoveryCodesTable holds the schema information for the "recovery_codes" table.
+	RecoveryCodesTable = &schema.Table{
+		Name:       "recovery_codes",
+		Columns:    RecoveryCodesColumns,
+		PrimaryKey: []*schema.Column{RecoveryCodesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "recovery_codes_users_recoveryCodes",
+				Columns:    []*schema.Column{RecoveryCodesColumns[4]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "recoverycode_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{RecoveryCodesColumns[4]},
+			},
+		},
+	}
 	// SessionsColumns holds the columns for the "sessions" table.
 	SessionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -76,6 +105,8 @@ var (
 		{Name: "email", Type: field.TypeString, Unique: true},
 		{Name: "nickname", Type: field.TypeString, Unique: true},
 		{Name: "password_hash", Type: field.TypeString},
+		{Name: "totp_secret", Type: field.TypeString, Nullable: true},
+		{Name: "totp_enabled_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "group_id", Type: field.TypeUUID},
@@ -88,7 +119,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "users_groups_users",
-				Columns:    []*schema.Column{UsersColumns[6]},
+				Columns:    []*schema.Column{UsersColumns[8]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -97,12 +128,12 @@ var (
 			{
 				Name:    "user_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[4]},
+				Columns: []*schema.Column{UsersColumns[6]},
 			},
 			{
 				Name:    "user_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[6]},
+				Columns: []*schema.Column{UsersColumns[8]},
 			},
 		},
 	}
@@ -138,6 +169,7 @@ var (
 	Tables = []*schema.Table{
 		GroupsTable,
 		GroupPermissionsTable,
+		RecoveryCodesTable,
 		SessionsTable,
 		UsersTable,
 		UserPermissionsTable,
@@ -146,6 +178,7 @@ var (
 
 func init() {
 	GroupPermissionsTable.ForeignKeys[0].RefTable = GroupsTable
+	RecoveryCodesTable.ForeignKeys[0].RefTable = UsersTable
 	UsersTable.ForeignKeys[0].RefTable = GroupsTable
 	UserPermissionsTable.ForeignKeys[0].RefTable = UsersTable
 }

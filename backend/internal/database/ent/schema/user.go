@@ -24,6 +24,8 @@ func (User) Fields() []ent.Field {
 		field.String("nickname").NotEmpty().Unique(),
 		field.String("password_hash").NotEmpty(),
 		field.UUID("group_id", uuid.UUID{}).Default(func() uuid.UUID { return rbac.GroupIDUser }),
+		field.String("totp_secret").Optional().Nillable(),
+		field.Time("totp_enabled_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}
@@ -33,6 +35,7 @@ func (User) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("group", Group.Type).Ref("users").Unique().Required().Field("group_id"),
 		edge.To("permissions", UserPermission.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("recoveryCodes", RecoveryCode.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 	}
 }
 
