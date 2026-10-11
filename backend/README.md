@@ -219,4 +219,4 @@ bash scripts/dev.sh     # 同上（先定位到 backend/，可在任意目录执
 ADDR=:9090 go run .     # 自定义端口
 ```
 
-健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.7.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
+健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"<当前版本>","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
