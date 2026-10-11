@@ -21,6 +21,7 @@ import (
 	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/health"
 	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/settings"
 )
 
 const (
@@ -33,12 +34,18 @@ const (
 )
 
 type App struct {
-	handler http.Handler
-	server  *http.Server
-	mailer  mail.Mailer
+	handler  http.Handler
+	server   *http.Server
+	mailer   mail.Mailer
+	settings *settings.Service
 }
 
-func New(cfg config.Config, db *database.Database) *App {
+func New(cfg config.Config, db *database.Database) (*App, error) {
+	settingsService, err := settings.New(db)
+	if err != nil {
+		return nil, err
+	}
+
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -78,8 +85,9 @@ func New(cfg config.Config, db *database.Database) *App {
 			WriteTimeout:      writeTimeout,
 			IdleTimeout:       idleTimeout,
 		},
-		mailer: mail.New(cfg),
-	}
+		mailer:   mail.New(cfg),
+		settings: settingsService,
+	}, nil
 }
 
 func recoveryHandler() gin.HandlerFunc {

@@ -25,8 +25,13 @@ func main() {
 	}
 	defer db.Close()
 
+	application, err := app.New(cfg, db)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	log.Printf("listening on %s", cfg.Addr)
-	if err := app.New(cfg, db).Run(cfg.Addr); err != nil {
+	if err := application.Run(cfg.Addr); err != nil {
 		log.Fatal(err)
 	}
 }

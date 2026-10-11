@@ -53,7 +53,11 @@ func newTestServer(t *testing.T, environment string) (*httptest.Server, *databas
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	ts := httptest.NewServer(New(cfg, db).Handler())
+	application, err := New(cfg, db)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	ts := httptest.NewServer(application.Handler())
 	t.Cleanup(ts.Close)
 	return ts, db
 }
@@ -372,7 +376,10 @@ func TestShutdownClosesMailer(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	a := New(cfg, db)
+	a, err := New(cfg, db)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
 	if err := a.shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
