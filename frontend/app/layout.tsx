@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
 
+import { ThemeSync } from "@/components/theme-sync";
 import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/bootstrap-scripts";
 
 import "./globals.css";
@@ -35,6 +36,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col">
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        <ThemeSync />
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
       </body>
     </html>

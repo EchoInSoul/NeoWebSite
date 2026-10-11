@@ -16,13 +16,17 @@ function isThemeMode(value: string | null): value is ThemeMode {
 
 function subscribe(onStoreChange: () => void): () => void {
   const darkColorScheme = window.matchMedia(DARK_COLOR_SCHEME_QUERY);
-  darkColorScheme.addEventListener("change", onStoreChange);
-  window.addEventListener("storage", onStoreChange);
-  window.addEventListener(CHANGE_EVENT_NAME, onStoreChange);
+  const handleExternalThemeChange = () => {
+    applyThemeMode(getSnapshot());
+    onStoreChange();
+  };
+  darkColorScheme.addEventListener("change", handleExternalThemeChange);
+  window.addEventListener("storage", handleExternalThemeChange);
+  window.addEventListener(CHANGE_EVENT_NAME, handleExternalThemeChange);
   return () => {
-    darkColorScheme.removeEventListener("change", onStoreChange);
-    window.removeEventListener("storage", onStoreChange);
-    window.removeEventListener(CHANGE_EVENT_NAME, onStoreChange);
+    darkColorScheme.removeEventListener("change", handleExternalThemeChange);
+    window.removeEventListener("storage", handleExternalThemeChange);
+    window.removeEventListener(CHANGE_EVENT_NAME, handleExternalThemeChange);
   };
 }
 
