@@ -123,7 +123,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 只提供后端接口（前端由前端侧接线）。层 1：登录 / 登出 / 当前用户；层 2：公开注册与更改密码。
 
-所有端点的错误响应统一为 `{"error":{"type","code","param"}}`：HTTP 状态码照常；`code` 即下表中的 token；`type` 由状态码唯一决定（400 `invalid_request_error` / 401 `authentication_error` / 403 `permission_error` / 404 `not_found_error` / 409 `conflict_error` / 500 `server_error`）；`param` 指向出错字段或为 `null`；错误体不含任何文案。
+所有端点的错误响应统一为 `{"error":{"type","code","param"}}`：HTTP 状态码照常；`code` 即下表中的 token；`type` 由状态码唯一决定（400 `invalid_request_error` / 401 `authentication_error` / 403 `permission_error` / 404 `not_found_error` / 409 `conflict_error` / 500 `server_error`）；`param` 指向出错字段或为 `null`；错误体不含任何文案。唯一例外：`/healthy` 为探针端点豁免本信封，503 降级时仍返回 `Status` 对象。
 
 | 方法 路径 | 认证 | 说明 |
 | --- | --- | --- |
@@ -219,4 +219,4 @@ bash scripts/dev.sh     # 同上（先定位到 backend/，可在任意目录执
 ADDR=:9090 go run .     # 自定义端口
 ```
 
-健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.5.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
+健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"0.7.0","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
