@@ -121,8 +121,10 @@ func TestSendAfterCloseReturnsErrClosed(t *testing.T) {
 	go m.run()
 	closeMailer(t, m)
 
-	if err := m.Send(context.Background(), Message{To: "a@example.com"}); !errors.Is(err, ErrClosed) {
-		t.Fatalf("send after close = %v, want ErrClosed", err)
+	for i := 0; i < 100; i++ {
+		if err := m.Send(context.Background(), Message{To: "a@example.com"}); !errors.Is(err, ErrClosed) {
+			t.Fatalf("send %d after close = %v, want ErrClosed", i, err)
+		}
 	}
 }
 
