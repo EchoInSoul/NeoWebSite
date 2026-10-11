@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"website/backend/internal/config"
 )
 
 const (
@@ -68,6 +70,20 @@ func newMailer(tr transport, logger *slog.Logger) *mailer {
 		done:         make(chan struct{}),
 		retryBackoff: []time.Duration{time.Second, 5 * time.Second},
 	}
+}
+
+func New(cfg config.Config) Mailer {
+	logger := slog.Default()
+	m := newMailer(newTransport(cfg, logger), logger)
+	go m.run()
+	return m
+}
+
+func newTransport(cfg config.Config, logger *slog.Logger) transport {
+	if cfg.SMTPHost == "" {
+		return newLogSender(cfg, logger)
+	}
+	return newSMTPTransport(cfg)
 }
 
 func (m *mailer) Send(ctx context.Context, msg Message) error {
