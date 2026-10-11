@@ -11,7 +11,6 @@
 | `main.go` | `main.ts` | 启动引导：加载配置、创建应用、启动 |
 | `internal/app/app.go` | `app.module.ts` + `setGlobalPrefix` | 组装模块、全局前缀 `/api/v1`、HTTP 服务器（超时 / 优雅关闭） |
 | `internal/config` | `ConfigModule` | 读环境变量，产出 `Config` |
-| `internal/modules/mail` | `@nestjs-modules/mailer`（对照位） | 邮件发送基础设施：`Mailer` 接口（Send / Close）+ SMTP / 日志双实现 + `templates/` 模板；`SMTP_HOST` 为空时降级为日志 |
 | `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close` / `Client`（ent）/ `SQL` |
 | `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
 | `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
@@ -24,19 +23,20 @@
 | `internal/modules/health/dto.go` | `dto/*.dto.ts` | 请求/响应数据结构 |
 | `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录 / 登出 / 当前用户 / 改密；`Register`（公开）与 `RegisterProtected`（受保护） |
 | `internal/modules/access/*` | `access.module.ts` 等 | 用户组与权限：组 CRUD、用户管理接口、生效权限解析；全部挂在权限守卫下 |
+| `internal/modules/mail` | `@nestjs-modules/mailer`（对照位） | 无路由模块（无 controller / dto / Register，对外入口 `New(cfg) Mailer` 与 `Render`）：`Mailer` 接口（Send / Close）+ SMTP / 日志双实现 + `templates/` 模板；`SMTP_HOST` 为空时降级为日志 |
 | `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）；常量 `auth.user_id` / `auth.identity` |
 | `internal/common/rbac` | `src/common`（权限目录） | 权限点目录与预设组常量（固定 UUID）；纯 Go，不依赖 gin / DB |
 | `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
 
 ## 硬性规则
 
-1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。
+1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。**无路由的能力模块（当前仅 `mail`）可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件。**
 2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。
 3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app 和 `internal/common/guard`（中间件）；service 一律不 import gin。
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
-5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。
+5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**另一个例外：无路由的能力模块由 `New` 直接返回能力接口（当前仅 `mail.New(cfg) Mailer`）；无状态的包级纯函数可直接导出（如 `mail.Render`）——都不算对外暴露内部实现。**
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
-7. 模块禁止自建数据库连接（禁止 `sql.Open` 等），只能用注入进来的连接。
+7. 模块禁止自建数据库连接（禁止 `sql.Open` 等），只能用注入进来的连接；**同理禁止自建 SMTP 客户端，发信一律用注入的 `mail.Mailer`**。
 8. `internal/database` 不得 import 任何业务模块。
 
 ## 新增一个功能模块的顺序
@@ -167,7 +167,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 ## 邮件
 
-只做后端基础设施，**当前没有任何模块消费它**（注册不验证邮箱）。`internal/modules/mail` 对外只暴露 `Mailer` 接口与 `Render`：
+只做后端发信能力（无路由模块，无 controller / dto），**当前没有任何模块消费它**（注册不验证邮箱）。`internal/modules/mail` 对外只暴露 `Mailer` 接口与 `Render`：
 
 ```go
 body, err := mail.Render("example", map[string]string{"Time": "...", "Site": "NeoBlog"})
@@ -178,7 +178,7 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 - `Close(ctx)` 停收新消息并把队列投完（`app.Run` 关闭路径中先 `server.Shutdown` 再 `mailer.Close`，共用 10s 预算）；`Close` 之后 `Send` 返回 `mail.ErrClosed`。
 - 模板：`internal/modules/mail/templates/<name>.html` 与 `<name>.txt` 成对（HTML 侧用 `html/template` 自动转义）；内置一封 `example`（邮件配置自检）。
 - `SMTP_HOST` 为空时降级为日志实现：邮件全文写进日志但不发送，开发环境无需凭据即可跑通全流程。
-- 真实投递测试（可选）：`backend/.env` 填好 `SMTP_*` 与 `MAIL_TEST_RECIPIENT` 后跑 `go test ./internal/modules/mail/ -run TestRealDelivery -v`。
+- 真实投递测试（可选）：`backend/.env` 填好 `SMTP_*` 与 `MAIL_TEST_RECIPIENT` 后跑 `go test ./internal/modules/mail/ -run TestRealDelivery -v`（测试会从包目录向上查找 `.env`，深度上限 5，不写死相对路径）。
 - 上线前按所选服务商配好 SPF / DKIM / DMARC（域验类服务商侧签 DKIM）；发件域名必须与认证域名对齐，**不要用自有域名 From 搭配 QQ 个人邮箱认证**。细节见 `docs/superpowers/specs/2026-10-11-neoblog-mail-design.md` §11。
 
 ## 运行
