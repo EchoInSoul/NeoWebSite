@@ -104,11 +104,11 @@ func TestDecodeNumberBoundary(t *testing.T) {
 		}
 	}
 	accepted := map[string]int64{
-		`3`:                     3,
-		`-5`:                    -5,
-		`0`:                     0,
-		`9223372036854775807`:   9223372036854775807,
-		`-9223372036854775808`:  -9223372036854775808,
+		`3`:                    3,
+		`-5`:                   -5,
+		`0`:                    0,
+		`9223372036854775807`:  9223372036854775807,
+		`-9223372036854775808`: -9223372036854775808,
 	}
 	for raw, want := range accepted {
 		got, err := decodeNumber(json.RawMessage(raw))

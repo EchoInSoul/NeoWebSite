@@ -232,7 +232,7 @@ func TestServiceBadRowFallback(t *testing.T) {
 
 func TestServiceExtraGroupNoMigration(t *testing.T) {
 	groups := append(sampleGroups(), Group{
-		Name: "extra",
+		Name:  "extra",
 		Items: []Definition{{Name: "flag", Type: FieldTypeBool, Default: true}},
 	})
 	svc, _ := newIntegrationService(t, groups)
