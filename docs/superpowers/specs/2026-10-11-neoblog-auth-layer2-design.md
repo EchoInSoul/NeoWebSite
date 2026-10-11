@@ -31,14 +31,14 @@
 | 邮箱规则 | `net/mail.ParseAddress` 可解析、≤254 字符、入库统一小写（沿用层 1 规则） |
 | 唯一性 | `email` / `nickname` 各自唯一；先查后插 + 唯一索引兜底，约束冲突映射为 409 |
 | 改密码会话语义 | **保留当前会话、吊销该用户其他全部会话**（推荐 B） |
-| 吊销实现 | 用 scs 公开 API：`Store.All()` 枚举 + `SessionManager.Codec.Decode` 解码，按会话中的 `auth.user_id` 定位、`store.Delete` 删除；当前会话的 token 从请求 cookie `session` 读取；**零 schema 改动** |
+| 吊销实现 | 用 scs 公开 API：`SessionManager.Store` 断言为 `scs.IterableStore` 后 `All()` 枚举 + `SessionManager.Codec.Decode`（签名 `(time.Time, map[string]interface{}, error)`）解码，按会话中的 `auth.user_id` 定位、`Delete` 删除；当前会话 token 从请求 cookie `session` 读取；命中行的 `Delete` 失败要报错（不静默跳过）；**零 schema 改动** |
 | 数据模型 | **无 schema 改动**（`users` 表沿用层 1；角色区分留到需要时） |
 | 版本 | minor：0.2.1 → **0.3.0** |
 
 已核实的事实（2026-10-11，scs v2.9.0 源码）：
 - cookie 值就是会话 token（`session.go:144` 读取 `cookie.Value`、`:198` 写出 `Value: token`）；
 - `HashTokenInStore` 默认 `false` 且本项目未开启，因此存储键 == cookie 值，可直接比较；若将来开启该开关，吊销比较需改为「哈希后再比」；
-- `scs.Store` 接口含 `All() (map[string][]byte, error)`，`postgresstore` 已实现；`SessionManager.Codec`（`Encode` / `Decode`）为公开 API。
+- `All() (map[string][]byte, error)` 定义在 `scs.IterableStore` 上（`scs.Store` 本身只有 `Delete` / `Find` / `Commit`），内存 store 与 `postgresstore` 都实现了它；`SessionManager.Store`、`SessionManager.Codec`（`Encode` / `Decode`）均为公开 API。
 
 ## 3. 接口
 
@@ -61,11 +61,10 @@
 - `internal/modules/auth/repository.go`：复用 `createUser` / `findUserByIdentifier` / `findUserByID`（层 1 已有）；新增 `updatePasswordHash(ctx, id, hash)`。
 - `internal/modules/auth/service.go`：
   - `Register(ctx, email, nickname, password) (User, error)`：规范化（email 小写、trim）→ 校验规则 → 唯一性预查（命中 → `ErrEmailTaken` / `ErrNicknameTaken`）→ bcrypt → `createUser`；唯一索引兜住并发竞态，冲突时统一返回 `ErrAlreadyTaken`（对应 409 `already_taken`，不做索引名解析）→ 写会话（`RenewToken` + `Put`）。
-  - `ChangePassword(ctx, userID, currentToken, currentPassword, newPassword) error`：取用户（不存在 → `ErrUnauthorized` 并销毁会话）→ 校验新密码（规则 + 不得与旧相同）→ 用 bcrypt 比旧密码（错则 `ErrInvalidCredentials`）→ 生成新哈希并更新 → `revokeOtherSessions(ctx, userID, currentToken)`。
-  - `revokeOtherSessions(ctx, userID, currentToken)`：`store.All()` → 逐个 `Codec.Decode` → `values[guard.SessionUserIDKey]` 等于该 userID 且 token ≠ currentToken → `store.Delete(token)`；解码失败的行跳过（不因单行异常中断吊销）。
+  - `ChangePassword(ctx, userID, currentToken, currentPassword, newPassword) error`：取用户（不存在 → `ErrUnauthorized` 并销毁会话）→ 校验新密码（规则 + 不得与旧相同）→ 用 bcrypt 比旧密码（错则 `ErrInvalidCredentials`）→ **先 `revokeOtherSessions`（失败 → 500，此时密码未改、用旧密码重试即可，吊销幂等）→ 再生成新哈希并更新**（更新失败 → 500：其他会话已吊销、密码未改，重试仍一致）。
+  - `revokeOtherSessions(ctx, userID, currentToken) error`：`IterableStore.All()`（失败 → 返回错误）→ 逐个 `Codec.Decode`（**解码失败的行跳过**，无法判定归属）→ `values[guard.SessionUserIDKey]` 等于该 userID 且 token ≠ currentToken → `Delete(token)`（**命中行的 Delete 失败 → 返回错误**，避免 204 谎报已吊销）。
   - 新增哨兵错误：`ErrInvalidRequest`、`ErrEmailTaken`、`ErrNicknameTaken`、`ErrAlreadyTaken`、`ErrWeakPassword`、`ErrPasswordUnchanged`。
-- `internal/modules/auth/controller.go`：注册两个新路由；`/auth/password` 从 guard 取 `userID`、从 `c.Cookie("session")` 取当前 token 传给 service（service 不碰 HTTP）；错误 → 状态码/错误码映射见第 3 节。
-- `internal/modules/auth/module.go`：`Register` 增加 `POST /auth/register`；`RegisterProtected` 增加 `POST /auth/password`。
+- `internal/modules/auth/controller.go`：注册两个新 handler（`c.signup`、`c.changePassword`——注意不能叫 `register`，`controller.register` 已是声明路由的方法名）；路由声明加在既有的 `controller.register` / `controller.registerProtected` 里（README 规则 4：路由声明属 controller）。`module.go` 无需改动。
 - `internal/app/app.go`：**无需改动**（两条路由都经由既有 `Register` / `RegisterProtected`）。
 - `backend/README.md`：接口表补两行；认证章节补「公开注册」「昵称/密码规则」「改密码会话语义」；版本行由脚本同步。
 - `docs/DEVLOG.md`：新增一条。
@@ -78,14 +77,14 @@
 1. 成功 → 201 + `Set-Cookie`，随后 `/auth/me` 200（注册即登录）；
 2. 重复邮箱 → 409 `email_taken`；重复昵称 → 409 `nickname_taken`；
 3. 弱密码分支：<8 位、纯字母、纯数字、>72 字节 → 400 `weak_password`；
-4. 邮箱非法（无 `@` / `net/mail` 拒绝）、昵称含 `@` / 含空白 / 超长 → 400 `invalid_request`；
+4. 邮箱非法（无 `@` / `net/mail` 拒绝）、昵称含 `@` / 含空白 / 超长 → 400 `invalid_request`；昵称两边带空格 → 合法，按 trim 后入库（201）；
 5. 畸形 JSON / 缺字段 → 400 `invalid_request`；
 6. 邮箱大小写：`A@B.com` 注册后，用 `a@b.com`（换一个不同昵称）再注册 → 第二次 409 `email_taken`。
 
 改密码：
 7. 成功 → 204；随后**新密码可登录**、**旧密码 401**；
 8. 旧密码错 → 401 `invalid_credentials`；未登录 → 401 `unauthorized`；
-9. 新密码弱 / 与旧相同 → 400 `weak_password` / `password_unchanged`；
+9. 新密码弱 / 与旧相同 → 400 `weak_password` / `password_unchanged`；畸形 JSON / 缺字段 → 400 `invalid_request`；
 10. 会话吊销：两个 client 登录同一账号 → A 改密码 → **A 仍 200**、**B 变 401**；B（已吊销）再访 `/me` 只返回 401（不复活）。
 
 单元：

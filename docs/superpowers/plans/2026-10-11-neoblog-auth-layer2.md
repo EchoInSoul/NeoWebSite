@@ -40,10 +40,11 @@
 - Create: `backend/internal/modules/auth/validate_test.go`
 
 **Interfaces:**
-- Produces（包内使用，全部纯函数）：
+- Produces（包内使用，全部纯函数；`validNickname` / `validEmail` 的入参是**已规范化**的值）：
   - `func normalizeEmail(raw string) string` —— `strings.ToLower(strings.TrimSpace(raw))`
+  - `func normalizeNickname(raw string) string` —— `strings.TrimSpace(raw)`
   - `func validEmail(email string) bool` —— `net/mail.ParseAddress` 成功且 `len(email) <= 254`
-  - `func validNickname(nickname string) bool` —— rune 数 2–32、无 `unicode.IsSpace` 字符、不含 `@`
+  - `func validNickname(nickname string) bool` —— rune 数 2–32、无 `unicode.IsSpace` 字符（含全角空格）、不含 `@`
   - `func validPassword(password string) bool` —— rune 数 ≥8、`len(password) <= 72`、至少一个 ASCII 字母与一个 ASCII 数字
 
 - [ ] **Step 1: 写失败测试（表驱动）**
@@ -111,6 +112,9 @@ func TestValidPassword(t *testing.T) {
 func TestNormalizeEmail(t *testing.T) {
 	if got := normalizeEmail("  A@B.COM "); got != "a@b.com" {
 		t.Fatalf("normalizeEmail = %q, want a@b.com", got)
+	}
+	if got := normalizeNickname("  ab  "); got != "ab" {
+		t.Fatalf("normalizeNickname = %q, want ab", got)
 	}
 }
 ```
@@ -210,21 +214,22 @@ git commit -m "feat(backend): repository 支持更新密码哈希"
 
 **Files:**
 - Modify: `backend/internal/modules/auth/service.go`（新增哨兵错误与 `Register`）
-- Modify: `backend/internal/modules/auth/controller.go`（新增 `POST /auth/register`）
-- Modify: `backend/internal/modules/auth/module.go`（`Register` 挂新路由）
+- Modify: `backend/internal/modules/auth/dto.go`（新增 `RegisterRequest`）
+- Modify: `backend/internal/modules/auth/controller.go`（新增 `c.signup` handler，并在 `controller.register` 里声明路由）
 - Modify: `backend/internal/modules/auth/auth_test.go`（HTTP 级测试）
 
 **Interfaces:**
 - Consumes: T1 的 `normalizeEmail` / `validEmail` / `validNickname` / `validPassword`；层 1 的 `repository.createUser`、`findUserByIdentifier`、`toUser`、`guard.SessionUserIDKey`、`maxPasswordBytes`。
 - Produces:
-  - 哨兵错误（与既有 `ErrInvalidCredentials` / `ErrUnauthorized` 同处）：`ErrEmailTaken`、`ErrNicknameTaken`、`ErrAlreadyTaken`、`ErrWeakPassword`
+  - `type RegisterRequest struct { Email string \`json:"email"\`; Nickname string \`json:"nickname"\`; Password string \`json:"password"\` }`（前端注册页的 `name` 字段映射到这里；`confirmPassword` 由前端自行校验，不进请求体）
+  - 哨兵错误（与既有 `ErrInvalidCredentials` / `ErrUnauthorized` 同处）：`ErrInvalidRequest`、`ErrEmailTaken`、`ErrNicknameTaken`、`ErrAlreadyTaken`、`ErrWeakPassword`
   - `func (s *Service) Register(ctx context.Context, email, nickname, password string) (User, error)`
   - 路由 `POST /api/v1/auth/register`
 
 - [ ] **Step 1: 写失败测试（HTTP 级，沿用 `newTestApp` / `postJSON` / `testClient` 助手）**
 
 用例（各自一个测试函数或子测试）：
-1. `TestRegisterSucceedsAndLogsIn`：合法注册 → 201、响应体 `{"email","nickname"}` 且 email 为小写、带 `session` cookie；随后 `/auth/me` 200 且返回同一账号。
+1. `TestRegisterSucceedsAndLogsIn`：合法注册 → 201、响应体 `{"email","nickname"}` 且 email 为小写、带 `session` cookie；随后 `/auth/me` 200 且返回同一账号。子用例：昵称两边带空格（`  ab  `）→ 201 且响应与库中均为 trim 后的 `ab`。
 2. `TestRegisterRejectsDuplicateEmail`：同邮箱（其中一个为大写变体、换不同昵称）→ 第二次 409 `email_taken`。
 3. `TestRegisterRejectsDuplicateNickname`：同昵称、换不同邮箱 → 409 `nickname_taken`。
 4. `TestRegisterRejectsWeakPasswords`：子测试覆盖 `<8 位`、`纯字母`、`纯数字`、`>72 字节` → 400 `weak_password`。
@@ -239,10 +244,9 @@ Expected: 编译失败（`Register` / 路由未定义）。
 
 - [ ] **Step 3: 实现**
 
-- `service.go`：`Register` 流程 = `normalizeEmail` → `validEmail`/`validNickname`（失败 → `errInvalidRequest` 型错误，映射 400 `invalid_request`）→ `validPassword`（失败 → `ErrWeakPassword`）→ `findUserByIdentifier` 预查（命中 email → `ErrEmailTaken`；命中 nickname → `ErrNicknameTaken`；注意预查用的 identifier 是规范化后的 email 与原始 nickname 各查一次，避免 OR 查询的歧义）→ bcrypt → `createUser`（`ent.IsConstraintError` → `ErrAlreadyTaken`）→ `RenewToken` + `Put(userID)`。
-  - 需要一个「请求无效」的哨兵：新增 `ErrInvalidRequest`（映射 400 `invalid_request`），供两个新流程复用。
-- `controller.go`：`register` handler —— `ShouldBindJSON` 失败/空字段 → 400；按哨兵错误映射 400（`weak_password` / `invalid_request`）、409（三种 taken）→ 其余 500；成功 201 + `UserResponse`。
-- `module.go`：`Register` 里追加 `r.POST("/auth/register", c.register)`。
+- `service.go`：`Register` 流程 = `normalizeEmail` + `normalizeNickname` → `validEmail`/`validNickname`（失败 → `ErrInvalidRequest` → 400 `invalid_request`）→ `validPassword`（失败 → `ErrWeakPassword`）→ 唯一性预查：**先用规范化后的 email 调 `findUserByIdentifier` 一次**（命中 → `ErrEmailTaken`）、**再用 trim 后的 nickname 调一次**（命中 → `ErrNicknameTaken`）——昵称不含 `@`，两次查询不会互相误报 → bcrypt → `createUser`（`ent.IsConstraintError` → `ErrAlreadyTaken`）→ `RenewToken` + `Put(userID)`。
+- `controller.go`：新增 `c.signup` handler（**不要叫 `register`**——`controller.register` 已是「声明路由」的方法名，同名会编译冲突）——`ShouldBindJSON` 失败/空字段 → 400；按哨兵错误映射 400（`weak_password` / `invalid_request`）、409（`email_taken` / `nickname_taken` / `already_taken`）→ 其余 500；成功 201 + `UserResponse`。路由声明加进既有的 `controller.register`：`r.POST("/auth/register", c.signup)`。
+- `module.go`：无需改动（`Register` 已委托 controller 声明路由）。
 
 - [ ] **Step 4: 跑测试确认通过**
 
@@ -251,7 +255,7 @@ Run: 同 Step 2，Expected: PASS。再跑 `go test ./internal/modules/auth/ -cou
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/internal/modules/auth
+git add backend/internal/modules/auth/service.go backend/internal/modules/auth/dto.go backend/internal/modules/auth/controller.go backend/internal/modules/auth/auth_test.go
 git commit -m "feat(backend): 公开注册（注册即登录）"
 ```
 
@@ -261,18 +265,19 @@ git commit -m "feat(backend): 公开注册（注册即登录）"
 
 **Files:**
 - Modify: `backend/internal/modules/auth/service.go`（`ChangePassword` / `revokeOtherSessions` / `ErrPasswordUnchanged`）
-- Modify: `backend/internal/modules/auth/controller.go`（`POST /auth/password`）
-- Modify: `backend/internal/modules/auth/module.go`（`RegisterProtected` 挂新路由）
+- Modify: `backend/internal/modules/auth/dto.go`（新增 `PasswordChangeRequest`）
+- Modify: `backend/internal/modules/auth/controller.go`（新增 `c.changePassword` 与路由声明）
 - Modify: `backend/internal/modules/auth/auth_test.go`（HTTP 级测试）
 - Modify: `backend/internal/app/app_test.go`（真 postgresstore 的吊销与坏行容错）
 
 **Interfaces:**
-- Consumes: T2 的 `updatePasswordHash`；层 1 的 `findUserByID`、`toUser`、`guard.SessionUserIDKey`、`ErrInvalidCredentials`、`ErrUnauthorized`；scs 的 `SessionManager.Store`（`Store.All()`）、`SessionManager.Codec`（`Decode`）。
+- Consumes: T2 的 `updatePasswordHash`；层 1 的 `findUserByID`、`toUser`、`guard.SessionUserIDKey`、`ErrInvalidCredentials`、`ErrUnauthorized`；scs 的 `scs.IterableStore`（`All()`，由 `SessionManager.Store` 类型断言取得——`scs.Store` 本身只有 `Delete/Find/Commit`）与 `SessionManager.Codec.Decode`（签名 `(time.Time, map[string]interface{}, error)`）。
 - Produces:
   - 哨兵错误 `ErrPasswordUnchanged`
+  - `type PasswordChangeRequest struct { CurrentPassword string \`json:"currentPassword"\`; NewPassword string \`json:"newPassword"\` }`
   - `func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, currentPassword, newPassword string) error`
-  - `func (s *Service) revokeOtherSessions(ctx context.Context, userID, currentToken string)`（包内方法；`All()` 失败不阻断——hmm，见 Step 3 的裁决说明）
-  - 路由 `POST /api/v1/auth/password`（受保护）
+  - `func (s *Service) revokeOtherSessions(ctx context.Context, userID, currentToken string) error`（包内方法；`All()` 失败或**命中行的 `Delete` 失败**都返回错误；只有「解码失败、无法判定归属」的行跳过）
+  - 路由 `POST /api/v1/auth/password`（受保护，声明在 `controller.registerProtected`）
 
 - [ ] **Step 1: 写失败测试**
 
@@ -281,9 +286,10 @@ auth_test.go（memstore）：
 2. `TestChangePasswordRejectsBadInput`：子测试——旧密码错 → 401 `invalid_credentials`；新密码弱 → 400 `weak_password`；新旧相同 → 400 `password_unchanged`；未登录 → 401 `unauthorized`。
 2b. `TestChangePasswordOnDeletedUserReturnsUnauthorized`：登录后删除该用户行（`db.Client.User.DeleteOneID(...).Exec`）→ 改密码 → 401 `unauthorized`，且响应带清除会话的 `Set-Cookie`（会话被销毁）。
 3. `TestChangePasswordRevokesOtherSessions`：client A、B 各登录同一账号 → A 改密码 → A 的 `/auth/me` 仍 200、**B 的 `/auth/me` 401**，且 B 再请求仍是 401（不复活）。
+4. `TestChangePasswordRejectsMalformedBody`：`{not json` 与缺 `newPassword` → 400 `invalid_request`。
 
 app_test.go（真 postgresstore）：
-4. `TestChangePasswordToleratesBadSessionRows`：经 `db.SQL()` 往 `sessions` 表插一行 `token='junk-<随机>'`、`data='\x00'`、未过期；然后登录 → 改密码 204（吊销过程不因坏行中断）→ 清理该行。
+5. `TestChangePasswordToleratesBadSessionRows`：经 `db.SQL().Exec("INSERT INTO sessions (token, data, expiry) VALUES ($1, $2, now() + interval '1 hour')", "junk-<随机>", []byte{0})` 插入一行坏数据；然后登录 → 改密码 204（吊销过程不因坏行中断）→ 清理该行。
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -292,10 +298,10 @@ Expected: 编译失败（`ChangePassword` / 路由未定义）。
 
 - [ ] **Step 3: 实现**
 
-- `service.go`：`ChangePassword` = `findUserByID`（`errUserNotFound` → 销毁会话 + `ErrUnauthorized`）→ `validPassword(newPassword)` 失败 → `ErrWeakPassword` → `bcrypt.CompareHashAndPassword(旧哈希, currentPassword)` 失败 → `ErrInvalidCredentials` → `bcrypt.CompareHashAndPassword(旧哈希, newPassword)` 成功 → `ErrPasswordUnchanged` → 生成新哈希 `updatePasswordHash` → `revokeOtherSessions`。
-- `revokeOtherSessions`：`s.sessions.Store.All()` → 遍历 `token → data`：`token == currentToken` 跳过；`s.sessions.Codec.Decode(data)` 失败的行**跳过并继续**；`values[guard.SessionUserIDKey]` 断言为 `string` 且等于 userID → `s.sessions.Store.Delete(token)`（单个 Delete 失败同样跳过继续）。`All()` 整体失败时返回错误（由 controller → 500）；部分行异常不阻断。
-- `controller.go`：`password` handler —— 从 `ctx.GetString(guard.SessionUserIDKey)` 取 userID、从 `ctx.Cookie("session")` 取当前 token（取不到 → 401 `unauthorized`，正常路径下 guard 已保证有会话）；映射 401（`unauthorized` / `invalid_credentials`）、400（`weak_password` / `password_unchanged` / `invalid_request`）→ 成功 204。
-- `module.go`：`RegisterProtected` 里追加 `r.POST("/auth/password", c.changePassword)`。
+- `service.go`：`ChangePassword` = `findUserByID`（`errUserNotFound` → 销毁会话 + `ErrUnauthorized`）→ `validPassword(newPassword)` 失败 → `ErrWeakPassword` → `bcrypt.CompareHashAndPassword(旧哈希, currentPassword)` 失败 → `ErrInvalidCredentials` → `bcrypt.CompareHashAndPassword(旧哈希, newPassword)` 成功 → `ErrPasswordUnchanged` → **先 `revokeOtherSessions`（失败 → 返回错误 → 500；此时密码未改，用旧密码重试即可，重试时吊销幂等）→ 再生成新哈希并 `updatePasswordHash`（失败 → 500；其他会话已吊销、密码未改，旧密码重试仍有效）**。
+- `revokeOtherSessions`：`its, ok := s.sessions.Store.(scs.IterableStore)`（`!ok` → 返回错误）→ `its.All()`（失败 → 返回错误）→ 遍历 `token → data`：`token == currentToken` 跳过；`_, values, err := s.sessions.Codec.Decode(data)` 失败的行**跳过并继续**（无法判定归属）；`values[guard.SessionUserIDKey]` 断言为 `string` 且等于 userID → `its.Delete(token)`，**Delete 失败直接返回错误**（不静默跳过——否则会 204 谎报已吊销）。
+- `controller.go`：新增 `c.changePassword` handler —— 从 `ctx.GetString(guard.SessionUserIDKey)` 取 userID、从 `ctx.Cookie("session")` 取当前 token（取不到 → 401 `unauthorized`，正常路径下 guard 已保证有会话）；映射 401（`unauthorized` / `invalid_credentials`）、400（`weak_password` / `password_unchanged` / `invalid_request`）→ 成功 204。**路由声明加在既有的 `controller.register` / `registerProtected` 里**（与层 1 相同；`module.go` 无需改动）。
+- `module.go`：无需改动（`Register` / `RegisterProtected` 已委托给 controller 的路由声明）。
 
 - [ ] **Step 4: 跑测试确认通过**
 
@@ -304,7 +310,7 @@ Run: 同 Step 2，Expected: PASS；再全量 `go test ./... -count=1`（带 `DAT
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/internal/modules/auth backend/internal/app
+git add backend/internal/modules/auth/service.go backend/internal/modules/auth/dto.go backend/internal/modules/auth/controller.go backend/internal/modules/auth/auth_test.go backend/internal/app/app_test.go
 git commit -m "feat(backend): 更改密码（保留当前会话，吊销其他会话）"
 ```
 
@@ -314,7 +320,7 @@ git commit -m "feat(backend): 更改密码（保留当前会话，吊销其他�
 
 **Files:**
 - Modify: `backend/README.md`
-- Create: `docs/DEVLOG.md`（追加一条，文件已存在）
+- Modify: `docs/DEVLOG.md`（文件已存在，顶部追加一条）
 - Modify: `backend/internal/version/version.go`（脚本改）
 
 **Interfaces:**
