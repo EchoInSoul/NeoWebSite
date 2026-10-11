@@ -11,6 +11,7 @@
     "localeEn": "English"
   },
   "sidebar": {
+    "open": "Open sidebar",
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar"
   },

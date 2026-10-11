@@ -11,6 +11,7 @@
     "localeEn": "English"
   },
   "sidebar": {
+    "open": "打开侧边栏",
     "collapse": "收起侧边栏",
     "expand": "展开侧边栏"
   },
