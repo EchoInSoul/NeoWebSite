@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/common/rbac"
 	"website/backend/internal/database"
@@ -157,24 +158,24 @@ func TestCreateGroup(t *testing.T) {
 		t.Fatalf("created permissions = %v, want [users.view]", created.Permissions)
 	}
 
-	if _, err := service.CreateGroup(ctx, owner, "x-"+tag, []string{"content.posts.edit"}); !errors.Is(err, ErrInvalidPermission) {
-		t.Fatalf("unknown key error = %v, want ErrInvalidPermission", err)
+	if _, err := service.CreateGroup(ctx, owner, "x-"+tag, []string{"content.posts.edit"}); !errors.Is(err, apierror.ErrInvalidPermission) {
+		t.Fatalf("unknown key error = %v, want apierror.ErrInvalidPermission", err)
 	}
-	if _, err := service.CreateGroup(ctx, owner, "管理员", nil); !errors.Is(err, ErrGroupNameTaken) {
-		t.Fatalf("preset name collision error = %v, want ErrGroupNameTaken", err)
+	if _, err := service.CreateGroup(ctx, owner, "管理员", nil); !errors.Is(err, apierror.ErrGroupNameTaken) {
+		t.Fatalf("preset name collision error = %v, want apierror.ErrGroupNameTaken", err)
 	}
-	if _, err := service.CreateGroup(ctx, owner, "   ", nil); !errors.Is(err, ErrInvalidName) {
-		t.Fatalf("blank name error = %v, want ErrInvalidName", err)
+	if _, err := service.CreateGroup(ctx, owner, "   ", nil); !errors.Is(err, apierror.ErrInvalidRequest) {
+		t.Fatalf("blank name error = %v, want apierror.ErrInvalidRequest", err)
 	}
-	if _, err := service.CreateGroup(ctx, owner, strings.Repeat("x", 65), nil); !errors.Is(err, ErrInvalidName) {
-		t.Fatalf("long name error = %v, want ErrInvalidName", err)
+	if _, err := service.CreateGroup(ctx, owner, strings.Repeat("x", 65), nil); !errors.Is(err, apierror.ErrInvalidRequest) {
+		t.Fatalf("long name error = %v, want apierror.ErrInvalidRequest", err)
 	}
 
 	limitedGroupID := createTestGroup(t, db, "lim-"+tag, []string{rbac.PermissionUsersView})
 	limitedUserID := createTestUser(t, db, limitedGroupID)
 	limited := identityFor(t, db, limitedUserID)
-	if _, err := service.CreateGroup(ctx, limited, "y-"+tag, []string{rbac.PermissionUsersEdit}); !errors.Is(err, ErrGrantForbidden) {
-		t.Fatalf("grant error = %v, want ErrGrantForbidden", err)
+	if _, err := service.CreateGroup(ctx, limited, "y-"+tag, []string{rbac.PermissionUsersEdit}); !errors.Is(err, apierror.ErrGrantForbidden) {
+		t.Fatalf("grant error = %v, want apierror.ErrGrantForbidden", err)
 	}
 }
 
@@ -185,11 +186,11 @@ func TestUpdateGroup(t *testing.T) {
 	owner, _ := createOwnerIdentity(t, db)
 	tag := uniqueTag(t)
 
-	if _, err := service.UpdateGroup(ctx, owner, rbac.GroupIDAdmin.String(), UpdateGroupInput{Name: ptr("x")}); !errors.Is(err, ErrPresetGroupLocked) {
-		t.Fatalf("preset locked error = %v, want ErrPresetGroupLocked", err)
+	if _, err := service.UpdateGroup(ctx, owner, rbac.GroupIDAdmin.String(), UpdateGroupInput{Name: ptr("x")}); !errors.Is(err, apierror.ErrPresetGroupLocked) {
+		t.Fatalf("preset locked error = %v, want apierror.ErrPresetGroupLocked", err)
 	}
-	if err := service.DeleteGroup(ctx, rbac.GroupIDUser.String()); !errors.Is(err, ErrPresetGroupLocked) {
-		t.Fatalf("preset delete error = %v, want ErrPresetGroupLocked", err)
+	if err := service.DeleteGroup(ctx, rbac.GroupIDUser.String()); !errors.Is(err, apierror.ErrPresetGroupLocked) {
+		t.Fatalf("preset delete error = %v, want apierror.ErrPresetGroupLocked", err)
 	}
 
 	groupID := createTestGroup(t, db, "g-"+tag, []string{rbac.PermissionUsersView})
@@ -219,8 +220,8 @@ func TestUpdateGroup(t *testing.T) {
 
 	if _, err := service.UpdateGroup(ctx, limited, groupID.String(), UpdateGroupInput{
 		Permissions: ptr([]string{rbac.PermissionGroupsEdit, rbac.PermissionUsersEdit}),
-	}); !errors.Is(err, ErrGrantForbidden) {
-		t.Fatalf("grant error = %v, want ErrGrantForbidden", err)
+	}); !errors.Is(err, apierror.ErrGrantForbidden) {
+		t.Fatalf("grant error = %v, want apierror.ErrGrantForbidden", err)
 	}
 
 	removed, err := service.UpdateGroup(ctx, limited, groupID.String(), UpdateGroupInput{
@@ -252,8 +253,8 @@ func TestDeleteGroup(t *testing.T) {
 
 	groupID := createTestGroup(t, db, "g-"+tag, []string{rbac.PermissionUsersView})
 	createTestUser(t, db, groupID)
-	if err := service.DeleteGroup(ctx, groupID.String()); !errors.Is(err, ErrGroupNotEmpty) {
-		t.Fatalf("non-empty delete error = %v, want ErrGroupNotEmpty", err)
+	if err := service.DeleteGroup(ctx, groupID.String()); !errors.Is(err, apierror.ErrGroupNotEmpty) {
+		t.Fatalf("non-empty delete error = %v, want apierror.ErrGroupNotEmpty", err)
 	}
 
 	emptyGroupID := createTestGroup(t, db, "e-"+tag, []string{rbac.PermissionUsersView})
@@ -261,11 +262,11 @@ func TestDeleteGroup(t *testing.T) {
 		t.Fatalf("empty delete: %v", err)
 	}
 
-	if err := service.DeleteGroup(ctx, uuid.New().String()); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("missing group delete error = %v, want ErrNotFound", err)
+	if err := service.DeleteGroup(ctx, uuid.New().String()); !errors.Is(err, apierror.ErrNotFound) {
+		t.Fatalf("missing group delete error = %v, want apierror.ErrNotFound", err)
 	}
-	if err := service.DeleteGroup(ctx, "not-a-uuid"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("invalid id delete error = %v, want ErrNotFound", err)
+	if err := service.DeleteGroup(ctx, "not-a-uuid"); !errors.Is(err, apierror.ErrNotFound) {
+		t.Fatalf("invalid id delete error = %v, want apierror.ErrNotFound", err)
 	}
 }
 
@@ -276,8 +277,8 @@ func TestUpdateUser(t *testing.T) {
 	owner, ownerID := createOwnerIdentity(t, db)
 	tag := uniqueTag(t)
 
-	if _, err := service.UpdateUser(ctx, owner, ownerID.String(), UpdateUserInput{GroupID: ptr(rbac.GroupIDUser.String())}); !errors.Is(err, ErrCannotModifySelf) {
-		t.Fatalf("self modification error = %v, want ErrCannotModifySelf", err)
+	if _, err := service.UpdateUser(ctx, owner, ownerID.String(), UpdateUserInput{GroupID: ptr(rbac.GroupIDUser.String())}); !errors.Is(err, apierror.ErrCannotModifySelf) {
+		t.Fatalf("self modification error = %v, want apierror.ErrCannotModifySelf", err)
 	}
 
 	targetID := createTestUser(t, db, rbac.GroupIDUser)
@@ -292,31 +293,31 @@ func TestUpdateUser(t *testing.T) {
 		t.Fatalf("group = %+v, want admin preset", updated.Group)
 	}
 
-	if _, err := service.UpdateUser(ctx, owner, ownerID.String(), UpdateUserInput{ExtraPermissions: ptr([]string{rbac.PermissionUsersView})}); !errors.Is(err, ErrCannotModifySelf) {
-		t.Fatalf("self extra error = %v, want ErrCannotModifySelf", err)
+	if _, err := service.UpdateUser(ctx, owner, ownerID.String(), UpdateUserInput{ExtraPermissions: ptr([]string{rbac.PermissionUsersView})}); !errors.Is(err, apierror.ErrCannotModifySelf) {
+		t.Fatalf("self extra error = %v, want apierror.ErrCannotModifySelf", err)
 	}
 
 	managerGroupID := createTestGroup(t, db, "mgr-"+tag, []string{rbac.PermissionUsersEdit})
 	managerID := createTestUser(t, db, managerGroupID)
 	manager := identityFor(t, db, managerID)
 
-	if _, err := service.UpdateUser(ctx, manager, ownerID.String(), UpdateUserInput{ExtraPermissions: ptr([]string{rbac.PermissionUsersView})}); !errors.Is(err, ErrOwnerProtected) {
-		t.Fatalf("non-owner touching owner error = %v, want ErrOwnerProtected", err)
+	if _, err := service.UpdateUser(ctx, manager, ownerID.String(), UpdateUserInput{ExtraPermissions: ptr([]string{rbac.PermissionUsersView})}); !errors.Is(err, apierror.ErrOwnerProtected) {
+		t.Fatalf("non-owner touching owner error = %v, want apierror.ErrOwnerProtected", err)
 	}
-	if _, err := service.UpdateUser(ctx, manager, targetID.String(), UpdateUserInput{GroupID: ptr(rbac.GroupIDOwner.String())}); !errors.Is(err, ErrOwnerProtected) {
-		t.Fatalf("non-owner promoting to owner error = %v, want ErrOwnerProtected", err)
+	if _, err := service.UpdateUser(ctx, manager, targetID.String(), UpdateUserInput{GroupID: ptr(rbac.GroupIDOwner.String())}); !errors.Is(err, apierror.ErrOwnerProtected) {
+		t.Fatalf("non-owner promoting to owner error = %v, want apierror.ErrOwnerProtected", err)
 	}
 
 	richGroupID := createTestGroup(t, db, "rich-"+tag, []string{rbac.PermissionGroupsEdit})
 	transferTargetID := createTestUser(t, db, rbac.GroupIDUser)
-	if _, err := service.UpdateUser(ctx, manager, transferTargetID.String(), UpdateUserInput{GroupID: ptr(richGroupID.String())}); !errors.Is(err, ErrGrantForbidden) {
-		t.Fatalf("group transfer grant error = %v, want ErrGrantForbidden", err)
+	if _, err := service.UpdateUser(ctx, manager, transferTargetID.String(), UpdateUserInput{GroupID: ptr(richGroupID.String())}); !errors.Is(err, apierror.ErrGrantForbidden) {
+		t.Fatalf("group transfer grant error = %v, want apierror.ErrGrantForbidden", err)
 	}
 	if _, err := service.UpdateUser(ctx, manager, transferTargetID.String(), UpdateUserInput{
 		GroupID:          ptr(richGroupID.String()),
 		ExtraPermissions: ptr([]string{rbac.PermissionUsersView}),
-	}); !errors.Is(err, ErrGrantForbidden) {
-		t.Fatalf("combined grant error = %v, want ErrGrantForbidden", err)
+	}); !errors.Is(err, apierror.ErrGrantForbidden) {
+		t.Fatalf("combined grant error = %v, want apierror.ErrGrantForbidden", err)
 	}
 
 	limitedGroupID := createTestGroup(t, db, "part-"+tag, []string{rbac.PermissionUsersView})
@@ -338,18 +339,18 @@ func TestUpdateUser(t *testing.T) {
 
 	if _, err := service.UpdateUser(ctx, manager, limitedID.String(), UpdateUserInput{
 		ExtraPermissions: ptr([]string{"content.posts.edit"}),
-	}); !errors.Is(err, ErrInvalidPermission) {
-		t.Fatalf("unknown key error = %v, want ErrInvalidPermission", err)
+	}); !errors.Is(err, apierror.ErrInvalidPermission) {
+		t.Fatalf("unknown key error = %v, want apierror.ErrInvalidPermission", err)
 	}
 	if _, err := service.UpdateUser(ctx, owner, limitedID.String(), UpdateUserInput{
 		GroupID: ptr(uuid.New().String()),
-	}); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("missing group error = %v, want ErrNotFound", err)
+	}); !errors.Is(err, apierror.ErrNotFound) {
+		t.Fatalf("missing group error = %v, want apierror.ErrNotFound", err)
 	}
 	if _, err := service.UpdateUser(ctx, owner, uuid.New().String(), UpdateUserInput{
 		ExtraPermissions: ptr([]string{}),
-	}); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("missing user error = %v, want ErrNotFound", err)
+	}); !errors.Is(err, apierror.ErrNotFound) {
+		t.Fatalf("missing user error = %v, want apierror.ErrNotFound", err)
 	}
 }
 
@@ -380,7 +381,7 @@ func TestLastOwnerConcurrent(t *testing.T) {
 	for _, err := range results {
 		switch {
 		case err == nil:
-		case errors.Is(err, ErrLastOwner):
+		case errors.Is(err, apierror.ErrLastOwner):
 			lastOwnerErrors++
 		default:
 			t.Fatalf("unexpected error: %v", err)
@@ -453,7 +454,7 @@ func TestListUsersAndGetUser(t *testing.T) {
 	if !reflect.DeepEqual(detail.Permissions, want) {
 		t.Fatalf("effective permissions = %v, want %v", detail.Permissions, want)
 	}
-	if _, err := service.GetUser(ctx, uuid.New().String()); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("missing user error = %v, want ErrNotFound", err)
+	if _, err := service.GetUser(ctx, uuid.New().String()); !errors.Is(err, apierror.ErrNotFound) {
+		t.Fatalf("missing user error = %v, want apierror.ErrNotFound", err)
 	}
 }

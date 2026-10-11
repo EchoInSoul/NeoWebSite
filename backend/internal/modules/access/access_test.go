@@ -89,11 +89,16 @@ func decodeErrorCode(t *testing.T, resp *http.Response) string {
 	t.Helper()
 	defer resp.Body.Close()
 
-	var body errorResponse
+	var body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode error body: %v", err)
 	}
-	return body.Error
+	errObj, ok := body["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error field = %v, want nested object with code", body["error"])
+	}
+	code, _ := errObj["code"].(string)
+	return code
 }
 
 func decodeItems[T any](t *testing.T, resp *http.Response) []T {
@@ -270,7 +275,7 @@ func TestGroupUpdateAndDelete(t *testing.T) {
 	tag := uniqueTag(t)
 
 	locked := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/groups/"+rbac.GroupIDAdmin.String(), map[string]any{"name": "x"})
-	expectStatus(t, locked, http.StatusForbidden)
+	expectStatus(t, locked, http.StatusConflict)
 	if code := decodeErrorCode(t, locked); code != "preset_group_locked" {
 		t.Fatalf("preset update error = %q, want preset_group_locked", code)
 	}
@@ -301,8 +306,18 @@ func TestGroupUpdateAndDelete(t *testing.T) {
 
 	emptyGroupID := createTestGroup(t, db, "e-"+tag, nil)
 	deleted := doJSON(t, owner, http.MethodDelete, ts.URL+"/api/v1/admin/groups/"+emptyGroupID.String(), nil)
-	expectStatus(t, deleted, http.StatusNoContent)
+	expectStatus(t, deleted, http.StatusOK)
+	var confirmation struct {
+		ID      string `json:"id"`
+		Deleted bool   `json:"deleted"`
+	}
+	if err := json.NewDecoder(deleted.Body).Decode(&confirmation); err != nil {
+		t.Fatalf("decode delete confirmation: %v", err)
+	}
 	deleted.Body.Close()
+	if confirmation.ID != emptyGroupID.String() || !confirmation.Deleted {
+		t.Fatalf("delete confirmation = %+v, want id %s deleted true", confirmation, emptyGroupID)
+	}
 
 	missing := doJSON(t, owner, http.MethodDelete, ts.URL+"/api/v1/admin/groups/"+uuid.New().String(), nil)
 	expectStatus(t, missing, http.StatusNotFound)

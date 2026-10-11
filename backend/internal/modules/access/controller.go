@@ -1,19 +1,15 @@
 package access
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/common/rbac"
 )
-
-type errorResponse struct {
-	Error string `json:"error"`
-}
 
 type itemList[T any] struct {
 	Items []T `json:"items"`
@@ -65,7 +61,7 @@ func (c *controller) listPermissions(ctx *gin.Context) {
 func (c *controller) listGroups(ctx *gin.Context) {
 	groups, err := c.service.ListGroups(ctx.Request.Context())
 	if err != nil {
-		writeError(ctx, err)
+		apierror.Write(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, itemList[Group]{Items: groups})
@@ -78,7 +74,7 @@ func (c *controller) createGroup(ctx *gin.Context) {
 	}
 	var request groupRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil || request.Name == nil {
-		writeInvalidRequest(ctx)
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 	permissions := []string{}
@@ -87,7 +83,7 @@ func (c *controller) createGroup(ctx *gin.Context) {
 	}
 	group, err := c.service.CreateGroup(ctx.Request.Context(), operator, *request.Name, permissions)
 	if err != nil {
-		writeError(ctx, err)
+		apierror.Write(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusCreated, group)
@@ -100,11 +96,11 @@ func (c *controller) updateGroup(ctx *gin.Context) {
 	}
 	var request groupRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
-		writeInvalidRequest(ctx)
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 	if request.Name == nil && request.Permissions == nil {
-		writeInvalidRequest(ctx)
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 	group, err := c.service.UpdateGroup(ctx.Request.Context(), operator, ctx.Param("id"), UpdateGroupInput{
@@ -112,7 +108,7 @@ func (c *controller) updateGroup(ctx *gin.Context) {
 		Permissions: request.Permissions,
 	})
 	if err != nil {
-		writeError(ctx, err)
+		apierror.Write(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, group)
@@ -120,16 +116,16 @@ func (c *controller) updateGroup(ctx *gin.Context) {
 
 func (c *controller) deleteGroup(ctx *gin.Context) {
 	if err := c.service.DeleteGroup(ctx.Request.Context(), ctx.Param("id")); err != nil {
-		writeError(ctx, err)
+		apierror.Write(ctx, err)
 		return
 	}
-	ctx.Status(http.StatusNoContent)
+	ctx.JSON(http.StatusOK, gin.H{"id": ctx.Param("id"), "deleted": true})
 }
 
 func (c *controller) listUsers(ctx *gin.Context) {
 	users, err := c.service.ListUsers(ctx.Request.Context())
 	if err != nil {
-		writeError(ctx, err)
+		apierror.Write(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, itemList[UserSummary]{Items: users})
@@ -138,7 +134,7 @@ func (c *controller) listUsers(ctx *gin.Context) {
 func (c *controller) getUser(ctx *gin.Context) {
 	user, err := c.service.GetUser(ctx.Request.Context(), ctx.Param("id"))
 	if err != nil {
-		writeError(ctx, err)
+		apierror.Write(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, user)
@@ -151,16 +147,16 @@ func (c *controller) updateUser(ctx *gin.Context) {
 	}
 	var request userRequest
 	if err := ctx.ShouldBindJSON(&request); err != nil {
-		writeInvalidRequest(ctx)
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 	if request.GroupID == nil && request.ExtraPermissions == nil {
-		writeInvalidRequest(ctx)
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 	if request.GroupID != nil {
 		if _, err := uuid.Parse(*request.GroupID); err != nil {
-			writeInvalidRequest(ctx)
+			apierror.Write(ctx, apierror.ErrInvalidRequest)
 			return
 		}
 	}
@@ -169,7 +165,7 @@ func (c *controller) updateUser(ctx *gin.Context) {
 		ExtraPermissions: request.ExtraPermissions,
 	})
 	if err != nil {
-		writeError(ctx, err)
+		apierror.Write(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, user)
@@ -178,39 +174,8 @@ func (c *controller) updateUser(ctx *gin.Context) {
 func operatorFrom(ctx *gin.Context) (guard.Identity, bool) {
 	identity, ok := guard.IdentityFrom(ctx)
 	if !ok {
-		ctx.JSON(http.StatusInternalServerError, errorResponse{Error: "internal_error"})
+		apierror.Write(ctx, apierror.ErrInternal)
 		return guard.Identity{}, false
 	}
 	return identity, true
-}
-
-func writeInvalidRequest(ctx *gin.Context) {
-	ctx.JSON(http.StatusBadRequest, errorResponse{Error: "invalid_request"})
-}
-
-func writeError(ctx *gin.Context, err error) {
-	switch {
-	case errors.Is(err, ErrNotFound):
-		ctx.JSON(http.StatusNotFound, errorResponse{Error: "not_found"})
-	case errors.Is(err, ErrInvalidName):
-		ctx.JSON(http.StatusBadRequest, errorResponse{Error: "invalid_request"})
-	case errors.Is(err, ErrInvalidPermission):
-		ctx.JSON(http.StatusBadRequest, errorResponse{Error: "invalid_permission"})
-	case errors.Is(err, ErrGroupNameTaken):
-		ctx.JSON(http.StatusConflict, errorResponse{Error: "group_name_taken"})
-	case errors.Is(err, ErrGroupNotEmpty):
-		ctx.JSON(http.StatusConflict, errorResponse{Error: "group_not_empty"})
-	case errors.Is(err, ErrLastOwner):
-		ctx.JSON(http.StatusConflict, errorResponse{Error: "last_owner"})
-	case errors.Is(err, ErrGrantForbidden):
-		ctx.JSON(http.StatusForbidden, errorResponse{Error: "grant_forbidden"})
-	case errors.Is(err, ErrOwnerProtected):
-		ctx.JSON(http.StatusForbidden, errorResponse{Error: "owner_protected"})
-	case errors.Is(err, ErrCannotModifySelf):
-		ctx.JSON(http.StatusForbidden, errorResponse{Error: "cannot_modify_self"})
-	case errors.Is(err, ErrPresetGroupLocked):
-		ctx.JSON(http.StatusForbidden, errorResponse{Error: "preset_group_locked"})
-	default:
-		ctx.JSON(http.StatusInternalServerError, errorResponse{Error: "internal_error"})
-	}
 }

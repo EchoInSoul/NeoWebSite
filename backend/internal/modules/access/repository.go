@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/rbac"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
@@ -60,7 +61,7 @@ func (r *repository) findUser(ctx context.Context, id uuid.UUID) (userRecord, er
 	row, err := r.client.User.Query().Where(user.IDEQ(id)).WithGroup().Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return userRecord{}, ErrNotFound
+			return userRecord{}, apierror.ErrNotFound
 		}
 		return userRecord{}, err
 	}
@@ -71,7 +72,7 @@ func (r *repository) findGroup(ctx context.Context, id uuid.UUID) (groupRecord, 
 	row, err := r.client.Group.Query().Where(group.IDEQ(id)).Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return groupRecord{}, ErrNotFound
+			return groupRecord{}, apierror.ErrNotFound
 		}
 		return groupRecord{}, err
 	}
@@ -173,7 +174,7 @@ func (r *repository) createGroup(ctx context.Context, name string, permissions [
 	created, err := tx.Group.Create().SetName(name).Save(ctx)
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			return groupRecord{}, ErrGroupNameTaken
+			return groupRecord{}, apierror.ErrGroupNameTaken
 		}
 		return groupRecord{}, err
 	}
@@ -197,7 +198,7 @@ func (r *repository) createGroup(ctx context.Context, name string, permissions [
 func (r *repository) updateGroupName(ctx context.Context, id uuid.UUID, name string) error {
 	if err := r.client.Group.UpdateOneID(id).SetName(name).Exec(ctx); err != nil {
 		if ent.IsConstraintError(err) {
-			return ErrGroupNameTaken
+			return apierror.ErrGroupNameTaken
 		}
 		return err
 	}
@@ -216,7 +217,7 @@ func (r *repository) replaceGroupPermissions(ctx context.Context, id uuid.UUID, 
 		return err
 	}
 	if len(locked) == 0 {
-		return ErrNotFound
+		return apierror.ErrNotFound
 	}
 
 	if _, err := tx.GroupPermission.Delete().Where(grouppermission.GroupIDEQ(id)).Exec(ctx); err != nil {
@@ -239,7 +240,7 @@ func (r *repository) replaceGroupPermissions(ctx context.Context, id uuid.UUID, 
 func (r *repository) deleteGroup(ctx context.Context, id uuid.UUID) error {
 	if err := r.client.Group.DeleteOneID(id).Exec(ctx); err != nil {
 		if ent.IsConstraintError(err) {
-			return ErrGroupNotEmpty
+			return apierror.ErrGroupNotEmpty
 		}
 		return err
 	}
@@ -262,7 +263,7 @@ func (r *repository) updateUser(ctx context.Context, params updateUserParams) er
 			return err
 		}
 		if len(owners) < 2 {
-			return ErrLastOwner
+			return apierror.ErrLastOwner
 		}
 	} else {
 		locked, err := tx.User.Query().
@@ -273,14 +274,14 @@ func (r *repository) updateUser(ctx context.Context, params updateUserParams) er
 			return err
 		}
 		if len(locked) == 0 {
-			return ErrNotFound
+			return apierror.ErrNotFound
 		}
 	}
 
 	if params.GroupChanged {
 		if err := tx.User.UpdateOneID(params.UserID).SetGroupID(params.GroupID).Exec(ctx); err != nil {
 			if ent.IsConstraintError(err) {
-				return ErrNotFound
+				return apierror.ErrNotFound
 			}
 			return err
 		}

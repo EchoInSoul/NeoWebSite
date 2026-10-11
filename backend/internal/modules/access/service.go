@@ -8,25 +8,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/common/rbac"
 	"website/backend/internal/database"
 )
 
 const maxGroupNameLength = 64
-
-var (
-	ErrNotFound          = errors.New("not found")
-	ErrGroupNotEmpty     = errors.New("group not empty")
-	ErrGroupNameTaken    = errors.New("group name taken")
-	ErrPresetGroupLocked = errors.New("preset group locked")
-	ErrInvalidName       = errors.New("invalid name")
-	ErrInvalidPermission = errors.New("invalid permission")
-	ErrGrantForbidden    = errors.New("permission grant forbidden")
-	ErrOwnerProtected    = errors.New("owner protected")
-	ErrCannotModifySelf  = errors.New("cannot modify self")
-	ErrLastOwner         = errors.New("last owner")
-)
 
 type Service struct {
 	repo *repository
@@ -43,7 +31,7 @@ func (s *Service) IdentityByUserID(ctx context.Context, userID string) (guard.Id
 	}
 	record, err := s.repo.findUser(ctx, id)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		if errors.Is(err, apierror.ErrNotFound) {
 			return guard.Identity{}, guard.ErrUserNotFound
 		}
 		return guard.Identity{}, err
@@ -107,14 +95,14 @@ func (s *Service) CreateGroup(ctx context.Context, operator guard.Identity, name
 func (s *Service) UpdateGroup(ctx context.Context, operator guard.Identity, groupID string, input UpdateGroupInput) (Group, error) {
 	id, err := uuid.Parse(groupID)
 	if err != nil {
-		return Group{}, ErrNotFound
+		return Group{}, apierror.ErrNotFound
 	}
 	record, err := s.repo.findGroup(ctx, id)
 	if err != nil {
 		return Group{}, err
 	}
 	if record.SystemKey != "" {
-		return Group{}, ErrPresetGroupLocked
+		return Group{}, apierror.ErrPresetGroupLocked
 	}
 
 	var nextName *string
@@ -162,21 +150,21 @@ func (s *Service) UpdateGroup(ctx context.Context, operator guard.Identity, grou
 func (s *Service) DeleteGroup(ctx context.Context, groupID string) error {
 	id, err := uuid.Parse(groupID)
 	if err != nil {
-		return ErrNotFound
+		return apierror.ErrNotFound
 	}
 	record, err := s.repo.findGroup(ctx, id)
 	if err != nil {
 		return err
 	}
 	if record.SystemKey != "" {
-		return ErrPresetGroupLocked
+		return apierror.ErrPresetGroupLocked
 	}
 	count, err := s.repo.memberCount(ctx, id)
 	if err != nil {
 		return err
 	}
 	if count > 0 {
-		return ErrGroupNotEmpty
+		return apierror.ErrGroupNotEmpty
 	}
 	return s.repo.deleteGroup(ctx, id)
 }
@@ -202,7 +190,7 @@ func (s *Service) ListUsers(ctx context.Context) ([]UserSummary, error) {
 func (s *Service) GetUser(ctx context.Context, userID string) (UserDetail, error) {
 	id, err := uuid.Parse(userID)
 	if err != nil {
-		return UserDetail{}, ErrNotFound
+		return UserDetail{}, apierror.ErrNotFound
 	}
 	record, err := s.repo.findUser(ctx, id)
 	if err != nil {
@@ -231,14 +219,14 @@ func (s *Service) GetUser(ctx context.Context, userID string) (UserDetail, error
 func (s *Service) UpdateUser(ctx context.Context, operator guard.Identity, userID string, input UpdateUserInput) (UserDetail, error) {
 	operatorID, err := uuid.Parse(operator.UserID)
 	if err != nil {
-		return UserDetail{}, ErrNotFound
+		return UserDetail{}, apierror.ErrNotFound
 	}
 	targetID, err := uuid.Parse(userID)
 	if err != nil {
-		return UserDetail{}, ErrNotFound
+		return UserDetail{}, apierror.ErrNotFound
 	}
 	if operatorID == targetID {
-		return UserDetail{}, ErrCannotModifySelf
+		return UserDetail{}, apierror.ErrCannotModifySelf
 	}
 
 	target, err := s.repo.findUser(ctx, targetID)
@@ -251,7 +239,7 @@ func (s *Service) UpdateUser(ctx context.Context, operator guard.Identity, userI
 	if input.GroupID != nil {
 		groupID, err := uuid.Parse(*input.GroupID)
 		if err != nil {
-			return UserDetail{}, ErrNotFound
+			return UserDetail{}, apierror.ErrNotFound
 		}
 		record, err := s.repo.findGroup(ctx, groupID)
 		if err != nil {
@@ -263,7 +251,7 @@ func (s *Service) UpdateUser(ctx context.Context, operator guard.Identity, userI
 
 	if isPrivilegedGroupKey(target.Group.SystemKey) || isPrivilegedGroupKey(nextGroup.SystemKey) {
 		if operator.GroupKey != rbac.GroupKeyOwner {
-			return UserDetail{}, ErrOwnerProtected
+			return UserDetail{}, apierror.ErrOwnerProtected
 		}
 	}
 
@@ -378,7 +366,7 @@ func optionalString(value string) *string {
 func normalizeGroupName(name string) (string, error) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" || len([]rune(trimmed)) > maxGroupNameLength {
-		return "", ErrInvalidName
+		return "", apierror.ErrInvalidRequest
 	}
 	return trimmed, nil
 }
@@ -388,7 +376,7 @@ func normalizePermissions(permissions []string) ([]string, error) {
 	seen := make(map[string]struct{}, len(permissions))
 	for _, permission := range permissions {
 		if !rbac.IsValid(permission) {
-			return nil, ErrInvalidPermission
+			return nil, apierror.ErrInvalidPermission
 		}
 		if _, ok := seen[permission]; ok {
 			continue
@@ -402,7 +390,7 @@ func normalizePermissions(permissions []string) ([]string, error) {
 func assertGrantable(operator guard.Identity, added []string) error {
 	for _, permission := range rbac.Expand(added) {
 		if !slices.Contains(operator.Permissions, permission) {
-			return ErrGrantForbidden
+			return apierror.ErrGrantForbidden
 		}
 	}
 	return nil
