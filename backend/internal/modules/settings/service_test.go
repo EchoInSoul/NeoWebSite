@@ -118,6 +118,14 @@ func TestDecodeNumberBoundary(t *testing.T) {
 	}
 }
 
+func TestDecodeTypedRejectsNull(t *testing.T) {
+	for _, fieldType := range []FieldType{FieldTypeString, FieldTypeNumber, FieldTypeBool} {
+		if _, err := decodeTyped(fieldType, json.RawMessage(`null`)); err == nil {
+			t.Fatalf("decodeTyped(%d, null) accepted, want error", fieldType)
+		}
+	}
+}
+
 func TestServiceItemWriteTypeMismatch(t *testing.T) {
 	svc := newUnitService(t)
 	ctx := context.Background()

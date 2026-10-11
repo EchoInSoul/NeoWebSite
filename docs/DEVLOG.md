@@ -21,6 +21,15 @@
 - `.env` 直接 `source` 只设 shell 变量、不导出，`go test` 子进程看不到 `DATABASE_URL_TEST`——要 `set -a; source .env; set +a`。
 - `gofmt -l` 退出码恒为 0（列出问题文件也不报错），门禁必须用 `test -z "$(gofmt -l .)"` 判定。
 
+### 终审
+
+独立子代理整分支终审（fresh context）：**0 Critical / 2 Important / 4 Minor**，Review Focus 五条逐条实测通过；build / vet / gofmt / 全仓测试 11 包全绿。
+
+- 已修（每个都先红后绿）：
+  1. **jsonb `null` 坏行对 string / bool 静默穿透**——`decodeTyped` 原来直接 `Unmarshal` 到零值（`null` 解入 string / bool 无错无日志，返回零值而非默认值）；改为三种类型统一 `UseNumber` + type switch，`null` 全部判坏行回退默认。新增 `TestDecodeTypedRejectsNull` 与 null 坏行集成断言（string / bool 各一）。
+  2. **Task 1 提交混入范围外文件**——`git add -A` 卷走了会话开始前就存在的 `frontend/app/page.tsx` 改动与四份 content / mail 存档文档，backend feat 提交历史语义失真。历史不重写，本条即补记；**防再犯：分轮提交按文件清单暂存，不裸 `git add -A`**。
+- 延后小项（待定）：`ConflictColumns` 用字面列名（接口轮映射 apierror 时顺带换生成常量）；集成测试用固定组名而非 spec 字面的"随机后缀"（隔离效果等价）；`marshalJSON` 吞 Marshal 错误（当前三种类型安全，将来加类型时回看）；`newServiceWith(nil)` 触库会 panic（已限定为不触库单测路径）。
+
 ### 已知缺口
 
 - 清单为空、无消费方：模块上线即休眠（与 2FA 轮同性质）；首次真实使用（加组 + 消费方）只改代码不动库。

@@ -228,6 +228,23 @@ func TestServiceBadRowFallback(t *testing.T) {
 	if got, err := svc.GetString(ctx, "site", "title"); err != nil || got != "我的博客" {
 		t.Fatalf("GetString with type-mismatch row = (%q, %v), want default no error", got, err)
 	}
+
+	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "null", "site", "title"); err != nil {
+		t.Fatalf("plant null row (string): %v", err)
+	}
+	if got, err := svc.GetString(ctx, "site", "title"); err != nil || got != "我的博客" {
+		t.Fatalf("GetString with null row = (%q, %v), want default no error", got, err)
+	}
+
+	if err := svc.SetBool(ctx, "site", "maintenance", true); err != nil {
+		t.Fatalf("SetBool: %v", err)
+	}
+	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "null", "site", "maintenance"); err != nil {
+		t.Fatalf("plant null row (bool): %v", err)
+	}
+	if got, err := svc.GetBool(ctx, "site", "maintenance"); err != nil || got {
+		t.Fatalf("GetBool with null row = (%v, %v), want default false no error", got, err)
+	}
 }
 
 func TestServiceExtraGroupNoMigration(t *testing.T) {

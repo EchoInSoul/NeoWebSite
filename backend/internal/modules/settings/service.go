@@ -217,37 +217,41 @@ func (s *Service) fallback(group, name string) {
 }
 
 func decodeTyped(fieldType FieldType, raw json.RawMessage) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var out any
+	if err := decoder.Decode(&out); err != nil {
+		return nil, err
+	}
 	switch fieldType {
 	case FieldTypeString:
-		var out string
-		if err := json.Unmarshal(raw, &out); err != nil {
-			return nil, err
+		s, ok := out.(string)
+		if !ok {
+			return nil, fmt.Errorf("not a JSON string")
 		}
-		return out, nil
+		return s, nil
 	case FieldTypeNumber:
-		return decodeNumber(raw)
-	case FieldTypeBool:
-		var out bool
-		if err := json.Unmarshal(raw, &out); err != nil {
-			return nil, err
+		number, ok := out.(json.Number)
+		if !ok {
+			return nil, fmt.Errorf("not a JSON number")
 		}
-		return out, nil
+		return strconv.ParseInt(string(number), 10, 64)
+	case FieldTypeBool:
+		b, ok := out.(bool)
+		if !ok {
+			return nil, fmt.Errorf("not a JSON bool")
+		}
+		return b, nil
 	}
 	return nil, fmt.Errorf("unknown field type %d", fieldType)
 }
 
 func decodeNumber(raw json.RawMessage) (int64, error) {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var out any
-	if err := decoder.Decode(&out); err != nil {
+	value, err := decodeTyped(FieldTypeNumber, raw)
+	if err != nil {
 		return 0, err
 	}
-	number, ok := out.(json.Number)
-	if !ok {
-		return 0, fmt.Errorf("not a JSON number")
-	}
-	return strconv.ParseInt(string(number), 10, 64)
+	return value.(int64), nil
 }
 
 func marshalJSON(value any) json.RawMessage {
