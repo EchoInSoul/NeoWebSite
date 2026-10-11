@@ -270,3 +270,39 @@ func TestHealthyEndpointStillWorks(t *testing.T) {
 		t.Fatalf("database = %v, want ok", body["database"])
 	}
 }
+
+func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
+	ts, db := newTestServer(t, "development")
+	u, password := createTestUser(t, db)
+	client := newClient(t)
+
+	loginResp := login(t, client, ts.URL, u.Email, password)
+	loginResp.Body.Close()
+	if loginResp.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want 200", loginResp.StatusCode)
+	}
+
+	junkToken := fmt.Sprintf("junk-%d", time.Now().UnixNano())
+	if _, err := db.SQL().Exec(
+		"INSERT INTO sessions (token, data, expiry) VALUES ($1, $2, now() + interval '1 hour')",
+		junkToken, []byte{0},
+	); err != nil {
+		t.Fatalf("insert junk session: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.SQL().Exec("DELETE FROM sessions WHERE token = $1", junkToken)
+	})
+
+	payload, err := json.Marshal(map[string]string{"currentPassword": password, "newPassword": "new-pass-123"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	resp, err := client.Post(ts.URL+"/api/v1/auth/password", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("change password: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+}

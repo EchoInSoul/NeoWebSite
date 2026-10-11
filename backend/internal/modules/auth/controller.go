@@ -25,6 +25,7 @@ func (c *controller) register(r *gin.RouterGroup) {
 func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.POST("/auth/logout", c.logout)
 	r.GET("/auth/me", c.me)
+	r.POST("/auth/password", c.changePassword)
 }
 
 func (c *controller) login(ctx *gin.Context) {
@@ -98,4 +99,40 @@ func (c *controller) me(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname})
+}
+
+func (c *controller) changePassword(ctx *gin.Context) {
+	var req PasswordChangeRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.CurrentPassword == "" || req.NewPassword == "" {
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid_request"})
+		return
+	}
+
+	userID := ctx.GetString(guard.SessionUserIDKey)
+	currentToken, err := ctx.Cookie("session")
+	if err != nil || currentToken == "" {
+		ctx.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		return
+	}
+
+	err = c.service.ChangePassword(ctx.Request.Context(), userID, currentToken, req.CurrentPassword, req.NewPassword)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrUnauthorized):
+			ctx.JSON(http.StatusUnauthorized, ErrorResponse{Error: "unauthorized"})
+		case errors.Is(err, ErrInvalidCredentials):
+			ctx.JSON(http.StatusUnauthorized, ErrorResponse{Error: "invalid_credentials"})
+		case errors.Is(err, ErrWeakPassword):
+			ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "weak_password"})
+		case errors.Is(err, ErrPasswordUnchanged):
+			ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "password_unchanged"})
+		case errors.Is(err, ErrInvalidRequest):
+			ctx.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid_request"})
+		default:
+			ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: "internal_error"})
+		}
+		return
+	}
+
+	ctx.Status(http.StatusNoContent)
 }

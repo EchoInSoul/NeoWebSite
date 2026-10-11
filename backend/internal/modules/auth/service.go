@@ -20,6 +20,7 @@ var (
 	ErrNicknameTaken      = errors.New("nickname taken")
 	ErrAlreadyTaken       = errors.New("already taken")
 	ErrWeakPassword       = errors.New("weak password")
+	ErrPasswordUnchanged  = errors.New("password unchanged")
 )
 
 type Service struct {
@@ -111,6 +112,74 @@ func (s *Service) Login(ctx context.Context, identifier, password string) (User,
 
 func (s *Service) Logout(ctx context.Context) error {
 	return s.sessions.Destroy(ctx)
+}
+
+func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, currentPassword, newPassword string) error {
+	found, err := s.repo.findUserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, errUserNotFound) {
+			s.sessions.Destroy(ctx)
+			return ErrUnauthorized
+		}
+		return err
+	}
+
+	if !validPassword(newPassword) {
+		return ErrWeakPassword
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(currentPassword)); err != nil {
+		return ErrInvalidCredentials
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(newPassword)); err == nil {
+		return ErrPasswordUnchanged
+	}
+
+	if err := s.revokeOtherSessions(ctx, userID, currentToken); err != nil {
+		return err
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.updatePasswordHash(ctx, userID, string(hash))
+}
+
+func (s *Service) revokeOtherSessions(ctx context.Context, userID, currentToken string) error {
+	iterable, ok := s.sessions.Store.(scs.IterableStore)
+	if !ok {
+		return errors.New("session store does not support iteration")
+	}
+
+	sessions, err := iterable.All()
+	if err != nil {
+		return err
+	}
+
+	for token, data := range sessions {
+		if token == currentToken {
+			continue
+		}
+
+		_, values, err := s.sessions.Codec.Decode(data)
+		if err != nil {
+			continue
+		}
+
+		storedUserID, ok := values[guard.SessionUserIDKey].(string)
+		if !ok || storedUserID != userID {
+			continue
+		}
+
+		if err := s.sessions.Store.Delete(token); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) CurrentUser(ctx context.Context, userID string) (User, error) {

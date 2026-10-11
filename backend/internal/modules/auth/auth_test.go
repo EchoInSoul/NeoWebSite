@@ -15,6 +15,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"website/backend/internal/common/guard"
 	"website/backend/internal/database"
@@ -588,5 +589,208 @@ func TestRegisterWhileLoggedInSwitchesSession(t *testing.T) {
 	}
 	if body.Email != secondEmail {
 		t.Fatalf("me email = %q, want %q", body.Email, secondEmail)
+	}
+}
+
+func TestChangePasswordSucceedsAndSwapsCredentials(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, oldPassword := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: oldPassword})
+	login.Body.Close()
+	if login.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want 200", login.StatusCode)
+	}
+
+	change := postJSON(t, client, ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: oldPassword, NewPassword: "new-pass-123"})
+	change.Body.Close()
+	if change.StatusCode != http.StatusNoContent {
+		t.Fatalf("change status = %d, want 204", change.StatusCode)
+	}
+
+	oldLogin := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: oldPassword})
+	oldLogin.Body.Close()
+	if oldLogin.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("old password login status = %d, want 401", oldLogin.StatusCode)
+	}
+
+	newLogin := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: "new-pass-123"})
+	newLogin.Body.Close()
+	if newLogin.StatusCode != http.StatusOK {
+		t.Fatalf("new password login status = %d, want 200", newLogin.StatusCode)
+	}
+}
+
+func TestChangePasswordRejectsBadInput(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+
+	loginClient := func(t *testing.T) *http.Client {
+		t.Helper()
+		client := testClient(t)
+		resp := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("login status = %d, want 200", resp.StatusCode)
+		}
+		return client
+	}
+
+	t.Run("wrong current password", func(t *testing.T) {
+		resp := postJSON(t, loginClient(t), ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: "wrong-pass-1", NewPassword: "new-pass-123"})
+		if resp.StatusCode != http.StatusUnauthorized {
+			resp.Body.Close()
+			t.Fatalf("status = %d, want 401", resp.StatusCode)
+		}
+		if got := decodeError(t, resp); got != "invalid_credentials" {
+			t.Fatalf("error = %q, want invalid_credentials", got)
+		}
+	})
+
+	t.Run("weak new password", func(t *testing.T) {
+		resp := postJSON(t, loginClient(t), ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "abcdefgh"})
+		if resp.StatusCode != http.StatusBadRequest {
+			resp.Body.Close()
+			t.Fatalf("status = %d, want 400", resp.StatusCode)
+		}
+		if got := decodeError(t, resp); got != "weak_password" {
+			t.Fatalf("error = %q, want weak_password", got)
+		}
+	})
+
+	t.Run("unchanged password", func(t *testing.T) {
+		resp := postJSON(t, loginClient(t), ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: password})
+		if resp.StatusCode != http.StatusBadRequest {
+			resp.Body.Close()
+			t.Fatalf("status = %d, want 400", resp.StatusCode)
+		}
+		if got := decodeError(t, resp); got != "password_unchanged" {
+			t.Fatalf("error = %q, want password_unchanged", got)
+		}
+	})
+
+	t.Run("anonymous", func(t *testing.T) {
+		resp := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
+		if resp.StatusCode != http.StatusUnauthorized {
+			resp.Body.Close()
+			t.Fatalf("status = %d, want 401", resp.StatusCode)
+		}
+		if got := decodeError(t, resp); got != "unauthorized" {
+			t.Fatalf("error = %q, want unauthorized", got)
+		}
+	})
+}
+
+func TestChangePasswordOnDeletedUserReturnsUnauthorized(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login.Body.Close()
+
+	if err := db.Client.User.DeleteOneID(uuid.MustParse(u.ID)).Exec(context.Background()); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+
+	resp := postJSON(t, client, ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+	if got := decodeError(t, resp); got != "unauthorized" {
+		t.Fatalf("error = %q, want unauthorized", got)
+	}
+
+	var cleared *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == "session" {
+			cleared = c
+		}
+	}
+	if cleared == nil || cleared.MaxAge >= 0 {
+		t.Fatalf("expected the session cookie to be cleared, got %+v", cleared)
+	}
+}
+
+func TestChangePasswordRevokesOtherSessions(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	clientA := testClient(t)
+	clientB := testClient(t)
+
+	for _, client := range []*http.Client{clientA, clientB} {
+		login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+		login.Body.Close()
+		if login.StatusCode != http.StatusOK {
+			t.Fatalf("login status = %d, want 200", login.StatusCode)
+		}
+	}
+
+	change := postJSON(t, clientA, ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
+	change.Body.Close()
+	if change.StatusCode != http.StatusNoContent {
+		t.Fatalf("change status = %d, want 204", change.StatusCode)
+	}
+
+	meA, err := clientA.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me A: %v", err)
+	}
+	meA.Body.Close()
+	if meA.StatusCode != http.StatusOK {
+		t.Fatalf("client A status = %d, want 200 (current session must survive)", meA.StatusCode)
+	}
+
+	for attempt := 1; attempt <= 2; attempt++ {
+		meB, err := clientB.Get(ts.URL + "/api/v1/auth/me")
+		if err != nil {
+			t.Fatalf("me B attempt %d: %v", attempt, err)
+		}
+		meB.Body.Close()
+		if meB.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("client B attempt %d status = %d, want 401", attempt, meB.StatusCode)
+		}
+	}
+}
+
+func TestChangePasswordRejectsMalformedBody(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login.Body.Close()
+	if login.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want 200", login.StatusCode)
+	}
+
+	resp := postRaw(t, client, ts.URL+"/api/v1/auth/password", "{not json")
+	if resp.StatusCode != http.StatusBadRequest {
+		resp.Body.Close()
+		t.Fatalf("broken json status = %d, want 400", resp.StatusCode)
+	}
+	if got := decodeError(t, resp); got != "invalid_request" {
+		t.Fatalf("broken json error = %q, want invalid_request", got)
+	}
+
+	resp = postRaw(t, client, ts.URL+"/api/v1/auth/password", `{"currentPassword":"`+password+`"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("missing fields status = %d, want 400", resp.StatusCode)
+	}
+	if got := decodeError(t, resp); got != "invalid_request" {
+		t.Fatalf("missing fields error = %q, want invalid_request", got)
 	}
 }
