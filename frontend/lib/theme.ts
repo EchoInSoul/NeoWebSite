@@ -2,7 +2,11 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-import { CHANGE_EVENT_NAME, THEME_STORAGE_KEY } from "@/lib/bootstrap-scripts";
+import {
+  CHANGE_EVENT_NAME,
+  THEME_STORAGE_KEY,
+  isSystemThemeRoute,
+} from "@/lib/bootstrap-scripts";
 
 export type ThemeMode = "system" | "light" | "dark";
 
@@ -31,6 +35,9 @@ function subscribe(onStoreChange: () => void): () => void {
 }
 
 function getSnapshot(): ThemeMode {
+  if (isSystemThemeRoute(window.location.pathname)) {
+    return "system";
+  }
   try {
     const storedThemeMode = window.localStorage.getItem(THEME_STORAGE_KEY);
     return isThemeMode(storedThemeMode) ? storedThemeMode : "system";
@@ -54,6 +61,10 @@ function applyThemeMode(themeMode: ThemeMode): void {
   rootElement.classList.toggle("dark", isDark);
   void rootElement.offsetHeight;
   rootElement.classList.remove("disable-theme-transitions");
+}
+
+export function syncThemeWithLocation(): void {
+  applyThemeMode(getSnapshot());
 }
 
 export function useThemeMode() {
