@@ -115,6 +115,8 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 18 | `POST /api/v1/auth/2fa/enable` | `backend/internal/modules/auth/controller.go:31`（0.10.0 新增，守卫内） |
 | 19 | `POST /api/v1/auth/2fa/disable` | `backend/internal/modules/auth/controller.go:32`（0.10.0 新增，守卫内） |
 | 20 | `POST /api/v1/auth/2fa/recovery-codes` | `backend/internal/modules/auth/controller.go:33`（0.10.0 新增，守卫内；资源名 `recovery-codes` 保持连字符小写） |
+| 21 | `GET /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:24`（0.12.0 新增，守卫链 `RequireAuth → LoadIdentity → RequirePermission(system.settings.view)`；整组裸对象，含未写过的默认值） |
+| 22 | `PATCH /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:25`（0.12.0 新增，`RequirePermission(system.settings.edit)`；只写请求体里出现的项，值类型以服务端清单为准，200 返回更新后的整组） |
 
 正例（新端点命名，资源复数 + 子动作）：
 
@@ -384,7 +386,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 
 ### 7.3 code 词汇表（收编现有 token；此后只增不改义）
 
-19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`：
+19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；0.12.0 起新增 `registration_closed`（注册开关关闭，见设置 spec 与本轮 spec）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`，设置端点 `PATCH` 的项名与类型错误覆盖为出错项名：
 
 | code | HTTP | type | 默认 param | 场景 | 建议默认 message（注册表基线，可润色） |
 | --- | --- | --- | --- | --- | --- |
@@ -403,6 +405,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `grant_forbidden` | 403 | `permission_error` | null | 授出操作者自己没有的权限 | 不能授出自己不持有的权限 |
 | `owner_protected` | 403 | `permission_error` | null | 非 owner 改动 owner / admin 组成员 | 该成员只能由所有者修改 |
 | `cannot_modify_self` | 403 | `permission_error` | null | 改自己的组或额外权限 | 不能修改自己的组或额外权限 |
+| `registration_closed` | 403 | `permission_error` | null | 注册开关（设置项 `register/enabled`）已关闭时提交注册；判定在字段校验之前，关闭态下连非法字段也返回本码而非 `invalid_request`（0.12.0 新增） | 当前已关闭注册 |
 | `preset_group_locked` | 409 | `conflict_error` | null | 改 / 删预设组的锁死字段（锁来自资源状态，owner 亦被拒；现状 403，改判见 §14 决策 5） | 预设组不可修改 |
 | `not_found` | 404 | `not_found_error` | null | 资源不存在（含路由未匹配兜底；方法不匹配自 v1.4 起归 `method_not_allowed`；路径 / 字段值**格式**非法归 `invalid_request`，§14 决策 4） | 资源不存在 |
 | `email_taken` | 409 | `conflict_error` | `email` | 邮箱已注册 | 该邮箱已被使用 |

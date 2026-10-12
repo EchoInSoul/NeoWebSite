@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.11.0
+当前版本：0.12.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -25,18 +25,18 @@
 | `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录（含 2FA 分叉）/ 登出 / 当前用户 / 改密 / 两步验证五接口；`Register`（公开）与 `RegisterProtected`（受保护）；`totp.go` + `secretbox.go` 承载 TOTP 窗匹配与 secret 加密 |
 | `internal/modules/access/*` | `access.module.ts` 等 | 用户组与权限：组 CRUD、用户管理接口、生效权限解析；全部挂在权限守卫下 |
 | `internal/modules/mail/*` | `@nestjs-modules/mailer`（对照位） | 邮件能力 + 管理端发信接口：`Mailer` 接口（Send / SendSync / Close）+ SMTP / 日志双实现 + `templates/` 模板；异步 `Send` 走后台队列重试，同步 `SendSync` 单次尝试（管理端即时反馈用）；`POST /admin/mail/messages` 挂守卫链 + 预设组守卫；`SMTP_HOST` 为空时降级为日志 |
-| `internal/modules/settings` | `@nestjs/config`（存储对照位） | 无路由模块（无 controller / dto / Register，对外入口 `New(db) (*Service, error)`）：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；清单为空 = 全默认，加设置见「设置」章节配方 |
+| `internal/modules/settings/*` | `@nestjs/config` + `config.controller.ts`（对照位） | 有路由模块：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；对外入口 `New(db) (*Module, error)`，能力挂 `m.Service`；`GET / PATCH /admin/settings/:group` 按组读写，挂 `RequirePermission(system.settings.view / .edit)`；当前清单含 `register/enabled`（注册开关），加设置见「设置」章节配方 |
 | `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）+ `RequirePresetGroup`（预设组白名单，owner / admin 这类不入权限目录的服务器级操作用）；常量 `auth.user_id` / `auth.identity` |
 | `internal/common/rbac` | `src/common`（权限目录） | 权限点目录与预设组常量（固定 UUID）；纯 Go，不依赖 gin / DB |
 | `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
 
 ## 硬性规则
 
-1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。**无路由的能力模块（当前 `settings`）可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件。**
+1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。**无路由的能力模块可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件（当前没有此类模块：`settings` 自 0.12.0 起带路由）。**
 2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。
 3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app、`internal/common/guard`（中间件）和 `internal/common/apierror`（统一错误写出）；service 一律不 import gin。
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
-5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**另一个例外：无路由的能力模块由 `New` 直接返回能力接口（当前 `settings.New(db) (*Service, error)`，它是唯一返回 error 的模块构造器，错误沿启动链返回）；无状态的包级纯函数可直接导出（如 `mail.Render`）——都不算对外暴露内部实现。**
+5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**`settings.New(db) (*Module, error)` 仍是唯一返回 error 的模块构造器（清单自检不过启动即失败，错误沿启动链返回）；无状态的包级纯函数可直接导出（如 `mail.Render`）——不算对外暴露内部实现。**
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
 7. 模块禁止自建数据库连接（禁止 `sql.Open` 等），只能用注入进来的连接；**同理禁止自建 SMTP 客户端，发信一律用注入的 `mail.Mailer`**。
 8. `internal/database` 不得 import 任何业务模块。
@@ -246,7 +246,16 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 
 ## 设置
 
-无路由模块 `internal/modules/settings/`：一张 `setting_values` 表只存"被显式写入过的值"，"有哪些设置"全部定义在代码内清单（`registry.go` 的 `builtinRegistry`）。构造入口 `settings.New(db) (*Service, error)`——清单自检不过启动即失败；错误哨兵 `ErrUnknownGroup` / `ErrUnknownItem` / `ErrTypeMismatch` / `ErrMethodMismatch`。三种类型（文字 / 数字 int64 / 开关）读写各按类型分方法，用错方法即报错；`GetGroup` 整组读取（默认值 ⊕ 覆盖逐项合并）；`ResetItem` 删行恢复默认。清单为空 = 全默认；本轮清单不含任何真实设置。
+模块 `internal/modules/settings/`：一张 `setting_values` 表只存"被显式写入过的值"，"有哪些设置"全部定义在代码内清单（`registry.go` 的 `builtinRegistry`）。构造入口 `settings.New(db) (*Module, error)`——清单自检不过启动即失败，能力挂 `m.Service`；错误哨兵 `ErrUnknownGroup` / `ErrUnknownItem` / `ErrTypeMismatch` / `ErrMethodMismatch`。三种类型（文字 / 数字 int64 / 开关）读写各按类型分方法，用错方法即报错；`GetGroup` 整组读取（默认值 ⊕ 覆盖逐项合并）；`PatchGroup` 整组部分更新（值类型以清单为准，任一项不合法即整组零落库）；`ResetItem` 删行恢复默认。库里没有某项的行 = 取代码里的默认值。
+
+**对外接口**（挂在 `RequireAuth → LoadIdentity` 之后）：`GET /api/v1/admin/settings/:group` 需 `system.settings.view`，`PATCH /api/v1/admin/settings/:group` 需 `system.settings.edit`（`edit` 隐含 `view`）；响应是整组裸对象。未知组 404、体非法或项名不在清单或值类型不符 400（带 `param` = 项名）。owner / admin 由权限目录运行时全量授予自动可用这两个权限点，无需数据迁移；自建组需显式授。
+
+**当前清单项**：`register/enabled`（开关，默认 `true`）——`auth.Service.Register` 的第一句读它，为 `false` 时注册返回 403 `registration_closed`；登录与 `auth.CreateAdminUser` 不受它影响。关掉注册的实际操作（暂无界面）：
+
+```
+PATCH /api/v1/admin/settings/register      →  {"enabled": false}
+PATCH /api/v1/admin/settings/register      →  {"enabled": true}
+```
 
 **怎么加一个设置**：在 `internal/modules/settings/registry.go` 的 `builtinRegistry` 里添加（组不存在就新增一个 `Group` 字面量）：
 
