@@ -48,6 +48,7 @@ var (
 	ErrGrantForbidden          = &Error{Type: TypePermission, Code: "grant_forbidden"}
 	ErrOwnerProtected          = &Error{Type: TypePermission, Code: "owner_protected"}
 	ErrCannotModifySelf        = &Error{Type: TypePermission, Code: "cannot_modify_self"}
+	ErrRegistrationClosed      = &Error{Type: TypePermission, Code: "registration_closed"}
 	ErrNotFound                = &Error{Type: TypeNotFound, Code: "not_found"}
 	ErrPresetGroupLocked       = &Error{Type: TypeConflict, Code: "preset_group_locked"}
 	ErrEmailTaken              = &Error{Type: TypeConflict, Code: "email_taken", Param: strPtr("email")}
@@ -79,6 +80,7 @@ var statusByCode = map[string]int{
 	"grant_forbidden":            http.StatusForbidden,
 	"owner_protected":            http.StatusForbidden,
 	"cannot_modify_self":         http.StatusForbidden,
+	"registration_closed":        http.StatusForbidden,
 	"not_found":                  http.StatusNotFound,
 	"preset_group_locked":        http.StatusConflict,
 	"email_taken":                http.StatusConflict,

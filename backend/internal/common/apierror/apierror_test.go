@@ -37,6 +37,7 @@ func TestRegistryMatchesSpec(t *testing.T) {
 		{"grant_forbidden", ErrGrantForbidden, TypePermission, "grant_forbidden", http.StatusForbidden, nil},
 		{"owner_protected", ErrOwnerProtected, TypePermission, "owner_protected", http.StatusForbidden, nil},
 		{"cannot_modify_self", ErrCannotModifySelf, TypePermission, "cannot_modify_self", http.StatusForbidden, nil},
+		{"registration_closed", ErrRegistrationClosed, TypePermission, "registration_closed", http.StatusForbidden, nil},
 		{"not_found", ErrNotFound, TypeNotFound, "not_found", http.StatusNotFound, nil},
 		{"preset_group_locked", ErrPresetGroupLocked, TypeConflict, "preset_group_locked", http.StatusConflict, nil},
 		{"email_taken", ErrEmailTaken, TypeConflict, "email_taken", http.StatusConflict, strPtr("email")},
@@ -251,16 +252,16 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrMethodNotAllowed,
 		ErrInvalidCredentials, ErrUnauthorized, ErrTwoFactorRequired, ErrTwoFactorInvalidCode,
 		ErrTwoFactorLocked, ErrForbidden, ErrGrantForbidden,
-		ErrOwnerProtected, ErrCannotModifySelf, ErrNotFound, ErrPresetGroupLocked,
+		ErrOwnerProtected, ErrCannotModifySelf, ErrRegistrationClosed, ErrNotFound, ErrPresetGroupLocked,
 		ErrEmailTaken, ErrNicknameTaken, ErrAlreadyTaken, ErrGroupNameTaken,
 		ErrGroupNotEmpty, ErrLastOwner, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
 		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrServiceUnavailable, ErrInternal,
 	}
-	if len(all) != 28 {
-		t.Fatalf("sentinel count = %d, want 28", len(all))
+	if len(all) != 29 {
+		t.Fatalf("sentinel count = %d, want 29", len(all))
 	}
-	if len(statusByCode) != 28 {
-		t.Fatalf("statusByCode entries = %d, want 28", len(statusByCode))
+	if len(statusByCode) != 29 {
+		t.Fatalf("statusByCode entries = %d, want 29", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,
