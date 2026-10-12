@@ -5,6 +5,8 @@ import { getTranslations } from "next-intl/server";
 import { getAuthenticatedUser } from "@/lib/auth-session";
 import { SignupView } from "./signup-view";
 
+export const instant = false;
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("auth.signup");
 
@@ -14,7 +16,14 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function SignupPage() {
-  if (await getAuthenticatedUser()) {
+  let user;
+  try {
+    user = await getAuthenticatedUser();
+  } catch {
+    return <SignupView />;
+  }
+
+  if (user) {
     redirect("/console");
   }
 

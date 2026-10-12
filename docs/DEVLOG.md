@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-10-13 · 后端连不上时三条路由不再 500（外壳 / 表单照常渲染 + 一条 toast）
+
+**版本**：前端 `package.json` 仍 **0.1.0**；本轮**零后端改动**、零接口契约变更。
+
+### 做了什么
+
+- `app/console/layout.tsx`：外壳 JSX 原样提成 `ConsoleShell` 函数；权威判定的抛错改为 `catch` → 渲染**无昵称的外壳** + 新组件 `ConsoleServiceToast`，`redirect("/signin")` 仍在 `try` 之外（`:46`）。
+- `app/signin/page.tsx`、`app/signup/page.tsx`：同形改动——判定抛错时照常渲染 `-view`。此前实测：带 cookie 且后端停机时登录页自己返 500，用户连输密码重试的地方都没有。
+- 新 `components/console/console-service-toast.tsx`：client 组件，effect 里 `toast.error(t("serviceUnavailable"), { id })`，`useRef` 挡 StrictMode 双跑，自身 `return null`。复用既有键 `common.serviceUnavailable`，两份语言包**零新增**。
+- 三条路由各加 `export const instant = false`（阻塞式读 cookie 的段按 `instant.md:69` 声明「允许阻塞」）；root layout 那条**没撤**。
+
+### 关键决定
+
+- **用户拍板「两侧都放行」**，推翻 `specs/2026-10-12-neoblog-console-auth-design.md` v1.1 里「不做『后端挂了先放控制台外壳』的降级」那一行，也超出 10-12 只放宽访客页的提议范围。spec 同步升到 **v1.2**（§2 两行、§5 的 I1/I4、§6 用例 6、§7 两条、§8 三个插槽、§3 范围），plan 的 Review Focus 1 与 Task 2 Step 7 期望值同步改写（10-12 的实测存档不改写，另加订正段）。
+- **判定层三态一字未改**：`lib/auth-session.ts` 故障时照旧抛错，变的只是抛错之后由谁接。「故障 ≠ 未登录」因此没退化——`/console` 带 cookie 遇故障是 200 外壳，若被错写成未登录就会是 307 回 `/signin`，鉴别点仍然成立。
+- **`catch` 的粒度本轮不动**（用户决定）：连不上 / 非 200 / 响应体畸形三种原因被同一个 `catch` 合并，服务端零日志，于是真 bug 也会被显示成「服务不可用」，与 10-12 定的「先做对内可诊断」相反。已登记到 spec §8。
+- **不新建 `error.tsx`**：沿 v1.1「避免造兜底 UI」，可读提示就交给那一条 toast。外壳形状不随后端数据变——无昵称时用户菜单只是少一段文字（`console-user-menu.tsx:79` 本来就在 `displayName` 为空时不渲染），没有任何新构造。
+- **`/console` 上不会双 toast**：客户端健康探测 `useServiceHealth` 只挂在 `use-signin` / `use-signup`，控制台外壳里没有任何组件自己发请求，所以这条是唯一一条。
+
+### 实测到的边界（2026-10-13，`:5732` 无人监听即后端不在）
+
+| 请求 | 实测 |
+| --- | --- |
+| `Cookie: session=whatever` → `/console` | **200**，响应体含 `console-sidebar`（改动前该组合是 500） |
+| 无 cookie → `/console` | `307 /signin`，proxy 未受本次改动波及 |
+| 带 cookie → `/signin` 与 `/signup` | **200**，表单照常渲染 |
+
+`npx tsc --noEmit`、`npx eslint`、`npx prettier --check` 三项退出码 0。
+
+### 未验证 / 已知缺口
+
+- **toast 的画面未取证**：它在水合后由 effect 发出，本轮只用 curl 证了状态码与响应体；「弹几条、导航时会不会重弹」需浏览器侧确认（`id` 去重 + `useRef` 是双保险，未实测）。
+- D 态（2FA pending）与 prefetch 撞 307 仍未取证，沿 10-12 的欠账，本轮未动。
+- 故障期 `/console` 属「未验明身份也渲染」，I1 已由充要降为必要；**该路由下新增子页不得假定布局已判过身份**。
+- 后端 pending 键破损（G 态）、`docs/DEVLOG.md:399` 的 logout 204 陈旧等 10-12 已登记项本轮未动。
+
+---
+
 ## 2026-10-12 · 服务不可用报错（两个表单不再谎报凭证错误）
 
 **版本**：前端 `package.json` 仍 **0.1.0**；后端 0.11.0 不动，本轮**零后端改动**、零接口契约变更。

@@ -2,7 +2,9 @@
 
 日期：2026-10-12
 范围：`frontend/`（Next 16.4 App Router，`cacheComponents: true` + `partialPrefetching: true`）。后端零改动——`GET /api/v1/auth/me`、`POST /api/v1/auth/logout` 已存在且已由 `guard.RequireAuth` 保护。
-状态：**已落地（2026-10-12，代码与文档均按用户要求暂未提交）**——plan `docs/superpowers/plans/2026-10-12-neoblog-console-auth.md` 的 Task 1–6 与 Task 8 已完成，Task 7（D 态取证）由用户决定推后。设计经用户确认：**不带 `?next=` 回跳**、**已登录不准停在 `/signin` / `/signup`**、**本轮一起做登出**。
+状态：**已落地**——代码与文档已于 2026-10-12 提交入库，**v1.2（2026-10-13）只改后端故障时的呈现口径**、同批提交，见下方修订说明。plan `docs/superpowers/plans/2026-10-12-neoblog-console-auth.md` 的 Task 1–6 与 Task 8 已完成，Task 7（D 态取证）由用户决定推后。设计经用户确认：**不带 `?next=` 回跳**、**已登录不准停在 `/signin` / `/signup`**、**本轮一起做登出**。
+
+> **v1.2（2026-10-13）修订**：用户拍板把「后端故障交给 Next 默认错误页」改成「当页照常渲染 + 一条 toast」，`/console` 与两个访客页**同时**改（原提议只放宽访客页）。三态判定本身一字未动，变的只是**抛错之后由谁接**。连带作废：§2「后端不可用时的界面」原口径、§5 的 I1 由「充要」降为「必要」、§6 用例 6 的期望、§7 末两条。新增的待办（故障原因拆分与服务端日志）见 §8——用户 2026-10-13 明确本轮不动 `catch` 的粒度。
 
 > **v1.1（2026-10-12）修订**：两个独立只读审查代理逐条证伪后重写。改动最大的五处——① 权威判定从「非 200 一律当未登录」改为三态（后端故障必须抛错，否则后端一挂全员静默锁死）；② 状态表从四态补到八态并新增「脏 cookie 不自愈」；③ 重定向码从写死的 302 改为 307（`NextResponse.redirect` 默认值，源码 `frontend/node_modules/next/dist/server/web/spec-extension/response.js:95`）；④ §1 的现状描述更正（前端接线已由 `16e210a`–`22d272c` 六个提交收进分支，**上一轮的纯 CSR 门控已被撤销**）；⑤ 引 `authentication-with-cache-components.md:156` 与 `:1127` 指出本设计两处**故意**偏离官方建议并给理由。§4 的 403 分支、`cache:"no-store"`、`app/layout.tsx:34` 行号等 6 处事实错误一并删除。下列 file:line 均于 2026-10-12 在当前工作区核对过。
 
@@ -31,8 +33,8 @@
 | 「不冲突」的顺序依据 | proxy 执行在第 3 步、**先于** `beforeFiles` rewrites（`proxy.md:240-244`），所以 `/api/:path*` 转发与 `/console/:path*` 门禁互不相干——不是「 matcher 不含 /api 才不会打架」 |
 | 权威判定的唯一来源 | `getAuthenticatedUser()` 一个函数。`/console` 的准入与 `/signin` `/signup` 的离开都问它，两处判定同源，不可能互相推诿成环 |
 | 反向跳（已登录访问 `/signin`、`/signup`） | 做，落在**服务端 page 层**（不能放 `-view.tsx`：那是 Client Component，`instant` 禁用于 Client Component（`instant.md:24`），也不该在客户端判会话）。官方示例把这条写在 proxy（`authentication.md:1061-1069`），本项目**故意不照抄** |
-| 后端故障 ≠ 未登录 | 权威判定是**三态**：401 才是「未登录」；5xx / 404 / 405 / 网络失败 / 响应体解析不出一律**抛错**（不 redirect、不降级）。否则后端一挂，`/signin` 也拿不到判定，用户被静默锁死且看不到原因。「非 200 一律 null」是 v1.0 的错误，已废 |
-| 后端不可用时的界面 | 抛错即交给 Next 默认错误页（项目内暂无 `error.tsx`，本轮不新建，避免造兜底 UI）。**不做「后端挂了先放控制台外壳」的降级** |
+| 后端故障 ≠ 未登录 | 权威判定是**三态**：401 才是「未登录」；5xx / 404 / 405 / 网络失败 / 响应体解析不出一律**抛错**（不 redirect）。否则后端一挂，`/signin` 也拿不到判定，用户被静默锁死且看不到原因。「非 200 一律 null」是 v1.0 的错误，已废。**v1.2 只改抛错之后的接法，判定函数本身不动** |
+| 后端不可用时的界面 | **v1.2 改**：三个路由各自 `catch` 掉那次抛错，照常渲染当页并弹一条 `common.serviceUnavailable`——`/console` 给空外壳 + toast，`/signin` `/signup` 给表单。原口径「抛错交给默认错误页、不做『后端挂了先放控制台外壳』的降级」作废。仍不新建 `error.tsx`；代价与边界见 §5 的 I1、§7 末两条 |
 | 未登录访问 `/console` 的去向 | 一律 `/signin`，**不带 `?next=`**；登录成功固定 `router.push("/console")` |
 | 注册成功的去向 | 改为 `/console`。用户选了「已登录不准停在登录/注册页」，而注册即登录——仍 `push("/signin")` 会立刻被 page 层的权威判定弹走，白跳一次。成功 toast 保留 |
 | 登出 | 一起做，落在 `ConsoleUserMenu`：`POST /api/v1/auth/logout` 成功 → `router.replace("/signin")`（`use-router.md:45`），失败 `toast.error` 并留在原地。逻辑抽 `hooks/use-signout.ts`，菜单只渲染——延续「UI 只管 UI，逻辑只做逻辑」；菜单里现有的主题/语言 handler 不是先例，它们不碰网络 |
@@ -45,7 +47,7 @@
 
 ## 3. 范围
 
-新增：`frontend/proxy.ts`、`frontend/lib/backend-url.ts`、`frontend/lib/auth-session.ts`、`frontend/hooks/use-signout.ts`
+新增：`frontend/proxy.ts`、`frontend/lib/backend-url.ts`、`frontend/lib/auth-session.ts`、`frontend/hooks/use-signout.ts`、`frontend/components/console/console-service-toast.tsx`（v1.2）
 
 改动：`app/console/layout.tsx`、`app/signin/page.tsx`、`app/signup/page.tsx`、`components/console/console-sidebar.tsx`、`components/console/console-user-menu.tsx`、`hooks/use-signup.ts`、`next.config.ts`、`messages/zh-CN.json`、`messages/en.json`
 
@@ -102,11 +104,11 @@ export const config = { matcher: ["/console/:path*"] };
 
 ## 5. 不变量与状态机
 
-- **I1** 进入 `/console` 渲染的充要条件是 `getAuthenticatedUser()` 返回非 null。proxy 只会在「完全没有 cookie」时挡人，它**不授予**任何访问权。
+- **I1**（v1.2 由「充要」降为「必要」）`getAuthenticatedUser()` 返回非 null 时 `/console` 必渲染；返回 null 时必跳 `/signin`。**故障期不再等价**：判定抛错时布局也渲染外壳，所以「看到控制台外壳」推不出「已验明身份」。支撑这条降级不泄数据的三点——外壳内没有用户数据（`app/console/page.tsx` 返回 `null`）、昵称整块不渲染（`components/console/console-user-menu.tsx:79`）、真实数据一律经后端 `guard.RequireAuth`。**故 `/console` 下新增子页不得假定布局已验明身份**，要么自己判，要么靠接口 401。proxy 只会在「完全没有 cookie」时挡人，它**不授予**任何访问权。
 - **I2** 从 `/signin` / `/signup` 跳往 `/console` 的唯一触发是同一个函数返回非 null。
 - **I3** 同一 cookie 在同一会话状态下，`getAuthenticatedUser()` 给出同一结论。
 - 由 I2/I3：判定为 null 时 `/signin` 是终点；判定为真时 `/signin → /console` 后 `/console` 判定同真，不会弹回。**不存在由两处互相推诿造成的环**。
-- **I4**（v1.1 新增）后端故障**不产生重定向**，只产生错误页。故故障期间不会出现「反复跳转」，也不会出现「看起来没登录」的假象。
+- **I4**（v1.1 新增，v1.2 修订）后端故障**不产生重定向**。故故障期间不会出现「反复跳转」，也不会出现「看起来没登录」的假象。v1.2 把呈现从「错误页」换成「当页照常渲染 + 一条 toast」，**不成环这条结论不变**：`catch` 只吃掉抛错，不引入任何跳转；`redirect()` 仍在 `try` 之外（`app/console/layout.tsx:46`、两个 page 同形），不会被当成故障吞掉。
 
 已知状态（v1.0 称「穷举」，不准确；下列为已核实的八态，未覆盖的后端新状态出现时需回来补表）：
 
@@ -136,7 +138,7 @@ export const config = { matcher: ["/console/:path*"] };
 | 3 | 同一 jar 请求 `/signin` | 307 → `/console` |
 | 4 | 假 cookie（`-b "session=garbage"`）请求 `/console`，再请求 `/signin` | 前者 307 → `/signin`；后者 200 停住。**顺带自证 F 态**：记录这两个响应里有没有 `Set-Cookie` |
 | 5 | D 态：先造一个开 2FA 的账号（`POST /auth/2fa/setup` + `/enable`，验证码按返回 secret 现算 TOTP），登录得 401 `two_factor_required` 并拿到 jar，再请求 `/console` 与 `/signin` | 前者 307 → `/signin`，后者 200 停住。此步不可省——它正是偏离官方示例的根据 |
-| 6 | 后端故障（把 `BACKEND_URL` 指向空闲端口起一次 dev，或停后端进程）访问 `/console` | **不是**跳 `/signin`，而是错误页 / 500。验 I4 |
+| 6 | 后端故障（把 `BACKEND_URL` 指向空闲端口起一次 dev，或停后端进程）访问 `/console`（带任意 cookie） | **200**：照常渲染外壳，不跳 `/signin`；同状态下带 cookie 访问 `/signin`、`/signup` 也 **200** 且表单照常。验 I4 与 §2 的呈现口径。2026-10-13 curl 实测（`:5732` 无人监听）：`/console` 带 cookie 200 且响应体含 `console-sidebar`、不带 cookie 仍 307、`/signin` `/signup` 带 cookie 均 200。**toast 本身未画面取证**——它由 `ConsoleServiceToast` 的 effect 在水合后发出，需浏览器侧确认 |
 | 7 | 浏览器登录 | 地址栏 `/console`，右上角显示 nickname，`/auth/me` 200 |
 | 8 | 点「退出登录」 | 请求 200；响应 `Set-Cookie: session=; Max-Age=0`；界面落 `/signin`；再进 `/console` 被挡 |
 | 9 | 注册成功 | toast「注册成功，请登录」出现（MutationObserver 取证），地址栏 `/console` |
@@ -148,11 +150,12 @@ export const config = { matcher: ["/console/:path*"] };
 - **G 态（后端不变量破损）**：会话可同时持 `auth.user_id` 与 `auth.pending_2fa_user_id`，公开的 `/auth/2fa/verify` 会按 pending 键完成登录，从而把身份切到那个 2FA 账号。触发前提是攻击者已掌握对方口令（pending 只在密码校验通过后写入）**且**能拿到对方的动态码/恢复码，所以不是远程可利用；但它与 `specs/2026-10-11-neoblog-2fa-design.md` 里「同一会话不可能既已登录又在等二段」的承诺相悖。本轮前端不改后端，登记到 §8/§9。
 - **`/signin`、`/signup`、`/console` 每次渲染各多一次到后端的会话查询**，而全站**零限流**（`backend/README.md:152`、layer2 spec:108 已登记），本轮把读放大带到登录页本身。生产 `BACKEND_URL` 必须指内网且不对浏览器暴露。
 - **故意违反一条官方建议**：`authentication-with-cache-components.md:156` 明确劝「别把 session 读放 layout 顶层，会连 `children` 一起拖住」。本设计**故意**放在顶层——门禁必须先于 children 渲染，否则未登录时控制台子树会先出画面。代价是整段多等一次内网 RTT（开发环境同机约 1ms）。后人勿按文档把它下移进 Suspense。
-- **依赖 `instant = false` 的位置**：`instant.md:87-89` 说明 root layout 上的 `false` 关掉**整站**静态壳校验，同时官方建议把它尽量下移。一旦被下移或删除，layout 顶层的 `cookies()` + 外部 fetch 会立刻变成构建错。此依赖写进本 spec 正文，改动 root layout 时必须回来核。
+- **依赖 `instant = false` 的位置**：`instant.md:87-89` 说明 root layout 上的 `false` 关掉**整站**静态壳校验，同时官方建议把它尽量下移。一旦被下移或删除，layout 顶层的 `cookies()` + 外部 fetch 会立刻变成构建错。此依赖写进本 spec 正文，改动 root layout 时必须回来核。**v1.2 补**：`app/console/layout.tsx:10`、`app/signin/page.tsx:8`、`app/signup/page.tsx:8` 三条各自声明了 `instant = false`，含义是「这一段允许阻塞」（`instant.md:69`）；root 那条**仍在**，所以这三条目前是自我说明多于功能必需，撤 root 时它们才成为承重的。
 - **prefetch 与 307 的交互无文档覆盖**：App Shell 在 prefetch 命中重定向后如何缓存，随包文档没说；且 `partialPrefetching.md:55` 提到读 cookie 的路由按 session 缓存壳。`partialPrefetching: true` 下需在验收时观察 `/console` 的 prefetch 行为，不能只信 dev 表现（dev 不 prefetch）。
 - **C/D 态的脏 cookie 不自愈**（§5 的 F 行）：脏 cookie 会留到浏览器 `Max-Age` 到期或被成功登录覆盖；本轮不主动清 cookie（前端读不到 HttpOnly 值，proxy 也无权改写后端会话）。
 - **Server Function 覆盖盲区**：`proxy.md:249-251`——Server Function 不是独立路由，matcher 收窄会静默失去对其的覆盖，重构挪路由也一样。本项目当前没有 Server Function（表单全走客户端 fetch），若将来引入，必须在其内部独立鉴权，不得依赖 proxy。
-- 后端故障时用户看到的是错误页而非「请重试」提示（项目暂无 `error.tsx`，本轮不新建）。
+- 后端故障时用户看到的是当页 + 一句「服务暂时不可用」，不再是一屏错误页（v1.2；仍无 `error.tsx`）。
+- **三种故障原因被同一个 `catch` 合并，且服务端零日志**（v1.2 引入）：`lib/auth-session.ts` 有三个抛错点——连不上（`:28`）、非 200 状态（`:36`）、响应体解析不出（`:42`），落地的三处 `catch` 不区分它们，于是「后端返 500 的响应体畸形」这类真 bug 也会被显示成「服务暂时不可用」，运维侧查不到原因。与 2026-10-12 定的「先做对内可诊断」相反。用户 2026-10-13 决定本轮不动，拆分与日志登记到 §8。
 - `docs/DEVLOG.md:399` 的 logout 204 与代码不符（`backend/README.md:135` 是对的）；`password` 的同类陈旧见 §1 列表。
 
 ## 8. 插槽（本轮不定，定它的时点）
@@ -165,7 +168,9 @@ export const config = { matcher: ["/console/:path*"] };
 | 角色/权限门禁（`permissions` 的前端表达、菜单按权显隐） | 做角色区分那轮 |
 | `?next=` 原位续作 | 出现多个受保护子页且需回原页时 |
 | 恢复纯 CSR 门控 | 你决定要不要恢复（上一轮的它已被撤销） |
-| `error.tsx` / 后端不可用的用户可读提示 | 需要可读错误页那轮 |
+| `error.tsx`（可读错误页）——「后端不可用的用户可读提示」已由 v1.2 的 toast 交付，此插槽只剩真错误页 | 需要可读错误页那轮 |
+| **拆分故障原因 + 服务端可诊断日志**：在 `lib/auth-session.ts` 里给需要降级的调用方一个命名明确的入口（只把「连不上」当故障放行，「非 200」「响应体畸形」继续抛），或在三处 `catch` 里打一行原因日志 | 下一次动 `auth-session.ts` 那轮（用户 2026-10-13 决定本轮保持裸 `catch`） |
+| `/console` 子页的身份自检约定（v1.2 后 I1 只保证「必要」，不保证「看到外壳＝已验明」） | 控制台开始渲染真实数据那轮 |
 | 前端版本号进位口径（`package.json` 仍是 0.1.0） | 你定前端版本规则那轮 |
 | 首个 owner 账号来源 | 管理端/建号那轮 |
 

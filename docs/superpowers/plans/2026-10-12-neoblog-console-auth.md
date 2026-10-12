@@ -28,7 +28,7 @@
 
 规格里写了但没有任何一个任务的测试会顺手覆盖、且最容易在真实使用咬人的五类，按可能性排序。每条后面标注它落在哪个任务。
 
-1. **后端故障被当成未登录**：`/auth/me` 返回 5xx / 404 / 405 / 连不上时，期望是**错误页（500）**，绝不是「弹回 `/signin` 看起来像没登录」——否则后端一挂，已登录用户被静默锁死且看不到原因。（Task 2 Step 6/7）
+1. **后端故障被当成未登录**：`/auth/me` 返回 5xx / 404 / 405 / 连不上时，期望**不是**「弹回 `/signin` 看起来像没登录」——否则后端一挂，已登录用户被静默锁死且看不到原因。**v1.2（2026-10-13）改了呈现**：故障仍抛错，但由三个路由自己 `catch`，`/console` 照常出外壳并弹一条 toast、`/signin` `/signup` 照常出表单；判定层三态不变，鉴别用例也不变（见 Task 2 Step 7 的订正）。（Task 2 Step 6/7）
 2. **pending 会话**（cookie 有效但会话里没有 `auth.user_id`）访问 `/console` 与 `/signin`：期望两跳收敛到 `/signin` 并停住，**不出现 `/signin ⇄ /console` 循环**。**本轮无实测覆盖**（Task 7 已由用户决定推后，见下文）；当前只由 spec §5 的 I2/I3 与代码结构保证，接 2FA 那轮必须补测。
 3. **取证被 HMR 缓存骗了**：登出或塞假 cookie 后，用热更新画面判断会得出「还像登录态」的错误结论；期望每条状态断言都出自冷请求或整页刷新。（Task 4 Step 5、Task 6 Step 6）
 4. **matcher 收窄的覆盖盲区**：`/console` 下**新增子路由**天然被 `/console/:path*` 覆盖，但若将来引入 Server Function（POST 到同一路由），matcher 不覆盖它就静默失去门禁；期望知道「布局层的权威校验才是防线」。（Task 3 Step 5；spec §7 已登记）
@@ -149,8 +149,10 @@ Run: `curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" http://127.0.0.1:
 | 无 cookie → `/console` | `307 /signin`（proxy 不依赖后端） |
 | 无 cookie → `/signin` | `200`（没 cookie 就不发那次请求） |
 
+> **v1.2（2026-10-13）订正**：上表第一行是当时那次实测的存档，不作历史记录改写；**现状已变**。同一条件下现在实测 `/console` 带 cookie → **200** 且响应体含 `console-sidebar`，`/signin` `/signup` 带 cookie → **200** 表单照常（2026-10-13 于 `:5732` 无人监听状态 curl 复测）。鉴别点不变、只是期望值从 500 换成 200：故障若被错写成 `null`，`/console` 会 307 回 `/signin`，所以「200 且不出跳转」仍然证明 `throw` 分支没退化成未登录。不带 cookie → `/console` 仍是 307，proxy 那层没被这次改动波及。
+
 Run（后端停机状态下）: `curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" -H "Cookie: session=whatever" http://127.0.0.1:3000/console`
-Expected: `500` 且 `redirect_url` 为空。这条证明 `throw` 分支没被写成 `null`。
+Expected（v1.2 起）: `200` 且 `redirect_url` 为空。这条证明 `throw` 分支没被写成 `null`（写成 `null` 就会是 `307 /signin`）。访客页那两条自 v1.2 起不再具鉴别力——表单本来就返 200，判不出是「按故障放行」还是「当成未登录」。
 
 - [ ] **Step 8: Commit**
 
