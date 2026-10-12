@@ -41,7 +41,7 @@ func LoadIdentity(resolver IdentityResolver, sessions *scs.SessionManager) gin.H
 				apierror.Abort(c, apierror.ErrUnauthorized)
 				return
 			}
-			apierror.Abort(c, apierror.ErrInternal)
+			apierror.Abort(c, err)
 			return
 		}
 

@@ -1,10 +1,14 @@
 package apierror
 
 import (
+	"database/sql/driver"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Type string
@@ -56,6 +60,7 @@ var (
 	ErrTwoFactorNotSetup       = &Error{Type: TypeConflict, Code: "two_factor_not_setup"}
 	ErrTwoFactorNotEnabled     = &Error{Type: TypeConflict, Code: "two_factor_not_enabled"}
 	ErrMailDeliveryFailed      = &Error{Type: TypeServer, Code: "mail_delivery_failed"}
+	ErrServiceUnavailable      = &Error{Type: TypeServer, Code: "service_unavailable"}
 	ErrInternal                = &Error{Type: TypeServer, Code: "internal_error"}
 )
 
@@ -86,7 +91,47 @@ var statusByCode = map[string]int{
 	"two_factor_not_setup":       http.StatusConflict,
 	"two_factor_not_enabled":     http.StatusConflict,
 	"mail_delivery_failed":       http.StatusInternalServerError,
+	"service_unavailable":        http.StatusServiceUnavailable,
 	"internal_error":             http.StatusInternalServerError,
+}
+
+var unavailableSQLStateClasses = map[string]bool{
+	"08": true,
+	"53": true,
+	"57": true,
+	"58": true,
+}
+
+func isUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var connectErr *pgconn.ConnectError
+	if errors.As(err, &connectErr) {
+		return true
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && len(pgErr.Code) >= 2 && unavailableSQLStateClasses[pgErr.Code[:2]] {
+		return true
+	}
+
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+
+	return errors.Is(err, driver.ErrBadConn) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF)
+}
+
+func resolve(err error) (int, *Error) {
+	if isUnavailable(err) {
+		err = ErrServiceUnavailable
+	}
+	return statusOf(err), Body(err)
 }
 
 type paramOverride struct {
@@ -155,9 +200,11 @@ func statusOf(err error) int {
 }
 
 func Write(ctx *gin.Context, err error) {
-	ctx.JSON(statusOf(err), gin.H{"error": Body(err)})
+	status, body := resolve(err)
+	ctx.JSON(status, gin.H{"error": body})
 }
 
 func Abort(ctx *gin.Context, err error) {
-	ctx.AbortWithStatusJSON(statusOf(err), gin.H{"error": Body(err)})
+	status, body := resolve(err)
+	ctx.AbortWithStatusJSON(status, gin.H{"error": body})
 }

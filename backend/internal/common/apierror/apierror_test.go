@@ -1,14 +1,21 @@
 package apierror
 
 import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func TestRegistryMatchesSpec(t *testing.T) {
@@ -38,6 +45,8 @@ func TestRegistryMatchesSpec(t *testing.T) {
 		{"group_name_taken", ErrGroupNameTaken, TypeConflict, "group_name_taken", http.StatusConflict, strPtr("name")},
 		{"group_not_empty", ErrGroupNotEmpty, TypeConflict, "group_not_empty", http.StatusConflict, nil},
 		{"last_owner", ErrLastOwner, TypeConflict, "last_owner", http.StatusConflict, nil},
+		{"mail_delivery_failed", ErrMailDeliveryFailed, TypeServer, "mail_delivery_failed", http.StatusInternalServerError, nil},
+		{"service_unavailable", ErrServiceUnavailable, TypeServer, "service_unavailable", http.StatusServiceUnavailable, nil},
 		{"internal_error", ErrInternal, TypeServer, "internal_error", http.StatusInternalServerError, nil},
 	}
 	for _, tc := range cases {
@@ -171,6 +180,71 @@ func TestBodyCopyDoesNotAliasSentinelParam(t *testing.T) {
 	}
 }
 
+func realConnectError(t *testing.T) error {
+	t.Helper()
+
+	db, err := sql.Open("pgx", "postgresql://nobody:nobody@127.0.0.1:1/nowhere?sslmode=disable")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	_, err = db.QueryContext(context.Background(), "select 1")
+	if err == nil {
+		t.Fatal("expected the unreachable database to fail")
+	}
+	var connectErr *pgconn.ConnectError
+	if !errors.As(err, &connectErr) {
+		t.Fatalf("fixture error = %T, want *pgconn.ConnectError", err)
+	}
+	return err
+}
+
+func TestDatabaseOutageMapsToServiceUnavailable(t *testing.T) {
+	connectErr := realConnectError(t)
+	cases := []struct {
+		name     string
+		err      error
+		wantCode string
+		wantT    int
+	}{
+		{"connect error", connectErr, "service_unavailable", http.StatusServiceUnavailable},
+		{"wrapped connect error", fmt.Errorf("ent: query failed: %w", connectErr), "service_unavailable", http.StatusServiceUnavailable},
+		{"net op error", &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset by peer")}, "service_unavailable", http.StatusServiceUnavailable},
+		{"driver bad conn", driver.ErrBadConn, "service_unavailable", http.StatusServiceUnavailable},
+		{"unexpected eof", io.ErrUnexpectedEOF, "service_unavailable", http.StatusServiceUnavailable},
+		{"closed connection", io.EOF, "service_unavailable", http.StatusServiceUnavailable},
+		{"admin shutdown", &pgconn.PgError{Code: "57P01"}, "service_unavailable", http.StatusServiceUnavailable},
+		{"cannot connect now", &pgconn.PgError{Code: "57P03"}, "service_unavailable", http.StatusServiceUnavailable},
+		{"too many connections", &pgconn.PgError{Code: "53300"}, "service_unavailable", http.StatusServiceUnavailable},
+		{"connection exception", &pgconn.PgError{Code: "08006"}, "service_unavailable", http.StatusServiceUnavailable},
+		{"unique violation", &pgconn.PgError{Code: "23505"}, "internal_error", http.StatusInternalServerError},
+		{"syntax error", &pgconn.PgError{Code: "42601"}, "internal_error", http.StatusInternalServerError},
+		{"plain error", errors.New("boom"), "internal_error", http.StatusInternalServerError},
+		{"typed sentinel", ErrInvalidCredentials, "invalid_credentials", http.StatusUnauthorized},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(rr)
+			ctx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+			Write(ctx, tc.err)
+
+			if rr.Code != tc.wantT {
+				t.Fatalf("status = %d, want %d (body %s)", rr.Code, tc.wantT, rr.Body.String())
+			}
+			var m map[string]map[string]any
+			if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if m["error"]["code"] != tc.wantCode {
+				t.Fatalf("code = %v, want %v", m["error"]["code"], tc.wantCode)
+			}
+		})
+	}
+}
+
 func TestRegistryIntegrity(t *testing.T) {
 	all := []*Error{
 		ErrInvalidRequest, ErrWeakPassword, ErrPasswordUnchanged, ErrInvalidPermission,
@@ -180,13 +254,13 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrOwnerProtected, ErrCannotModifySelf, ErrNotFound, ErrPresetGroupLocked,
 		ErrEmailTaken, ErrNicknameTaken, ErrAlreadyTaken, ErrGroupNameTaken,
 		ErrGroupNotEmpty, ErrLastOwner, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
-		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrInternal,
+		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrServiceUnavailable, ErrInternal,
 	}
-	if len(all) != 27 {
-		t.Fatalf("sentinel count = %d, want 27", len(all))
+	if len(all) != 28 {
+		t.Fatalf("sentinel count = %d, want 28", len(all))
 	}
-	if len(statusByCode) != 27 {
-		t.Fatalf("statusByCode entries = %d, want 27", len(statusByCode))
+	if len(statusByCode) != 28 {
+		t.Fatalf("statusByCode entries = %d, want 28", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,
@@ -196,6 +270,7 @@ func TestRegistryIntegrity(t *testing.T) {
 		http.StatusNotFound:            TypeNotFound,
 		http.StatusConflict:            TypeConflict,
 		http.StatusInternalServerError: TypeServer,
+		http.StatusServiceUnavailable:  TypeServer,
 	}
 	seenCodes := make(map[string]struct{}, len(all))
 	for _, sentinel := range all {

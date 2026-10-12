@@ -17,8 +17,9 @@ import (
 const pingTimeout = 5 * time.Second
 
 type Database struct {
-	db     *sql.DB
-	Client *ent.Client
+	db         *sql.DB
+	Client     *ent.Client
+	startupErr error
 }
 
 func Open(ctx context.Context, cfg config.Config) (*Database, error) {
@@ -31,17 +32,23 @@ func Open(ctx context.Context, cfg config.Config) (*Database, error) {
 	db.SetMaxIdleConns(cfg.DBMaxIdleConns)
 	db.SetConnMaxLifetime(cfg.DBConnMaxLifetime)
 
+	d := &Database{
+		db:     db,
+		Client: ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db))),
+	}
+
 	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
 
 	if err := db.PingContext(pingCtx); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("database: connect: %w", err)
+		d.startupErr = fmt.Errorf("database: connect: %w", err)
 	}
 
-	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+	return d, nil
+}
 
-	return &Database{db: db, Client: client}, nil
+func (d *Database) StartupError() error {
+	return d.startupErr
 }
 
 func (d *Database) SQL() *sql.DB {

@@ -475,6 +475,110 @@ func TestHealthyEndpointStillWorks(t *testing.T) {
 	}
 }
 
+func degradedConfig() config.Config {
+	return config.Config{
+		Addr:              ":0",
+		Environment:       "development",
+		ServiceName:       "website-backend-test",
+		DatabaseURL:       "postgresql://nobody:nobody@127.0.0.1:1/nowhere?sslmode=disable",
+		DBMaxOpenConns:    2,
+		DBMaxIdleConns:    1,
+		DBConnMaxLifetime: time.Minute,
+		SessionLifetime:   time.Hour,
+		TOTPEncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+	}
+}
+
+func newDegradedServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	cfg := degradedConfig()
+	db, err := database.Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if db.StartupError() == nil {
+		t.Fatal("expected the degraded fixture database url to be unreachable")
+	}
+
+	application, err := New(cfg, db)
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	ts := httptest.NewServer(application.Handler())
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+func TestDegradedServerStillServesRoutes(t *testing.T) {
+	ts := newDegradedServer(t)
+
+	cases := []struct {
+		name     string
+		method   string
+		path     string
+		body     string
+		want     int
+		wantCode string
+	}{
+		{"login needs the database", http.MethodPost, "/api/v1/auth/login", `{"identifier":"a@b.c","password":"pass-12345"}`, http.StatusServiceUnavailable, "service_unavailable"},
+		{"register needs the database", http.MethodPost, "/api/v1/auth/register", `{"email":"a@b.c","nickname":"ab","password":"pass-12345"}`, http.StatusServiceUnavailable, "service_unavailable"},
+		{"admin list needs the database", http.MethodPost, "/api/v1/admin/groups", `{"name":"G"}`, http.StatusUnauthorized, "unauthorized"},
+		{"validation does not need the database", http.MethodPost, "/api/v1/auth/login", `{}`, http.StatusBadRequest, "invalid_request"},
+		{"unknown route is still 404", http.MethodGet, "/api/v1/definitely/not/a/route", "", http.StatusNotFound, "not_found"},
+		{"method mismatch is still 405", http.MethodGet, "/api/v1/auth/login", "", http.StatusMethodNotAllowed, "method_not_allowed"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := http.NewRequest(tc.method, ts.URL+tc.path, strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatalf("build request: %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := newClient(t).Do(req)
+			if err != nil {
+				t.Fatalf("%s %s: %v", tc.method, tc.path, err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tc.want {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
+			}
+			var body errorEnvelope
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if body.Error.Code != tc.wantCode {
+				t.Fatalf("code = %q, want %q", body.Error.Code, tc.wantCode)
+			}
+		})
+	}
+}
+
+func TestDegradedHealthReportsDatabaseError(t *testing.T) {
+	ts := newDegradedServer(t)
+
+	resp, err := http.Get(ts.URL + "/api/v1/healthy")
+	if err != nil {
+		t.Fatalf("healthy: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", resp.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["status"] != "degraded" || body["database"] != "error" {
+		t.Fatalf("body = %+v, want degraded / database error", body)
+	}
+}
+
 func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
 	ts, db := newTestServer(t, "development")
 	u, password := createTestUser(t, db)

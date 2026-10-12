@@ -18,10 +18,36 @@ func testConfig(url string) config.Config {
 	}
 }
 
-func TestOpenRejectsUnreachableDatabase(t *testing.T) {
-	_, err := Open(context.Background(), testConfig("postgresql://nobody:nobody@127.0.0.1:1/nowhere?sslmode=disable"))
-	if err == nil {
-		t.Fatal("expected error for unreachable database")
+func TestOpenSurvivesUnreachableDatabase(t *testing.T) {
+	db, err := Open(context.Background(), testConfig("postgresql://nobody:nobody@127.0.0.1:1/nowhere?sslmode=disable"))
+	if err != nil {
+		t.Fatalf("open must not fail when the database is unreachable: %v", err)
+	}
+	if db == nil {
+		t.Fatal("expected a usable handle")
+	}
+	if db.Client == nil {
+		t.Fatal("expected the ent client to be built even when unreachable")
+	}
+	if db.StartupError() == nil {
+		t.Fatal("expected the failed probe to be recorded as a startup error")
+	}
+	if err := db.Ping(context.Background()); err == nil {
+		t.Fatal("expected ping to keep failing while the database is down")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+}
+
+func TestOpenRecordsUnparsableDatabaseURL(t *testing.T) {
+	db, err := Open(context.Background(), testConfig("not-a-dsn-at-all"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	if db.StartupError() == nil {
+		t.Fatal("expected an unparsable database url to be recorded as a startup error")
 	}
 }
 
@@ -34,8 +60,8 @@ func TestOpenPingClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if err := db.Ping(context.Background()); err != nil {
-		t.Fatalf("ping: %v", err)
+	if db.StartupError() != nil {
+		t.Fatalf("startup error = %v, want nil for a reachable database", db.StartupError())
 	}
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)

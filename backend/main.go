@@ -25,6 +25,10 @@ func main() {
 	}
 	defer db.Close()
 
+	if err := db.StartupError(); err != nil {
+		log.Printf("degraded start: %v; serving anyway, database-backed endpoints return 503 until it answers", err)
+	}
+
 	application, err := app.New(cfg, db)
 	if err != nil {
 		log.Fatal(err)

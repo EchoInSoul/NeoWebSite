@@ -11,7 +11,7 @@
 | `main.go` | `main.ts` | 启动引导：加载配置、创建应用、启动 |
 | `internal/app/app.go` | `app.module.ts` + `setGlobalPrefix` | 组装模块、全局前缀 `/api/v1`、HTTP 服务器（超时 / 优雅关闭） |
 | `internal/config` | `ConfigModule` | 读环境变量，产出 `Config` |
-| `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close` / `Client`（ent）/ `SQL` |
+| `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close` / `Client`（ent）/ `SQL` / `StartupError`（首次探测失败原因，不致命） |
 | `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
 | `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
 | `scripts/db-up.sh` / `scripts/dev.sh` | — | 起本地 Postgres 容器（等到 healthy） / 启动后端（先定位到 `backend/` 再 `go run .`，可在任意目录执行） |
@@ -57,7 +57,7 @@ postsModule.Register(api)
 | `APP_ENV` | `development` | 环境标识，出现在健康检查响应里；`production` 时自动切到 Gin release 模式（关闭 debug 横幅与路由表打印） |
 | `APP_VERSION` | 编译进二进制的版本号 | 仅作运行时临时覆盖（本地调试），常规部署不设置 |
 | `SERVICE_NAME` | `website-backend` | 服务名 |
-| `DATABASE_URL` | 无（必需） | Postgres 连接串；可写在 `backend/.env`（启动时自动加载，环境变量优先）；缺失或不可用时启动即失败 |
+| `DATABASE_URL` | 无（必需） | Postgres 连接串；可写在 `backend/.env`（启动时自动加载，环境变量优先）；**缺失时启动即失败**，串本身不可达时照常启动、进降级态（见「运行」的降级启动） |
 | `DATABASE_URL_TEST` | 无 | 集成测试专用连接串；不设置时集成用例自动 skip |
 | `DB_MAX_OPEN_CONNS` | `10` | 连接池最大连接数 |
 | `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
@@ -124,7 +124,9 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 只提供后端接口（前端由前端侧接线）。层 1：登录 / 登出 / 当前用户；层 2：公开注册与更改密码。
 
-所有端点的错误响应统一为 `{"error":{"type","code","param"}}`：HTTP 状态码照常；`code` 即下表中的 token；`type` 由状态码唯一决定（400 `invalid_request_error` / 401 `authentication_error` / 403 `permission_error` / 404 `not_found_error` / 405 `invalid_request_error` / 409 `conflict_error` / 500 `server_error`）；`param` 指向出错字段或为 `null`；错误体不含任何文案。唯一例外：`/healthy` 为探针端点豁免本信封，503 降级时仍返回 `Status` 对象。
+所有端点的错误响应统一为 `{"error":{"type","code","param"}}`：HTTP 状态码照常；`code` 即下表中的 token；`type` 由状态码唯一决定（400 `invalid_request_error` / 401 `authentication_error` / 403 `permission_error` / 404 `not_found_error` / 405 `invalid_request_error` / 409 `conflict_error` / 500 `server_error` / 503 `server_error`）；`param` 指向出错字段或为 `null`；错误体不含任何文案。唯一例外：`/healthy` 为探针端点豁免本信封，503 降级时仍返回 `Status` 对象。
+
+数据库连不上时，凡是要读写库的端点统一返回 503 `service_unavailable`（由 `internal/common/apierror` 在写出处识别连接级错误得出：`*pgconn.ConnectError`、`driver.ErrBadConn`、`*net.OpError`、`io.EOF` / `io.ErrUnexpectedEOF`，以及 SQLSTATE 类 08 / 53 / 57 / 58）；SQL 逻辑错误（如唯一约束 23505、语法 42601）仍是 500 `internal_error`，不会被降级掩盖。不需要碰库的端点不受影响：请求体校验仍是 400、路径不存在仍是 404、方法不匹配仍是 405。
 
 请求方法不匹配（路径存在但该路径没注册这个方法）返回 405 `method_not_allowed`，并按 RFC 9110 带上 `Allow` 头列出该路径允许的方法；路径本身不存在仍是 404 `not_found`，且此时响应不带 `Allow`。这条分流由 `app.go` 的 `HandleMethodNotAllowed` + `NoMethod` 承担，在认证中间件之前生效，因此匿名请求也能拿到 `Allow`（即该端点存在）；要隐藏端点存在性就把 `HandleMethodNotAllowed` 关回 `false`，届时方法不匹配与路径不存在同为 404。`HEAD` 与 `OPTIONS` 没有任何端点注册，同样落进 405（`HEAD` 按 HTTP 语义响应体必为空，只有 `Allow` 头；将来接跨域时要先给 `OPTIONS` 预检让路）。
 
@@ -252,3 +254,7 @@ ADDR=:9090 go run .     # 自定义端口
 ```
 
 健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"<当前版本>","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
+
+**降级启动**：`database.Open` 只在驱动 / DSN 语法层面失败才返回错误；首次 Ping 失败被记在 `Database.StartupError()` 里，`main.go` 打一条 `degraded start: …` 日志后照常监听端口，所有路由照常注册。要读写库的端点在此期间统一 503 `service_unavailable`（判定见「认证」章节的错误信封段），连不上那一刻起的请求不会退化成 401 或 HTML 错误页。连接池是惰性的，库恢复后无需重启进程：下一次取连接即成功（已实测：进程不变，`/healthy` 从 503 翻回 200、登录从 503 回到 401 `invalid_credentials`）。
+
+已知取舍：会话本身存在 Postgres（scs 的 `postgresstore`），库不可用时 scs 把「读不到会话」与「没有会话」一视同仁，带 cookie 打受保护端点仍是 401 `unauthorized`，不是 503。
