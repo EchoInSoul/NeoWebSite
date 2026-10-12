@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 
 	"website/backend/internal/database"
@@ -165,6 +166,53 @@ func (s *Service) SetGroup(ctx context.Context, group string, items []ItemWrite)
 		return err
 	}
 	return s.repo.upsertMany(ctx, group, values)
+}
+
+type ItemError struct {
+	Item string
+	Err  error
+}
+
+func (e *ItemError) Error() string { return e.Err.Error() }
+
+func (e *ItemError) Unwrap() error { return e.Err }
+
+func (s *Service) PatchGroup(ctx context.Context, group string, raw map[string]json.RawMessage) (map[string]any, error) {
+	items, ok := s.registry.groups[group]
+	if !ok {
+		return nil, ErrUnknownGroup
+	}
+	if len(raw) == 0 {
+		return nil, ErrUnknownItem
+	}
+
+	names := make([]string, 0, len(raw))
+	for name := range raw {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	writes := make([]ItemWrite, 0, len(names))
+	for _, name := range names {
+		def, ok := items[name]
+		if !ok {
+			return nil, &ItemError{Item: name, Err: ErrUnknownItem}
+		}
+		value, err := decodeTyped(def.Type, raw[name])
+		if err != nil {
+			return nil, &ItemError{Item: name, Err: ErrTypeMismatch}
+		}
+		writes = append(writes, ItemWrite{Name: name, Type: def.Type, Value: value})
+	}
+
+	values, err := s.resolveGroupWrites(group, writes)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.upsertMany(ctx, group, values); err != nil {
+		return nil, err
+	}
+	return s.GetGroup(ctx, group)
 }
 
 func (s *Service) resolveGroupWrites(group string, items []ItemWrite) (map[string]json.RawMessage, error) {

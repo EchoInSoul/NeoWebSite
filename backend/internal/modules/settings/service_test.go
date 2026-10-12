@@ -89,6 +89,42 @@ func TestServiceUnknown(t *testing.T) {
 	}
 }
 
+func TestPatchGroupValidation(t *testing.T) {
+	svc := newUnitService(t)
+	ctx := context.Background()
+
+	if _, err := svc.PatchGroup(ctx, "nope", map[string]json.RawMessage{"title": json.RawMessage(`"x"`)}); !errors.Is(err, ErrUnknownGroup) {
+		t.Fatalf("PatchGroup unknown group = %v, want ErrUnknownGroup", err)
+	}
+
+	_, err := svc.PatchGroup(ctx, "site", nil)
+	if !errors.Is(err, ErrUnknownItem) {
+		t.Fatalf("PatchGroup empty body = %v, want ErrUnknownItem", err)
+	}
+	var emptyItemErr *ItemError
+	if errors.As(err, &emptyItemErr) {
+		t.Fatalf("empty body error must not carry an item name, got %+v", emptyItemErr)
+	}
+
+	_, err = svc.PatchGroup(ctx, "site", map[string]json.RawMessage{"nope": json.RawMessage(`1`)})
+	var unknownItemErr *ItemError
+	if !errors.As(err, &unknownItemErr) {
+		t.Fatalf("PatchGroup unknown item = %v, want *ItemError", err)
+	}
+	if unknownItemErr.Item != "nope" || !errors.Is(err, ErrUnknownItem) {
+		t.Fatalf("unknown item error = %+v, want item \"nope\" wrapping ErrUnknownItem", unknownItemErr)
+	}
+
+	_, err = svc.PatchGroup(ctx, "site", map[string]json.RawMessage{"port": json.RawMessage(`3.5`)})
+	var typeItemErr *ItemError
+	if !errors.As(err, &typeItemErr) {
+		t.Fatalf("PatchGroup type mismatch = %v, want *ItemError", err)
+	}
+	if typeItemErr.Item != "port" || !errors.Is(err, ErrTypeMismatch) {
+		t.Fatalf("type mismatch error = %+v, want item \"port\" wrapping ErrTypeMismatch", typeItemErr)
+	}
+}
+
 func TestDecodeNumberBoundary(t *testing.T) {
 	rejected := []json.RawMessage{
 		json.RawMessage(`3.5`),
