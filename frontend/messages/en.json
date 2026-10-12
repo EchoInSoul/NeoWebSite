@@ -8,7 +8,9 @@
     "themeDark": "Dark",
     "language": "Language",
     "localeZhCn": "简体中文",
-    "localeEn": "English"
+    "localeEn": "English",
+    "signOut": "Sign out",
+    "signOutFailed": "Sign out failed, please try again later"
   },
   "sidebar": {
     "open": "Open sidebar",

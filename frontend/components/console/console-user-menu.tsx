@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ExternalLink,
   Languages,
+  LogOut,
   Monitor,
   Moon,
   Sun,
@@ -18,12 +19,14 @@ import {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenuButton } from "@/components/ui/sidebar";
+import { useSignout } from "@/hooks/use-signout";
 import { SUPPORTED_LOCALES, type Locale } from "@/i18n/config";
 import { setUserLocale } from "@/i18n/set-locale";
 import { useThemeMode, type ThemeMode } from "@/lib/theme";
@@ -47,6 +50,7 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
   const router = useRouter();
   const [isSwitchingLocale, startLocaleSwitch] = useTransition();
   const { themeMode, setThemeMode } = useThemeMode();
+  const { isSigningOut, signOut } = useSignout();
 
   const themeModeLabels: Record<ThemeMode, string> = {
     system: t("themeSystem"),
@@ -127,6 +131,13 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem disabled={isSigningOut} onClick={signOut}>
+          <LogOut />
+          <span>{t("signOut")}</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
