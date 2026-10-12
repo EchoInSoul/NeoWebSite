@@ -132,7 +132,7 @@ export function useSignupForm() {
         body: { email, nickname, password: values.password },
       });
       toast.success(t("success"));
-      router.push("/signin");
+      router.push("/console");
       return undefined;
     } catch (error) {
       const apiErrors = toFieldErrors(error);
