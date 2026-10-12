@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-10-12 · 服务不可用报错（两个表单不再谎报凭证错误）
+
+**版本**：前端 `package.json` 仍 **0.1.0**；后端 0.11.0 不动，本轮**零后端改动**、零接口契约变更。
+
+### 做了什么
+
+数据库连不上时，登录/注册原本一律弹「登录失败，请稍后重试」（`use-signin.ts` 的兜底分支），把服务侧故障说成用户填错。现在：
+
+- `lib/api.ts` +2 个导出：`looksLikeServiceFailure(error)`（HTTP 0 或 ≥500，只回答"这次错误值不值得去查一次健康"）与 `isServiceUp()`（打 `/api/v1/healthy`，**非 200 一律算不可用**，是唯一的结论来源）。`apiRequest` / `ApiError` 一字未动。
+- 新 `hooks/use-service-error.ts`：`useServiceErrorMessage()` 返回统一入口（传错误 = 提交场景，不传 = 纯探测），两种场景给的是同一句话；`useServiceCheck()` 在组件挂载时探测一次，不可用就弹一条，带 `active` 标记防卸载后弹（StrictMode 双跑也只弹一次）。
+- `hooks/use-signin.ts` / `use-signup.ts`：提交失败的兜底改走统一入口，拿不到才落回原业务文案；`toMessage` / `toFailure` 里的 code→文案映射一条没删，注册页故障时不落焦点到任何字段。
+- `app/signin|signup/*-view.tsx` 各加一行 `useServiceCheck()`，不改 DOM、不影响排版。
+- 两份语言包各 +1 键 `common.serviceUnavailable`（中文「服务暂时不可用，请稍后重试」）。
+
+### 关键决定
+
+- **判定收成单一信息源**（用户拍板"两处都只认 `/healthy` 探测"）。初版是进页探测 `/healthy`、提交时看接口自己的状态码——一个判定两个信息源，读起来像实现了两遍。现在提交侧不再自己下结论，状态码只当闸门。
+- **闸门保留**，否则密码每打错一次就多发的一个健康请求（harness 实测：有闸门请求数 0，无闸门 1）。
+- 原命名 `isServiceUnavailable` 已改名为 `looksLikeServiceFailure`：收敛之后它不再下判决，旧名字读起来像在下判决。
+- **没新增 503 `database_unavailable`**：会推翻 api-conventions §4「500 之外的 5xx 一律归并为 500、503 只给 `/healthy`」，还要判定哪些 ent 错误算数据库掉线（连接池耗尽 / 超时 / 慢查询语义不同），误报会把普通 bug 说成库故障。界面因此只说"服务"不可用，不特指数据库。
+- 文案放 `common` 而非两个 `auth.*.failed` 各加一条：三个消费者共用同一句，拆开必然漂移。
+- **不做去重**，登录/注册两页之间来回跳各弹一次——沿 `0e8a4be` 定的"连点提交弹几次算几次"。
+
+### 实测到的边界（记下来免得下次重查）
+
+- **后端进程不在时，浏览器看到的不是网络错误，是 Next 自己返 500 + 纯文本 `Internal Server Error`**（`curl -i POST /api/v1/auth/login`，dev 3000 端口实测）。因为 `/api/*` 由 `next.config.ts` 的 rewrites 转发，断点在服务端那一跳；`apiRequest` 解析不出 JSON 于是给 `ApiError(500, "invalid_response")`。`status === 0` 只在"浏览器到 Next 这一跳也断了"时才出现。
+- 后端 boot 时 ping 失败即 `log.Fatal` 退出（`backend/main.go:22-25`），所以"数据库连不上"最常见的形态是整个 HTTP 服务不存在。
+- `/healthy` 在库掉线时返 **503** + `{"status":"degraded","database":"error"}`（`health/controller.go`），且它不受错误信封约束，非 200 时 `apiRequest` 拿不到 `error.code`。
+- `useTranslations()` 的返回值是 `useMemo` 过的（依赖 cache / formatters / messages / locale / timeZone，见 `node_modules/use-intl/dist/esm/production/react.js`），放进 `useEffect` 依赖数组不会导致重复探测。
+- **Qoder 内置浏览器跑不动这站**：37 个 JS chunk 全 200、`window.next` 已定义，但 6 秒内 React 事件属性始终没挂到 DOM（`__react*` 键为空）、`window.__next_f` 长度 0、`/__nextjs_font/*` 与 HMR WebSocket 一律 403 → 页面不水合，客户端 effect 根本不执行。**结论：本项目的 toast / 交互类验收不能靠内置浏览器**，只能无头 harness + 人工眼验。
+- 无头 harness 四态矩阵（判定逻辑逐条实测，非推演）：后端不在 / 库运行中掉线 / 浏览器到 Next 断了 → 进页与提交都报同一句并各发 1 次探测；一切正常但密码错 → 仍报「用户名或密码错误」且探测请求数 0。`tsc --noEmit`、`eslint`、`prettier --check` 全绿。
+
+### 已知缺口
+
+- **`/console` 的整页可读错误页仍未做**（`2026-10-12-neoblog-console-auth-design.md:35` 与 `:168` 登记给"需要可读错误页那轮"）。后端故障时现在还是 Next 默认错误页 / dev 红堆栈。
+- **本轮未验**：toast 的实际渲染（内置浏览器不水合），需要人工开 `http://127.0.0.1:<dev 端口>/signin` 在停机状态下确认一次。
+- 登出失败文案 `userMenu.signOutFailed` 没接这套判定（本轮点名范围只有两个表单）。
+- 前台公开页（`app/page.tsx` 当前是空 div）将来接上内容后需要自己的故障态。
+- `isServiceUp()` 把 `/healthy` 任何非 200 都算不可用 → 该路由若改名或被摘掉，进页会弹「服务暂时不可用」，属误导性诊断。
+
+---
+
 ## 2026-10-12 · 控制台访问控制（proxy 短路 + 服务端权威校验 + 登出）
 
 **版本**：前端 `package.json` 仍 **0.1.0**（前端版本进位口径未定，见 spec §8 插槽）；后端 0.11.0 不动，本轮**零后端改动**。

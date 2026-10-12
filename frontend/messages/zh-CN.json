@@ -22,7 +22,8 @@
   },
   "common": {
     "showPassword": "显示密码",
-    "hidePassword": "隐藏密码"
+    "hidePassword": "隐藏密码",
+    "serviceUnavailable": "服务暂时不可用，请稍后重试"
   },
   "auth": {
     "signin": {

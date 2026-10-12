@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
+import { useServiceErrorMessage } from "@/hooks/use-service-error";
 import { ApiError, apiRequest } from "@/lib/api";
 
 export type SigninField = "identifier" | "password";
@@ -14,6 +15,7 @@ const EMPTY_VALUES: Record<SigninField, string> = {
 
 export function useSigninForm() {
   const t = useTranslations("auth.signin");
+  const resolveServiceError = useServiceErrorMessage();
   const router = useRouter();
   const [values, setValues] = useState(EMPTY_VALUES);
   const [isPending, setIsPending] = useState(false);
@@ -57,7 +59,7 @@ export function useSigninForm() {
       router.push("/console");
       return undefined;
     } catch (error) {
-      toast.error(toMessage(error));
+      toast.error((await resolveServiceError(error)) ?? toMessage(error));
       return undefined;
     } finally {
       setIsPending(false);

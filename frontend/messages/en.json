@@ -22,7 +22,8 @@
   },
   "common": {
     "showPassword": "Show password",
-    "hidePassword": "Hide password"
+    "hidePassword": "Hide password",
+    "serviceUnavailable": "The service is unavailable, please try again later"
   },
   "auth": {
     "signin": {

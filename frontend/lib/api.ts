@@ -27,6 +27,12 @@ export class ApiError extends Error {
   }
 }
 
+export function looksLikeServiceFailure(error: unknown): boolean {
+  return (
+    error instanceof ApiError && (error.status === 0 || error.status >= 500)
+  );
+}
+
 async function readPayload(response: Response) {
   const text = await response.text();
   if (text.length === 0) {
@@ -70,4 +76,13 @@ export async function apiRequest<T = unknown>(
   }
 
   return payload as T;
+}
+
+export async function isServiceUp(): Promise<boolean> {
+  try {
+    await apiRequest("/api/v1/healthy");
+    return true;
+  } catch {
+    return false;
+  }
 }
