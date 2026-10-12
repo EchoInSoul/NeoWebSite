@@ -13,19 +13,20 @@
 数据库连不上时，登录/注册原本一律弹「登录失败，请稍后重试」（`use-signin.ts` 的兜底分支），把服务侧故障说成用户填错。现在：
 
 - `lib/api.ts` +2 个导出：`looksLikeServiceFailure(error)`（HTTP 0 或 ≥500，只回答"这次错误值不值得去查一次健康"）与 `isServiceUp()`（打 `/api/v1/healthy`，**非 200 一律算不可用**，是唯一的结论来源）。`apiRequest` / `ApiError` 一字未动。
-- 新 `hooks/use-service-error.ts`：`useServiceErrorMessage()` 返回统一入口（传错误 = 提交场景，不传 = 纯探测），两种场景给的是同一句话；`useServiceCheck()` 在组件挂载时探测一次，不可用就弹一条，带 `active` 标记防卸载后弹（StrictMode 双跑也只弹一次）。
-- `hooks/use-signin.ts` / `use-signup.ts`：提交失败的兜底改走统一入口，拿不到才落回原业务文案；`toMessage` / `toFailure` 里的 code→文案映射一条没删，注册页故障时不落焦点到任何字段。
-- `app/signin|signup/*-view.tsx` 各加一行 `useServiceCheck()`，不改 DOM、不影响排版。
-- 两份语言包各 +1 键 `common.serviceUnavailable`（中文「服务暂时不可用，请稍后重试」）。
+- 新 `hooks/use-service-health.ts`：`useServiceHealth()` 返回 `{ serviceDown, resolveServiceError }`。`resolveServiceError(error?)` 是统一入口（传错误 = 提交场景，不传 = 纯探测），两种场景给的是同一句话、这句只在 hook 顶部算一次；挂载时在 effect 里探测一次，不可用除弹一条外还把 `serviceDown` 置真，带 `active` 标记防卸载后弹（StrictMode 双跑也只弹一次）。
+- `hooks/use-signin.ts` / `use-signup.ts`：提交失败的兜底改走统一入口，拿不到才落回原业务文案；`toMessage` / `toFailure` 里的 code→文案映射一条没删，注册页故障时不落焦点到任何字段。`serviceDown` 经 hook 透传给表单组件。
+- `app/signin|signup/*-form.tsx`：`serviceDown` 为真时提交按钮文案换成「服务不可用」，**按钮不加 `disabled`**；`*-view.tsx` 本轮零改动。
+- 两份语言包各 +2 键 `common.serviceUnavailable`（「服务暂时不可用，请稍后重试」）与 `common.serviceUnavailableButton`（「服务不可用」）。
 
 ### 关键决定
 
 - **判定收成单一信息源**（用户拍板"两处都只认 `/healthy` 探测"）。初版是进页探测 `/healthy`、提交时看接口自己的状态码——一个判定两个信息源，读起来像实现了两遍。现在提交侧不再自己下结论，状态码只当闸门。
 - **闸门保留**，否则密码每打错一次就多发的一个健康请求（harness 实测：有闸门请求数 0，无闸门 1）。
-- 原命名 `isServiceUnavailable` 已改名为 `looksLikeServiceFailure`：收敛之后它不再下判决，旧名字读起来像在下判决。
+- 原命名 `isServiceUnavailable` 已改名为 `looksLikeServiceFailure`：收敛之后它不再下判决，旧名字读起来像在下判决。同轮里 hook 文件也从 `use-service-error.ts` 改名为 `use-service-health.ts`（它现在管的是状态而不只是报错文案），`c5408dc` 那个提交里记的是旧名。
 - **没新增 503 `database_unavailable`**：会推翻 api-conventions §4「500 之外的 5xx 一律归并为 500、503 只给 `/healthy`」，还要判定哪些 ent 错误算数据库掉线（连接池耗尽 / 超时 / 慢查询语义不同），误报会把普通 bug 说成库故障。界面因此只说"服务"不可用，不特指数据库。
 - 文案放 `common` 而非两个 `auth.*.failed` 各加一条：三个消费者共用同一句，拆开必然漂移。
 - **不做去重**，登录/注册两页之间来回跳各弹一次——沿 `0e8a4be` 定的"连点提交弹几次算几次"。
+- **故障时不禁用提交按钮，只改文案**（用户拍板"服务不可用 按照这个改吧"）：禁用会把「点提交」这条最省事的恢复检测堵掉——`/healthy` 的结论只是进页那一刻的快照，服务恢复后前端并不知道，而用户点一次提交恰好是一次免费重探；灰色本身不解释原因，要诚实就还得再挂一条常驻说明，等于把已有那条 toast 换成两套东西；另外沿用 2026-10-01 加载占位那轮定过的「常驻行必须真可用，禁用＝灰色遮蔽」否例。配套地，`resolveServiceError` 在拿到 4xx 业务错时会 `setServiceDown(false)`——服务器能回 4xx 就说明它活着，按钮文案当场恢复正常。
 
 ### 实测到的边界（记下来免得下次重查）
 
@@ -33,13 +34,14 @@
 - 后端 boot 时 ping 失败即 `log.Fatal` 退出（`backend/main.go:22-25`），所以"数据库连不上"最常见的形态是整个 HTTP 服务不存在。
 - `/healthy` 在库掉线时返 **503** + `{"status":"degraded","database":"error"}`（`health/controller.go`），且它不受错误信封约束，非 200 时 `apiRequest` 拿不到 `error.code`。
 - `useTranslations()` 的返回值是 `useMemo` 过的（依赖 cache / formatters / messages / locale / timeZone，见 `node_modules/use-intl/dist/esm/production/react.js`），放进 `useEffect` 依赖数组不会导致重复探测。
+- **`react-hooks/set-state-in-effect` 会追进 effect 调用的回调里**：只要那个函数存在任何一条"未经 `await` 就 setState"的分支（本例是 4xx 直接 `setServiceDown(false)` 后 return），规则就报 "Calling setState synchronously within an effect"，哪怕实际调用路径必过 `await`。解法：effect 不复用那个入口函数，自己 `isServiceUp().then(...)` 置状态；文案在 hook 顶部算成常量串供两边用。
 - **Qoder 内置浏览器跑不动这站**：37 个 JS chunk 全 200、`window.next` 已定义，但 6 秒内 React 事件属性始终没挂到 DOM（`__react*` 键为空）、`window.__next_f` 长度 0、`/__nextjs_font/*` 与 HMR WebSocket 一律 403 → 页面不水合，客户端 effect 根本不执行。**结论：本项目的 toast / 交互类验收不能靠内置浏览器**，只能无头 harness + 人工眼验。
 - 无头 harness 四态矩阵（判定逻辑逐条实测，非推演）：后端不在 / 库运行中掉线 / 浏览器到 Next 断了 → 进页与提交都报同一句并各发 1 次探测；一切正常但密码错 → 仍报「用户名或密码错误」且探测请求数 0。`tsc --noEmit`、`eslint`、`prettier --check` 全绿。
 
 ### 已知缺口
 
 - **`/console` 的整页可读错误页仍未做**（`2026-10-12-neoblog-console-auth-design.md:35` 与 `:168` 登记给"需要可读错误页那轮"）。后端故障时现在还是 Next 默认错误页 / dev 红堆栈。
-- **本轮未验**：toast 的实际渲染（内置浏览器不水合），需要人工开 `http://127.0.0.1:<dev 端口>/signin` 在停机状态下确认一次。
+- **本轮未验**：toast 与「服务不可用」按钮文案的实际渲染都只在浏览器里才看得见，而内置浏览器不水合（见上），需要人工开 `http://127.0.0.1:<dev 端口>/signin` 在停机状态下各看一眼：进页弹一条、按钮文字变成「服务不可用」、点下去仍会重探。
 - 登出失败文案 `userMenu.signOutFailed` 没接这套判定（本轮点名范围只有两个表单）。
 - 前台公开页（`app/page.tsx` 当前是空 div）将来接上内容后需要自己的故障态。
 - `isServiceUp()` 把 `/healthy` 任何非 200 都算不可用 → 该路由若改名或被摘掉，进页会弹「服务暂时不可用」，属误导性诊断。

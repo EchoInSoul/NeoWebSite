@@ -23,7 +23,8 @@
   "common": {
     "showPassword": "Show password",
     "hidePassword": "Hide password",
-    "serviceUnavailable": "The service is unavailable, please try again later"
+    "serviceUnavailable": "The service is unavailable, please try again later",
+    "serviceUnavailableButton": "Service unavailable"
   },
   "auth": {
     "signin": {

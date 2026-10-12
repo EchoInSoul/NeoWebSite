@@ -18,7 +18,8 @@ import { PASSWORD_MIN_LENGTH, useSignupForm } from "@/hooks/use-signup";
 export function SignupForm() {
   const t = useTranslations("auth.signup");
   const tCommon = useTranslations("common");
-  const { values, isPending, changeField, submit } = useSignupForm();
+  const { values, isPending, serviceDown, changeField, submit } =
+    useSignupForm();
 
   const formRef = useRef<HTMLFormElement>(null);
   const emailFieldId = useId();
@@ -136,7 +137,7 @@ export function SignupForm() {
       </fieldset>
 
       <Button type="submit" className="w-full" disabled={isPending}>
-        {t("submit")}
+        {serviceDown ? tCommon("serviceUnavailableButton") : t("submit")}
       </Button>
     </form>
   );

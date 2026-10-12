@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
-import { useServiceErrorMessage } from "@/hooks/use-service-error";
+import { useServiceHealth } from "@/hooks/use-service-health";
 import { ApiError, apiRequest } from "@/lib/api";
 
 export const PASSWORD_MIN_LENGTH = 8;
@@ -44,7 +44,7 @@ function isValidPassword(value: string) {
 
 export function useSignupForm() {
   const t = useTranslations("auth.signup");
-  const resolveServiceError = useServiceErrorMessage();
+  const { serviceDown, resolveServiceError } = useServiceHealth();
   const router = useRouter();
   const [values, setValues] = useState(EMPTY_VALUES);
   const [isPending, setIsPending] = useState(false);
@@ -122,5 +122,5 @@ export function useSignupForm() {
     }
   }
 
-  return { values, isPending, changeField, submit };
+  return { values, isPending, serviceDown, changeField, submit };
 }

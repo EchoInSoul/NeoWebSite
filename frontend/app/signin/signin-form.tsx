@@ -18,7 +18,8 @@ import { useSigninForm } from "@/hooks/use-signin";
 export function SigninForm() {
   const t = useTranslations("auth.signin");
   const tCommon = useTranslations("common");
-  const { values, isPending, changeField, submit } = useSigninForm();
+  const { values, isPending, serviceDown, changeField, submit } =
+    useSigninForm();
 
   const formRef = useRef<HTMLFormElement>(null);
   const identifierFieldId = useId();
@@ -87,7 +88,7 @@ export function SigninForm() {
       </fieldset>
 
       <Button type="submit" className="w-full" disabled={isPending}>
-        {t("submit")}
+        {serviceDown ? tCommon("serviceUnavailableButton") : t("submit")}
       </Button>
     </form>
   );

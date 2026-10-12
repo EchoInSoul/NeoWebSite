@@ -4,13 +4,10 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { AuthFrame } from "@/components/auth/auth-frame";
-import { useServiceCheck } from "@/hooks/use-service-error";
 import { SignupForm } from "./signup-form";
 
 export function SignupView() {
   const t = useTranslations("auth.signup");
-
-  useServiceCheck();
 
   return (
     <AuthFrame
