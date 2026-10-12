@@ -39,7 +39,14 @@ func testDB(t *testing.T) *database.Database {
 
 func uniqueTag(t *testing.T) string {
 	t.Helper()
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+	return fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
+}
+
+func TestUniqueTagIncludesProcessID(t *testing.T) {
+	tag := uniqueTag(t)
+	if !strings.HasPrefix(tag, fmt.Sprintf("%d-", os.Getpid())) {
+		t.Fatalf("tag %q does not start with process id %d", tag, os.Getpid())
+	}
 }
 
 func createTestUser(t *testing.T, db *database.Database, tag string) (User, string) {

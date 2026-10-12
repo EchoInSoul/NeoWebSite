@@ -47,7 +47,7 @@
   8. **M-6 集成腿缺失**——补 `TestMailMessagesEndpointEndToEnd`：匿名 401 / 普通用户 403 / 自建组 403 / owner 201（走真实 app 装配 + 登录会话，`DATABASE_URL_TEST` 缺省 skip）。
 - **留档不修（用户裁定）**：M-3（`ErrClosed` 单列错误码——其建议的 503 本身违反 §4 白名单，503 仅 `/healthy` 豁免；且该窗口实际不可达）；M-7（「操作即资源」判定标准待出现第二个此类端点时写入规范 §3/§4）；M-8（未跟踪的 2FA 两份文档写着 0.8.0 → 0.9.0，本轮已占用 0.9.0，2FA 轮启动时需重编版本号）。
 - **审查手段缺陷记录**：本机 `-race` 不可用（`CGO_ENABLED=1` 缺 gcc），数据竞争结论以 go-mail v0.8.1 源码取证替代（每次投递新建连接 + `c.mutex.RLock()`）；`gofmt -l` 恒退出 0、`-race` 首跑退出码被管道吞掉——两处都要求门禁脚本用显式判定，不信工具默认行为。
-- **过程中撞出的存量 flake（非本轮引入，未修待点名）**：全仓并行跑时 auth 一次 `TestLoginRejectsWrongPasswordAndUnknownAccount` 报 `email or nickname already exists`——`auth` 与 `access/service_test.go` 的建号昵称同为 `"nick"+UnixNano`，两个测试进程共用 `neoblog_test` 并行执行，取到同一时钟刻度即撞唯一约束；单独重跑与后续两轮全仓 `-count=1` 均绿。tag 生成器无进程间唯一成分（pid/随机量），属测试基建隐患；修法（tag 加 pid 或随机后缀）待用户点名。
+- **过程中撞出的存量 flake（非本轮引入；2026-10-12 用户点名后已修）**：全仓并行跑时 auth 一次 `TestLoginRejectsWrongPasswordAndUnknownAccount` 报 `email or nickname already exists`——两包共用 `neoblog_test` 并行执行，而 `auth/repository_test.go` 与 `access/migration_test.go` 的 tag 生成器同为纯 `UnixNano`、建号昵称都派生自它（如 `"nick"+tag`），取到同一时钟刻度即撞唯一约束（当时单独重跑与后续两轮全仓 `-count=1` 均绿，属偶发）。修法：tag 改为「pid + `-` + UnixNano」，跨进程必不同；两包各加守护用例 `TestUniqueTagIncludesProcessID`（先红后绿）。修复后全仓 `-count=1`（带库）重跑绿。
 
 ---
 

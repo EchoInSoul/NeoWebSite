@@ -30,7 +30,7 @@
 | --- | --- | --- |
 | 库 | `github.com/wneessen/go-mail` v0.8.1（2026-07-09 发布；依赖仅 `golang.org/x/crypto` + `x/text`，均已在依赖树） | 本轮 |
 | 包位置 | `internal/modules/mail/`——按 README 硬性规则 1（一个功能一个模块目录）归入 modules；初版无路由（不含 controller / dto / Register），0.9.0（v5）升级为路由模块（module + controller，`RegisterProtected` 挂守卫链），对外入口 `New(cfg) *Module`，能力接口经 `m.Mailer` 暴露 | 本轮；v5 升级 |
-| 对外形状 | 导出 `Mailer` 接口 + `Message` / `Body`；`New(cfg) Mailer`、`Render(name, data)`；业务代码不 import go-mail | 本轮 |
+| 对外形状 | 导出 `Mailer` 接口 + `Message` / `Body`；`New(cfg) *Module`（能力接口经 `m.Mailer` 暴露）、`Render(name, data)`；业务代码不 import go-mail | 本轮；v5 修订 |
 | 投递模型 | 内存队列（缓冲 channel，容量 32）+ 单 worker 串行投递（一次只有一个 SMTP 连接）；**不做持久化 outbox** | 本轮 |
 | 重试 | 每封最多 3 次尝试（首次 + 2 次重试），退避 1s / 5s，单次投递拨号死线 20s（go-mail 对每条 SMTP 命令续期，非总上限）；**服务端 4xx 或传输层错误重试，服务端 5xx 不重试**（判定依据见 §13） | 本轮 |
 | 降级 | `SMTP_HOST` 为空 → log sender（把邮件写日志），启动不报错——这是 fail-fast 原则的唯一例外，开发机无凭据也能全流程跑通 | 本轮 |
