@@ -13,8 +13,6 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type SignupField = "email" | "name" | "password" | "confirmPassword";
 
-export type SignupErrors = Partial<Record<SignupField | "form", string>>;
-
 const EMPTY_VALUES: Record<SignupField, string> = {
   email: "",
   name: "",
@@ -47,82 +45,55 @@ export function useSignupForm() {
   const t = useTranslations("auth.signup");
   const router = useRouter();
   const [values, setValues] = useState(EMPTY_VALUES);
-  const [errors, setErrors] = useState<SignupErrors>({});
   const [isPending, setIsPending] = useState(false);
-
-  const confirmError =
-    values.confirmPassword.length > 0 &&
-    values.confirmPassword !== values.password
-      ? t("mismatch")
-      : undefined;
 
   function changeField(field: SignupField, value: string) {
     setValues((previous) => ({ ...previous, [field]: value }));
-    setErrors((previous) =>
-      previous[field] === undefined
-        ? previous
-        : { ...previous, [field]: undefined },
-    );
   }
 
-  function toFieldErrors(error: unknown): SignupErrors {
-    if (!(error instanceof ApiError)) {
-      return { form: t("failed") };
+  function toFailure(error: unknown): { message: string; field?: SignupField } {
+    if (error instanceof ApiError) {
+      switch (error.code) {
+        case "email_taken":
+          return { message: t("emailTaken"), field: "email" };
+        case "nickname_taken":
+          return { message: t("nameTaken"), field: "name" };
+        case "weak_password":
+          return { message: t("weakPassword"), field: "password" };
+        case "already_taken":
+          return { message: t("alreadyTaken") };
+        case "invalid_request":
+          return { message: t("invalidRequest") };
+      }
     }
 
-    switch (error.code) {
-      case "email_taken":
-        return { email: t("emailTaken") };
-      case "nickname_taken":
-        return { name: t("nameTaken") };
-      case "weak_password":
-        return { password: t("weakPassword") };
-      case "already_taken":
-        return { form: t("alreadyTaken") };
-      case "invalid_request":
-        return { form: t("invalidRequest") };
-      default:
-        return { form: t("failed") };
-    }
-  }
-
-  function firstErrorField(current: SignupErrors): SignupField | undefined {
-    if (current.email) {
-      return "email";
-    }
-    if (current.name) {
-      return "name";
-    }
-    if (current.password) {
-      return "password";
-    }
-    return undefined;
+    return { message: t("failed") };
   }
 
   async function submit(): Promise<SignupField | undefined> {
     const email = values.email.trim();
     const nickname = values.name.trim();
 
-    const nextErrors: SignupErrors = {};
     if (!isValidEmail(email)) {
-      nextErrors.email = t("invalidEmail");
+      toast.error(t("invalidEmail"));
+      return "email";
     }
     if (!isValidName(nickname)) {
-      nextErrors.name = t("invalidName", {
-        minLength: NAME_MIN_LENGTH,
-        maxLength: NAME_MAX_LENGTH,
-      });
+      toast.error(
+        t("invalidName", {
+          minLength: NAME_MIN_LENGTH,
+          maxLength: NAME_MAX_LENGTH,
+        }),
+      );
+      return "name";
     }
     if (!isValidPassword(values.password)) {
-      nextErrors.password = t("weakPassword");
+      toast.error(t("weakPassword"));
+      return "password";
     }
-    setErrors(nextErrors);
-
-    const invalidField =
-      firstErrorField(nextErrors) ??
-      (confirmError ? "confirmPassword" : undefined);
-    if (invalidField) {
-      return invalidField;
+    if (values.confirmPassword !== values.password) {
+      toast.error(t("mismatch"));
+      return "confirmPassword";
     }
 
     setIsPending(true);
@@ -135,13 +106,13 @@ export function useSignupForm() {
       router.push("/console");
       return undefined;
     } catch (error) {
-      const apiErrors = toFieldErrors(error);
-      setErrors(apiErrors);
-      return firstErrorField(apiErrors);
+      const failure = toFailure(error);
+      toast.error(failure.message);
+      return failure.field;
     } finally {
       setIsPending(false);
     }
   }
 
-  return { values, errors, confirmError, isPending, changeField, submit };
+  return { values, isPending, changeField, submit };
 }

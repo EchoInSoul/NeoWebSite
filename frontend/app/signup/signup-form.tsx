@@ -4,7 +4,6 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-import { FieldError } from "@/components/auth/field-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,19 +18,13 @@ import { PASSWORD_MIN_LENGTH, useSignupForm } from "@/hooks/use-signup";
 export function SignupForm() {
   const t = useTranslations("auth.signup");
   const tCommon = useTranslations("common");
-  const { values, errors, confirmError, isPending, changeField, submit } =
-    useSignupForm();
+  const { values, isPending, changeField, submit } = useSignupForm();
 
   const formRef = useRef<HTMLFormElement>(null);
   const emailFieldId = useId();
   const nameFieldId = useId();
   const passwordFieldId = useId();
   const confirmFieldId = useId();
-  const emailErrorId = useId();
-  const nameErrorId = useId();
-  const passwordErrorId = useId();
-  const confirmErrorId = useId();
-  const formErrorId = useId();
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmVisible, setIsConfirmVisible] = useState(false);
@@ -62,12 +55,9 @@ export function SignupForm() {
             type="email"
             autoComplete="email"
             required
-            aria-invalid={errors.email !== undefined}
-            aria-describedby={errors.email ? emailErrorId : undefined}
             value={values.email}
             onChange={(event) => changeField("email", event.target.value)}
           />
-          <FieldError id={emailErrorId} message={errors.email} />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -78,12 +68,9 @@ export function SignupForm() {
             type="text"
             autoComplete="username"
             required
-            aria-invalid={errors.name !== undefined}
-            aria-describedby={errors.name ? nameErrorId : undefined}
             value={values.name}
             onChange={(event) => changeField("name", event.target.value)}
           />
-          <FieldError id={nameErrorId} message={errors.name} />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -95,8 +82,6 @@ export function SignupForm() {
               type={isPasswordVisible ? "text" : "password"}
               autoComplete="new-password"
               required
-              aria-invalid={errors.password !== undefined}
-              aria-describedby={errors.password ? passwordErrorId : undefined}
               value={values.password}
               onChange={(event) => changeField("password", event.target.value)}
             />
@@ -117,7 +102,6 @@ export function SignupForm() {
           <p className="text-xs text-muted-foreground">
             {t("passwordHint", { minLength: PASSWORD_MIN_LENGTH })}
           </p>
-          <FieldError id={passwordErrorId} message={errors.password} />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -129,8 +113,6 @@ export function SignupForm() {
               type={isConfirmVisible ? "text" : "password"}
               autoComplete="new-password"
               required
-              aria-invalid={confirmError !== undefined}
-              aria-describedby={confirmError ? confirmErrorId : undefined}
               value={values.confirmPassword}
               onChange={(event) =>
                 changeField("confirmPassword", event.target.value)
@@ -150,18 +132,10 @@ export function SignupForm() {
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
-          <FieldError id={confirmErrorId} message={confirmError} />
         </div>
       </fieldset>
 
-      <FieldError id={formErrorId} message={errors.form} />
-
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={isPending}
-        aria-describedby={errors.form ? formErrorId : undefined}
-      >
+      <Button type="submit" className="w-full" disabled={isPending}>
         {t("submit")}
       </Button>
     </form>

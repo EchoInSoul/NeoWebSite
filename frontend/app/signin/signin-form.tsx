@@ -4,7 +4,6 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-import { FieldError } from "@/components/auth/field-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,14 +18,11 @@ import { useSigninForm } from "@/hooks/use-signin";
 export function SigninForm() {
   const t = useTranslations("auth.signin");
   const tCommon = useTranslations("common");
-  const { values, errors, isPending, changeField, submit } = useSigninForm();
+  const { values, isPending, changeField, submit } = useSigninForm();
 
   const formRef = useRef<HTMLFormElement>(null);
   const identifierFieldId = useId();
   const passwordFieldId = useId();
-  const identifierErrorId = useId();
-  const passwordErrorId = useId();
-  const formErrorId = useId();
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
@@ -56,12 +52,9 @@ export function SigninForm() {
             type="text"
             autoComplete="username"
             required
-            aria-invalid={errors.identifier !== undefined}
-            aria-describedby={errors.identifier ? identifierErrorId : undefined}
             value={values.identifier}
             onChange={(event) => changeField("identifier", event.target.value)}
           />
-          <FieldError id={identifierErrorId} message={errors.identifier} />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -73,8 +66,6 @@ export function SigninForm() {
               type={isPasswordVisible ? "text" : "password"}
               autoComplete="current-password"
               required
-              aria-invalid={errors.password !== undefined}
-              aria-describedby={errors.password ? passwordErrorId : undefined}
               value={values.password}
               onChange={(event) => changeField("password", event.target.value)}
             />
@@ -92,18 +83,10 @@ export function SigninForm() {
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
-          <FieldError id={passwordErrorId} message={errors.password} />
         </div>
       </fieldset>
 
-      <FieldError id={formErrorId} message={errors.form} />
-
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={isPending}
-        aria-describedby={errors.form ? formErrorId : undefined}
-      >
+      <Button type="submit" className="w-full" disabled={isPending}>
         {t("submit")}
       </Button>
     </form>

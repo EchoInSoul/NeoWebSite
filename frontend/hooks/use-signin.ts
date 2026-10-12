@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 import { ApiError, apiRequest } from "@/lib/api";
 
 export type SigninField = "identifier" | "password";
-
-export type SigninErrors = Partial<Record<SigninField | "form", string>>;
 
 const EMPTY_VALUES: Record<SigninField, string> = {
   identifier: "",
@@ -17,50 +16,35 @@ export function useSigninForm() {
   const t = useTranslations("auth.signin");
   const router = useRouter();
   const [values, setValues] = useState(EMPTY_VALUES);
-  const [errors, setErrors] = useState<SigninErrors>({});
   const [isPending, setIsPending] = useState(false);
 
   function changeField(field: SigninField, value: string) {
     setValues((previous) => ({ ...previous, [field]: value }));
-    setErrors((previous) =>
-      previous[field] === undefined
-        ? previous
-        : { ...previous, [field]: undefined },
-    );
   }
 
-  function toFieldErrors(error: unknown): SigninErrors {
-    if (!(error instanceof ApiError)) {
-      return { form: t("failed") };
+  function toMessage(error: unknown) {
+    if (error instanceof ApiError) {
+      switch (error.code) {
+        case "invalid_credentials":
+          return t("invalidCredentials");
+        case "two_factor_required":
+          return t("twoFactorUnsupported");
+      }
     }
 
-    switch (error.code) {
-      case "invalid_credentials":
-        return { form: t("invalidCredentials") };
-      case "two_factor_required":
-        return { form: t("twoFactorUnsupported") };
-      default:
-        return { form: t("failed") };
-    }
+    return t("failed");
   }
 
   async function submit(): Promise<SigninField | undefined> {
     const identifier = values.identifier.trim();
     const password = values.password;
 
-    const nextErrors: SigninErrors = {};
     if (identifier === "") {
-      nextErrors.identifier = t("requiredIdentifier");
-    }
-    if (password === "") {
-      nextErrors.password = t("requiredPassword");
-    }
-    setErrors(nextErrors);
-
-    if (nextErrors.identifier) {
+      toast.error(t("requiredIdentifier"));
       return "identifier";
     }
-    if (nextErrors.password) {
+    if (password === "") {
+      toast.error(t("requiredPassword"));
       return "password";
     }
 
@@ -73,12 +57,12 @@ export function useSigninForm() {
       router.push("/console");
       return undefined;
     } catch (error) {
-      setErrors(toFieldErrors(error));
+      toast.error(toMessage(error));
       return undefined;
     } finally {
       setIsPending(false);
     }
   }
 
-  return { values, errors, isPending, changeField, submit };
+  return { values, isPending, changeField, submit };
 }

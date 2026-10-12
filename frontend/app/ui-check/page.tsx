@@ -461,10 +461,10 @@ export default function UiCheckPage() {
       <Section title="输入与表单">
         <p className="max-w-prose text-sm text-muted-foreground">
           业务表单照登录页组合：Label + Input（或 InputGroupInput +
-          密码可见切换）+ auth/FieldError，错误时输入框挂 aria-invalid 并用
-          aria-describedby 绑报错 id（范例见
-          app/signin/signin-form.tsx）。业务不许用 ui/field 的 FieldError，本页
-          field 那块 demo 只做展示。
+          密码可见切换），报错一律走 sonner toast、一次只报第一个不合规字段，
+          输入框不挂 aria-invalid、字段下方不放报错小字（范例见
+          app/signin/signin-form.tsx 与 hooks/use-signin.ts）。业务不许用
+          ui/field 的 FieldError，本页 field 那块 demo 只做展示。
         </p>
         <Demo label="input">
           <Input placeholder="请输入标题" className="w-64" />
