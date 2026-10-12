@@ -8,6 +8,7 @@
 - v1（2026-10-11，对话稿）：认证 = 登录 / 登出 / 会话守卫；库 = scs + bcrypt（2FA 留层 2）；数据访问 = sqlc + goose。
 - v2（2026-10-11，本文）：数据访问改为 **ent + Atlas**，对齐《数据层设计（层 0）》——该文档已定「第一张业务表落地时接 ent + Atlas」，认证的 users / sessions 正是第一张表。其余与 v1 一致。
 - v3（2026-10-11，实施后修订）：按用户要求收窄为**后端 only**——前端接线（§3 / §7 的 rewrite 与登录表单）与管理员创建命令（`cmd/create-admin`）不纳入本分支（相关提交已从分支历史移除）；这两部分作废，不再执行。`auth.CreateAdminUser` 保留，仅供测试使用；首次建号方式另行决定。
+- v4（2026-10-12 再修订）：v3 里作废的**前端接线已另行落地**（提交 `16e210a`–`22d272c`：`/api` 转发、`lib/api.ts`、`hooks/use-signin.ts` / `use-signup.ts`、`*-view.tsx`、中英文案），登录成功跳 `/console` 这条口径如今真在代码里；控制台访问控制见 `2026-10-12-neoblog-console-auth-design.md`。`cmd/create-admin` 仍为移除状态，首次建号方式仍未定。
 
 ## 1. 意图与背景
 
@@ -83,7 +84,7 @@ sessions（scs postgresstore 的约定表，供其读写）：
 | 方法 路径 | 认证 | 请求 | 成功 | 失败 |
 | --- | --- | --- | --- | --- |
 | `POST /api/v1/auth/login` | 公开 | `{"identifier":"...","password":"..."}` | 200 `{"email":"...","nickname":"..."}` + Set-Cookie | 401 `{"error":"invalid_credentials"}` |
-| `POST /api/v1/auth/logout` | 守卫 | 空 | 204 | 401 `{"error":"unauthorized"}` |
+| `POST /api/v1/auth/logout` | 守卫 | 空 | **200 `{}`**（2026-10-12 对账更正：本文原写 204，代码 `controller.go:73` 是 200；`backend/README.md:135` 正确） | 401 `{"error":"unauthorized"}` |
 | `GET /api/v1/auth/me` | 守卫 | 空 | 200 `{"email":"...","nickname":"..."}` | 401 `{"error":"unauthorized"}` |
 
 - 错误形状 `{"error":"..."}` 为本轮最小约定；common 层有统一 filters 时再收编。

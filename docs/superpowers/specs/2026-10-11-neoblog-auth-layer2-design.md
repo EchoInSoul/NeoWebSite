@@ -45,7 +45,7 @@
 | 方法 路径 | 认证 | 请求 | 成功 | 失败 |
 | --- | --- | --- | --- | --- |
 | `POST /api/v1/auth/register` | 公开 | `{"email":"...","nickname":"...","password":"..."}` | 201 `{"email":"...","nickname":"..."}` + `Set-Cookie` | 400 `invalid_request`（JSON 畸形 / 缺字段 / 邮箱或昵称规则不符）；400 `weak_password`（密码规则不符）；409 `email_taken`；409 `nickname_taken`；409 `already_taken`（并发竞态兜底） |
-| `POST /api/v1/auth/password` | 需登录 | `{"currentPassword":"...","newPassword":"..."}` | 204 | 401 `unauthorized`（无会话）；401 `invalid_credentials`（旧密码错）；400 `invalid_request`；400 `weak_password`；400 `password_unchanged` |
+| `POST /api/v1/auth/password` | 需登录 | `{"currentPassword":"...","newPassword":"..."}` | **200 `{}`**（2026-10-12 对账更正：本文原写 204，代码 `controller.go:130` 是 200） | 401 `unauthorized`（无会话）；401 `invalid_credentials`（旧密码错）；400 `invalid_request`；400 `weak_password`；400 `password_unchanged` |
 
 说明：
 - 注册接口**区分**「邮箱已占用 / 昵称已占用」（注册场景的常规 UX，且用户需要知道换哪个）；登录接口维持层 1 的**不区分**（不泄露账号是否存在）。
@@ -62,7 +62,7 @@
 - `internal/modules/auth/service.go`：
   - `Register(ctx, email, nickname, password) (User, error)`：规范化（email 小写、trim）→ 校验规则 → 唯一性预查（命中 → `ErrEmailTaken` / `ErrNicknameTaken`）→ bcrypt → `createUser`；唯一索引兜住并发竞态，冲突时统一返回 `ErrAlreadyTaken`（对应 409 `already_taken`，不做索引名解析）→ 写会话（`RenewToken` + `Put`）。
   - `ChangePassword(ctx, userID, currentToken, currentPassword, newPassword) error`：取用户（不存在 → `ErrUnauthorized` 并销毁会话）→ 校验新密码（规则 + 不得与旧相同）→ 用 bcrypt 比旧密码（错则 `ErrInvalidCredentials`）→ **先 `revokeOtherSessions`（失败 → 500，此时密码未改、用旧密码重试即可，吊销幂等）→ 再生成新哈希并更新**（更新失败 → 500：其他会话已吊销、密码未改，重试仍一致）。
-  - `revokeOtherSessions(ctx, userID, currentToken) error`：`IterableStore.All()`（失败 → 返回错误）→ 逐个 `Codec.Decode`（**解码失败的行跳过**，无法判定归属）→ `values[guard.SessionUserIDKey]` 等于该 userID 且 token ≠ currentToken → `Delete(token)`（**命中行的 Delete 失败 → 返回错误**，避免 204 谎报已吊销）。
+  - `revokeOtherSessions(ctx, userID, currentToken) error`：`IterableStore.All()`（失败 → 返回错误）→ 逐个 `Codec.Decode`（**解码失败的行跳过**，无法判定归属）→ `values[guard.SessionUserIDKey]` 等于该 userID 且 token ≠ currentToken → `Delete(token)`（**命中行的 Delete 失败 → 返回错误**，避免成功码谎报已吊销；2026-10-12 注：原文写「避免 204 谎报」，成功码实为 200 `{}`）。
   - 新增哨兵错误：`ErrInvalidRequest`、`ErrEmailTaken`、`ErrNicknameTaken`、`ErrAlreadyTaken`、`ErrWeakPassword`、`ErrPasswordUnchanged`。
 - `internal/modules/auth/controller.go`：注册两个新 handler（`c.signup`、`c.changePassword`——注意不能叫 `register`，`controller.register` 已是声明路由的方法名）；路由声明加在既有的 `controller.register` / `controller.registerProtected` 里（README 规则 4：路由声明属 controller）。`module.go` 无需改动。
 - `internal/app/app.go`：**无需改动**（两条路由都经由既有 `Register` / `RegisterProtected`）。
@@ -82,7 +82,7 @@
 6. 邮箱大小写：`A@B.com` 注册后，用 `a@b.com`（换一个不同昵称）再注册 → 第二次 409 `email_taken`。
 
 改密码：
-7. 成功 → 204；随后**新密码可登录**、**旧密码 401**；
+7. 成功 → **200 `{}`**（2026-10-12 对账更正：原写 204）；随后**新密码可登录**、**旧密码 401**；
 8. 旧密码错 → 401 `invalid_credentials`；未登录 → 401 `unauthorized`；
 9. 新密码弱 / 与旧相同 → 400 `weak_password` / `password_unchanged`；畸形 JSON / 缺字段 → 400 `invalid_request`；
 10. 会话吊销：两个 client 登录同一账号 → A 改密码 → **A 仍 200**、**B 变 401**；B（已吊销）再访 `/me` 只返回 401（不复活）。
@@ -97,7 +97,7 @@
 
 1. `POST /auth/register` 真机成功：注册 → 响应带 cookie → `/auth/me` 返回本人；库里能看到该行（email 小写）。
 2. 重复邮箱 / 昵称分别 409；弱密码与格式错误分别 400 且错误码正确。
-3. `POST /auth/password` 成功 204；旧密码错 401；新密码可登录、旧密码不可。
+3. `POST /auth/password` 成功 **200 `{}`**（2026-10-12 对账更正：原写 204）；旧密码错 401；新密码可登录、旧密码不可。
 4. 双设备验证吊销：B 设备被踢、A 设备保持登录。
 5. 层 1 的既有测试与行为不回退（登录 / 登出 / me / cookie 属性 / 删号吊销）。
 6. README 与 DEVLOG 更新；版本进位 0.2.1 → 0.3.0。

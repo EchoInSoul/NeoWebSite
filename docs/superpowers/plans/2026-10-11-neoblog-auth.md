@@ -11,6 +11,8 @@
 **Spec:** `docs/superpowers/specs/2026-10-11-neoblog-auth-design.md`
 
 > **实施后修订（2026-10-11）：** 按用户要求收窄为后端 only——**Task 7（`cmd/create-admin`）与 Task 9（前端接线）不纳入本分支**（相关提交已从分支历史移除），这两节作废；Task 1–6、8、10 照常落地。首次建号方式另行决定。
+>
+> **2026-10-12 再修订：** Task 9（前端接线）**已另行落地**——提交 `16e210a`–`22d272c`（`/api` 转发、`lib/api.ts`、`hooks/use-signin.ts` / `use-signup.ts`、`*-view.tsx` 拆分、中英文案），随后控制台访问控制见 `specs/2026-10-12-neoblog-console-auth-design.md` 与 `plans/2026-10-12-neoblog-console-auth.md`。本行以上原文保留作历史。Task 7（`cmd/create-admin`）仍为移除状态，首个 owner 建号入口仍未定。
 
 ## Global Constraints
 

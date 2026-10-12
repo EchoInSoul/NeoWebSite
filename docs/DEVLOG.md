@@ -4,6 +4,55 @@
 
 ---
 
+## 2026-10-12 · 控制台访问控制（proxy 短路 + 服务端权威校验 + 登出）
+
+**版本**：前端 `package.json` 仍 **0.1.0**（前端版本进位口径未定，见 spec §8 插槽）；后端 0.11.0 不动，本轮**零后端改动**。
+
+### 做了什么
+
+- 两层门禁。新 `frontend/proxy.ts`（Next 16.4 里 middleware 已改名 proxy）只做乐观短路：`matcher: ["/console/:path*"]`，有 `session` cookie 就 `next()`、没有就 307 `/signin`；不调后端、不引共享模块。权威校验集中在新文件 `frontend/lib/auth-session.ts` 的 `getAuthenticatedUser()`——带 cookie 请求 `${backendUrl}/api/v1/auth/me`，**三态**：200 → `{email, nickname}`、401 → `null`、其余（5xx / 404 / 405 / 连不上 / 体解析不出）→ **抛错**。
+- `app/console/layout.tsx` 由同步改异步：判到 `null` 就 `redirect("/signin")`；把 `nickname` 经 `ConsoleSidebar` 传给一直空传的 `ConsoleSidebarFooter` / `ConsoleUserMenu` 的 `displayName`。
+- `app/signin/page.tsx`、`app/signup/page.tsx` 加反向跳：`if (await getAuthenticatedUser()) redirect("/console")`。判定放服务端 page 而非 `-view.tsx`（那是 Client Component，`instant` 在客户端会直接报错）。
+- 登出：新 `frontend/hooks/use-signout.ts`（`{ isSigningOut, signOut }`）+ 用户菜单「退出登录」项，`POST /api/v1/auth/logout` 成功 `router.replace("/signin")`、失败 `toast.error`；两份语言包各 +2 键（49 键对齐）。逻辑留 hook、菜单只渲染，延续「UI 只管 UI，逻辑只做逻辑」。
+- `hooks/use-signup.ts` 成功去向 `/signin` → `/console`：注册即登录与反向跳两条叠加后，推 `/signin` 会被立刻弹回、白跳一次。
+- 新 `lib/backend-url.ts` 收口后端地址，`next.config.ts` 的 rewrites 改引它。
+- 设计由两个独立只读审查代理逐条证伪后修订成 v1.1；v1.0 有 6 处事实错误（列在 spec 头部修订记录）。spec `2026-10-12-neoblog-console-auth-design.md`、plan `2026-10-12-neoblog-console-auth.md`。
+
+### 关键决定
+
+- **反向跳故意不放 proxy**（官方示例就放在 proxy，`authentication.md:1061-1069`）：后端对已开 TOTP 的账号会下发**有效 cookie 却不写 `auth.user_id`**（`service.go:109-113`），此时 proxy 的「有 cookie 就弹走」与布局的「401 就送回」会拼成 `/signin ⇄ /console` 无限重定向。两处判定必须共用同一个权威函数才不成环。
+- **后端故障 ≠ 未登录**：v1.0 的「非 200 一律当未登录」被推翻——那样后端一挂，所有人（含已登录者）被静默判成未登录，连登录页都进不去且看不到原因。故障现在走 `throw` → Next 默认错误页。
+- **session 读取故意放 layout 顶层**（官方 `authentication-with-cache-components.md:156` 明确劝退，理由是连 children 一起拖住）：门禁必须先于 children 渲染，代价是控制台整段多等一次内网 RTT。
+- `matcher` 收窄到 `/console/:path*`，与官方「鉴权场景建议 proxy 跑全部路由」的 Tips 相反：`/api` 若进 matcher，会在 rewrites 之前被重定向劫持（proxy 执行在第 3 步、`beforeFiles` rewrites 在第 4 步，`proxy.md:240-244`）。
+- **没用 `server-only` 包**（本机未安装，为一个防护 import 引新依赖不值当）；该模块 import 了 `next/headers`，被 Client Component 误引时 Next 自身就会构建失败，这层保护是白送的。
+
+### 实测到的边界（记下来免得下次重查）
+
+- `NextResponse.redirect` 默认 **307**（`node_modules/next/dist/server/web/spec-extension/response.js:95`）；服务端布局里抛 `redirect()` 对 HTML 请求同样是 307。
+- 后端停机时：带任意 cookie 访问 `/console` → **500，响应体含 `session lookup failed`**；无 cookie → 仍 307（proxy 不依赖后端）；`/signin` 无 cookie → 200（压根不发那次请求）。
+- **脏 cookie 不自愈**：`session=garbage` 的两个响应都不带 `Set-Cookie`（本项目未设 `IdleTimeout`，未改动的会话不回写），要等浏览器侧 `Max-Age` 到期或被一次成功登录覆盖。
+- 登出实测 `set-cookie: session=; Path=/; Expires=Thu, 01 Jan 1970 ...; Max-Age=0; HttpOnly; SameSite=Lax`；同一 token 再进 `/console` 由布局层拒（proxy 放行）——两层分工的现场证据。
+- dev 的 Server Component fetch 有 **HMR 缓存**，且对 `cache: 'no-store'` 同样生效，只在导航/整页刷新时清（`serverComponentsHmrCache.md:9-11`）。状态类验收必须冷请求或整页刷新，否则会得出「已退出却还像登录态」的错误结论。
+- `proxy.ts` 与 `next.config.ts` 的改动都被 dev 自动热加载，无需重启；`/console/whatever` 这类不存在的子路由同样被 matcher 命中（proxy 先于路由执行）。
+- 注册成功码是 **201**（`controller.go:65`），不是 200。
+
+### 已知缺口
+
+- **D 态（2FA pending 会话）本轮未实测**：不造开 TOTP 的账号，无环结论目前只有代码与推演支撑；取证步骤整段留在 plan 的 Task 7（已标推后）。
+- **prefetch 撞 307 的行为未取证**：dev 不 prefetch，要验只能 `next build` + `next start`。
+- 会话中途失效时，界面内的接口调用不会自动跳登录（`lib/api.ts` 不处理 401）。控制台开始消费真实数据那轮补，落点是它的单一出口。
+- 本轮让 `/console`、`/signin`、`/signup` 每次渲染各多一次后端会话查询，而全站**零限流**（`backend/README.md:152`）。
+- **后端不变量破损（本轮不改后端）**：`register` 与正常 `login` 都只写 `auth.user_id`、**不清** `auth.pending_2fa_user_id`（`Remove` 只出现在 verify 成功路径 `service.go:378-379`），而 `POST /auth/2fa/verify` 是公开路由、按该键放行 → 一枚已登录会话可能残留另一个账号的 pending 身份。利用前提苛刻（先掌握对方口令、再拿到对方动态码），不是远程可利用，但与 2FA spec 的不变量承诺相悖。
+- 上一轮做的纯 CSR 门控（`hooks/use-is-client.ts`）已被并行会话撤销，本轮未恢复，登记为插槽。
+
+### 更正既有文档口径
+
+- `plans/2026-10-11-neoblog-auth.md:13` 与 `specs/2026-10-11-neoblog-auth-design.md:10` 仍写「前端未接 / Task 9 作废」——前端接线已随 `16e210a`–`22d272c` 入库，本轮又加门禁，两处已就地补修订说明。
+- 本文件 0.11.0 条目里「本轮前端仍无任何对 `/api/v1` 的调用（全仓 grep 无 fetch 与后端地址常量）」现已失效。
+- `logout` / `password` 成功码在 `DEVLOG:335`、`DEVLOG:399`、`specs/2026-10-11-neoblog-auth-layer2-design.md:48/85/100`、`specs/2026-10-11-neoblog-auth-design.md:86` 写成 **204**，代码是 200 `{}`（`controller.go:73/130`）；`backend/README.md:135` 本来就对。逐处加更正标注。
+
+---
+
 ## 2026-10-12 · 方法不匹配改判 405（路由层错误分流）
 
 **版本**：0.10.0 → **0.11.0**（minor：新增对外 HTTP 行为 + 1 个错误码）
@@ -29,7 +78,7 @@
 
 ### 已知缺口
 
-- **跨域预检未开路**：将来若给浏览器跨域调用，`OPTIONS` 必须先绕开 405（预检会被现在的分流打回），届时 CORS 中间件要么注册 `OPTIONS` 要么在 `NoMethod` 之前放行。本轮前端仍无任何对 `/api/v1` 的调用（全仓 grep 无 fetch 与后端地址常量），不构成现行回归。
+- **跨域预检未开路**：将来若给浏览器跨域调用，`OPTIONS` 必须先绕开 405（预检会被现在的分流打回），届时 CORS 中间件要么注册 `OPTIONS` 要么在 `NoMethod` 之前放行。本轮前端仍无任何对 `/api/v1` 的调用（全仓 grep 无 fetch 与后端地址常量），不构成现行回归。（2026-10-12 更正：该前提已失效——`frontend/lib/api.ts`、`lib/auth-session.ts`、`next.config.ts` 的 rewrites 与 `proxy.ts` 都已存在并调用 `/api/v1`。）
 - **HEAD 探活拿不到 2xx**：监控若用 HEAD 打 `/healthy` 仍是 405（改前是 404，同样不是本轮引入的回归），探活必须用 GET。
 
 ---
@@ -332,7 +381,7 @@
 
 - 新接口（前缀 `/api/v1`）：
   - `POST /auth/register`（公开，注册即登录）→ 201 + 会话 cookie；校验与注册页 UI 对齐（邮箱小写入库、昵称 trim 后 2–32 字符且禁空白与 `@`、密码 ≥8 字符含 ASCII 字母与数字且 ≤72 字节）；错误码 400 `invalid_request` / `weak_password`、409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底）。
-  - `POST /auth/password`（需登录）→ 204；**保留当前设备、吊销该用户其他所有设备的会话**（scs `IterableStore.All()` + `Codec` 按 `auth.user_id` 定位；零 schema 改动）；失败契约 fail-closed——吊销或写库失败都返回 500 且密码未改，旧密码可直接重试。
+  - `POST /auth/password`（需登录）→ **200 `{}`**（2026-10-12 对账更正：原文写 204，代码是 `controller.go:130` 的 200）；**保留当前设备、吊销该用户其他所有设备的会话**（scs `IterableStore.All()` + `Codec` 按 `auth.user_id` 定位；零 schema 改动）；失败契约 fail-closed——吊销或写库失败都返回 500 且密码未改，旧密码可直接重试。
 - 校验规则抽成 `internal/modules/auth/validate.go` 纯函数（表驱动单测，覆盖全角空格、ASCII 字母判定、`net/mail` 边界等）。
 - 无 schema 改动、无新依赖、`app.go` 未改。测试新增 10 组 / 25+ 用例（双设备吊销、坏会话行容错、删号后改密码、已登录时注册切换会话、昵称/密码边界）。
 - 文档：`backend/README.md` 认证章节重写（接口表 + 规则 + 已知缺口）；spec/plan 见 `docs/superpowers/{specs,plans}/2026-10-11-neoblog-auth-layer2*`。
@@ -396,7 +445,7 @@
 
 - **接口**（前缀 `/api/v1`）：
   - `POST /auth/login`：body `{"identifier":"邮箱或昵称","password":"..."}` → 200 `{"email","nickname"}` + 会话 cookie；凭据错 401 `invalid_credentials`；请求不合法 400 `invalid_request`。
-  - `POST /auth/logout` → 204（销毁会话）。
+  - `POST /auth/logout` → **200 `{}`**（2026-10-12 对账更正：原文写 204，代码是 `controller.go:73`；`backend/README.md:135` 一直是对的）（销毁会话）。
   - `GET /auth/me` → 200 `{"email","nickname"}`；未登录 401 `unauthorized`。
 - **会话**：`scs` + Postgres 存储（`sessions` 表）；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当 `APP_ENV=production`；有效期 `SESSION_LIFETIME`（默认 168h）；登录成功换发 token（防会话固定），登出与「用户已删除」都会销毁会话。
 - **密码**：bcrypt；拒绝空密码与超 72 字节密码；未知账号也做一次等价比较（抗时序探测）。
