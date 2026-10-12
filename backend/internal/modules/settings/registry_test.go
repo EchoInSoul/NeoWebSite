@@ -26,6 +26,20 @@ func TestRegistryRecipeShape(t *testing.T) {
 	}
 }
 
+func TestBuiltinRegistryShape(t *testing.T) {
+	reg, err := compileRegistry(builtinRegistry)
+	if err != nil {
+		t.Fatalf("builtin registry rejected: %v", err)
+	}
+	def, ok := reg.groups["register"]["enabled"]
+	if !ok {
+		t.Fatal("builtin registry missing register.enabled")
+	}
+	if def.Type != FieldTypeBool || def.Default.(bool) != true {
+		t.Fatalf("register.enabled = %+v, want bool default true", def)
+	}
+}
+
 func TestRegistryValid(t *testing.T) {
 	groups := []Group{
 		{Name: "alpha", Items: []Definition{{Name: "enabled", Type: FieldTypeBool, Default: true}}},

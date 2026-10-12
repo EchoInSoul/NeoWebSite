@@ -5,7 +5,14 @@ import (
 	"regexp"
 )
 
-var builtinRegistry = []Group{}
+var builtinRegistry = []Group{
+	{
+		Name: "register",
+		Items: []Definition{
+			{Name: "enabled", Type: FieldTypeBool, Default: true},
+		},
+	},
+}
 
 var namePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
