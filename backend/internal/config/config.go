@@ -1,10 +1,12 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"website/backend/internal/version"
@@ -21,6 +23,7 @@ const (
 	defaultSMTPPort     = 587
 	defaultSMTPFromName = "NeoBlog"
 	maxSMTPPort         = 65535
+	totpKeyBytes        = 32
 )
 
 type Config struct {
@@ -40,6 +43,7 @@ type Config struct {
 	SMTPPassword      string
 	SMTPFrom          string
 	SMTPFromName      string
+	TOTPEncryptionKey []byte
 }
 
 func Load() (Config, error) {
@@ -77,6 +81,11 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DB_MAX_IDLE_CONNS (%d) must not exceed DB_MAX_OPEN_CONNS (%d)", maxIdle, maxOpen)
 	}
 
+	totpKey, err := loadTOTPKey()
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Addr:              getEnv("ADDR", ":5732"),
 		Environment:       getEnv("APP_ENV", "development"),
@@ -94,6 +103,7 @@ func Load() (Config, error) {
 		SMTPPassword:      smtp.Password,
 		SMTPFrom:          smtp.From,
 		SMTPFromName:      smtp.FromName,
+		TOTPEncryptionKey: totpKey,
 	}, nil
 }
 
@@ -150,6 +160,22 @@ func loadSMTP() (smtpConfig, error) {
 		From:     from,
 		FromName: getEnv("SMTP_FROM_NAME", defaultSMTPFromName),
 	}, nil
+}
+
+func loadTOTPKey() ([]byte, error) {
+	value := strings.TrimSpace(os.Getenv("TOTP_ENCRYPTION_KEY"))
+	if value == "" {
+		return nil, errors.New("TOTP_ENCRYPTION_KEY is required (generate one with: openssl rand -base64 32)")
+	}
+
+	key, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return nil, errors.New("TOTP_ENCRYPTION_KEY must be valid base64 (generate one with: openssl rand -base64 32)")
+	}
+	if len(key) != totpKeyBytes {
+		return nil, fmt.Errorf("TOTP_ENCRYPTION_KEY must decode to %d bytes, got %d", totpKeyBytes, len(key))
+	}
+	return key, nil
 }
 
 func getEnv(key string, fallback string) string {

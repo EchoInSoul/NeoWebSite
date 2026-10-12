@@ -40,6 +40,7 @@ func testConfig(t *testing.T, environment string) config.Config {
 		DBMaxIdleConns:    5,
 		DBConnMaxLifetime: 30 * time.Minute,
 		SessionLifetime:   time.Hour,
+		TOTPEncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 	}
 }
 

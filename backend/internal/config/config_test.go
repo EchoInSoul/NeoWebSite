@@ -15,6 +15,7 @@ func TestLoadRequiresDatabaseURL(t *testing.T) {
 
 func TestLoadDatabaseDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://neoblog:neoblog@127.0.0.1:5434/neoblog?sslmode=disable")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -26,6 +27,7 @@ func TestLoadDatabaseDefaults(t *testing.T) {
 
 func TestLoadReadsPoolOverrides(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 	t.Setenv("DB_MAX_OPEN_CONNS", "20")
 	t.Setenv("DB_MAX_IDLE_CONNS", "8")
 	t.Setenv("DB_CONN_MAX_LIFETIME", "1h")
@@ -69,6 +71,7 @@ func TestLoadRejectsIdleGreaterThanOpen(t *testing.T) {
 
 func TestLoadSessionLifetimeDefaultsToSevenDays(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -80,6 +83,7 @@ func TestLoadSessionLifetimeDefaultsToSevenDays(t *testing.T) {
 
 func TestLoadReadsSessionLifetimeOverride(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 	t.Setenv("SESSION_LIFETIME", "1h")
 	cfg, err := Load()
 	if err != nil {
@@ -107,6 +111,7 @@ func clearSMTPEnv(t *testing.T) {
 
 func TestLoadSMTPDefaultsWhenHostUnset(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 	clearSMTPEnv(t)
 
 	cfg, err := Load()
@@ -123,6 +128,7 @@ func TestLoadSMTPDefaultsWhenHostUnset(t *testing.T) {
 
 func TestLoadSkipsSMTPValidationWhenHostUnset(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 	clearSMTPEnv(t)
 	t.Setenv("SMTP_PORT", "abc")
 	t.Setenv("SMTP_TLS", "bogus")
@@ -184,6 +190,7 @@ func TestLoadRejectsInvalidSMTPTLS(t *testing.T) {
 
 func TestLoadReadsSMTPConfiguration(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 	clearSMTPEnv(t)
 	t.Setenv("SMTP_HOST", "smtp.example.com")
 	t.Setenv("SMTP_PORT", "465")
@@ -199,5 +206,42 @@ func TestLoadReadsSMTPConfiguration(t *testing.T) {
 	}
 	if cfg.SMTPHost != "smtp.example.com" || cfg.SMTPPort != 465 || cfg.SMTPTLS != SMTPTLSSSL || cfg.SMTPUsername != "noreply@example.com" || cfg.SMTPPassword != "secret" || cfg.SMTPFrom != "noreply@example.com" || cfg.SMTPFromName != "NeoBlog Mail" {
 		t.Fatalf("unexpected SMTP config: %+v", cfg)
+	}
+}
+
+const validTOTPEncryptionKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+
+func TestLoadRequiresTOTPKey(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", "")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TOTP_ENCRYPTION_KEY") {
+		t.Fatalf("expected error mentioning TOTP_ENCRYPTION_KEY, got %v", err)
+	}
+}
+
+func TestLoadRejectsBadTOTPKey(t *testing.T) {
+	for _, value := range []string{"not-base64!!", "c2hvcnQ="} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+			t.Setenv("TOTP_ENCRYPTION_KEY", value)
+
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TOTP_ENCRYPTION_KEY") {
+				t.Fatalf("expected error mentioning TOTP_ENCRYPTION_KEY, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadAcceptsValidTOTPKey(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.TOTPEncryptionKey) != 32 {
+		t.Fatalf("TOTPEncryptionKey length = %d, want 32", len(cfg.TOTPEncryptionKey))
 	}
 }
