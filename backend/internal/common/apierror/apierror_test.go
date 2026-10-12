@@ -174,6 +174,7 @@ func TestBodyCopyDoesNotAliasSentinelParam(t *testing.T) {
 func TestRegistryIntegrity(t *testing.T) {
 	all := []*Error{
 		ErrInvalidRequest, ErrWeakPassword, ErrPasswordUnchanged, ErrInvalidPermission,
+		ErrMethodNotAllowed,
 		ErrInvalidCredentials, ErrUnauthorized, ErrTwoFactorRequired, ErrTwoFactorInvalidCode,
 		ErrTwoFactorLocked, ErrForbidden, ErrGrantForbidden,
 		ErrOwnerProtected, ErrCannotModifySelf, ErrNotFound, ErrPresetGroupLocked,
@@ -181,14 +182,15 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrGroupNotEmpty, ErrLastOwner, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
 		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrInternal,
 	}
-	if len(all) != 26 {
-		t.Fatalf("sentinel count = %d, want 26", len(all))
+	if len(all) != 27 {
+		t.Fatalf("sentinel count = %d, want 27", len(all))
 	}
-	if len(statusByCode) != 26 {
-		t.Fatalf("statusByCode entries = %d, want 26", len(statusByCode))
+	if len(statusByCode) != 27 {
+		t.Fatalf("statusByCode entries = %d, want 27", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,
+		http.StatusMethodNotAllowed:    TypeInvalidRequest,
 		http.StatusUnauthorized:        TypeAuthentication,
 		http.StatusForbidden:           TypePermission,
 		http.StatusNotFound:            TypeNotFound,

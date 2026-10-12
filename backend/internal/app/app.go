@@ -52,6 +52,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 
 	engine := gin.New()
 	engine.Use(gin.Logger(), recoveryHandler())
+	engine.HandleMethodNotAllowed = true
 
 	_ = engine.SetTrustedProxies(nil)
 
@@ -75,6 +76,10 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 
 	engine.NoRoute(func(c *gin.Context) {
 		apierror.Write(c, apierror.ErrNotFound)
+	})
+
+	engine.NoMethod(func(c *gin.Context) {
+		apierror.Write(c, apierror.ErrMethodNotAllowed)
 	})
 
 	handler := sessions.LoadAndSave(engine)

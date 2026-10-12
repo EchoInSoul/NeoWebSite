@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -280,6 +283,145 @@ func TestNoRouteReturnsErrorEnvelope(t *testing.T) {
 	}
 	if body.Error.Code != "not_found" {
 		t.Fatalf("error = %q, want not_found", body.Error.Code)
+	}
+}
+
+type errorEnvelope struct {
+	Error struct {
+		Type  string  `json:"type"`
+		Code  string  `json:"code"`
+		Param *string `json:"param"`
+	} `json:"error"`
+}
+
+func sendBare(t *testing.T, base, method, path string) (*http.Response, errorEnvelope) {
+	t.Helper()
+
+	req, err := http.NewRequest(method, base+path, nil)
+	if err != nil {
+		t.Fatalf("build %s %s: %v", method, path, err)
+	}
+	resp, err := newClient(t).Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer resp.Body.Close()
+
+	var body errorEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode %s %s: %v", method, path, err)
+	}
+	return resp, body
+}
+
+func sortedAllow(resp *http.Response) string {
+	allow := strings.Split(resp.Header.Get("Allow"), ", ")
+	sort.Strings(allow)
+	return strings.Join(allow, ",")
+}
+
+func sortedMethods(methods ...string) string {
+	sort.Strings(methods)
+	return strings.Join(methods, ",")
+}
+
+func TestMethodMismatchReturns405Envelope(t *testing.T) {
+	ts, _ := newTestServer(t, "development")
+
+	cases := []struct {
+		name      string
+		method    string
+		path      string
+		wantAllow string
+	}{
+		{"POST-only route hit with GET", http.MethodGet, "/api/v1/auth/login", "POST"},
+		{"GET-only route hit with DELETE", http.MethodDelete, "/api/v1/auth/me", "GET"},
+		{"multi-method route hit with PUT", http.MethodPut, "/api/v1/admin/groups/" + uuid.NewString(), sortedMethods("PATCH", "DELETE")},
+		{"OPTIONS is not registered anywhere", http.MethodOptions, "/api/v1/auth/login", "POST"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, body := sendBare(t, ts.URL, tc.method, tc.path)
+			if resp.StatusCode != http.StatusMethodNotAllowed {
+				t.Fatalf("status = %d, want 405 (body %+v)", resp.StatusCode, body)
+			}
+			if body.Error.Type != "invalid_request_error" {
+				t.Fatalf("type = %q, want invalid_request_error", body.Error.Type)
+			}
+			if body.Error.Code != "method_not_allowed" {
+				t.Fatalf("code = %q, want method_not_allowed", body.Error.Code)
+			}
+			if body.Error.Param != nil {
+				t.Fatalf("param = %q, want null", *body.Error.Param)
+			}
+			if got := sortedAllow(resp); got != tc.wantAllow {
+				t.Fatalf("Allow = %q, want %q", got, tc.wantAllow)
+			}
+		})
+	}
+}
+
+func TestHeadMismatchSendsNoBody(t *testing.T) {
+	ts, _ := newTestServer(t, "development")
+
+	req, err := http.NewRequest(http.MethodHead, ts.URL+"/api/v1/healthy", nil)
+	if err != nil {
+		t.Fatalf("build HEAD: %v", err)
+	}
+	resp, err := newClient(t).Do(req)
+	if err != nil {
+		t.Fatalf("HEAD: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", resp.StatusCode)
+	}
+	if resp.Header.Get("Allow") != "GET" {
+		t.Fatalf("Allow = %q, want GET", resp.Header.Get("Allow"))
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if len(body) != 0 {
+		t.Fatalf("HEAD must carry no body, got %q", body)
+	}
+}
+
+func TestUnknownPathStaysNotFound(t *testing.T) {
+	ts, _ := newTestServer(t, "development")
+
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+		resp, body := sendBare(t, ts.URL, method, "/api/v1/definitely/not/a/route")
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want 404", method, resp.StatusCode)
+		}
+		if body.Error.Code != "not_found" {
+			t.Fatalf("%s code = %q, want not_found", method, body.Error.Code)
+		}
+		if resp.Header.Get("Allow") != "" {
+			t.Fatalf("%s unexpected Allow header %q", method, resp.Header.Get("Allow"))
+		}
+	}
+}
+
+func TestMatchingMethodIsNotHijackedByNoMethod(t *testing.T) {
+	ts, _ := newTestServer(t, "development")
+	path := "/api/v1/admin/groups/" + uuid.NewString()
+
+	wrong, wrongBody := sendBare(t, ts.URL, http.MethodPut, path)
+	if wrong.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("PUT status = %d, want 405 (body %+v)", wrong.StatusCode, wrongBody)
+	}
+
+	right, rightBody := sendBare(t, ts.URL, http.MethodPatch, path)
+	if right.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("PATCH status = %d, want 401 (body %+v)", right.StatusCode, rightBody)
+	}
+	if rightBody.Error.Code != "unauthorized" {
+		t.Fatalf("PATCH code = %q, want unauthorized", rightBody.Error.Code)
 	}
 }
 

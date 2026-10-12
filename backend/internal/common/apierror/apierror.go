@@ -34,6 +34,7 @@ var (
 	ErrWeakPassword            = &Error{Type: TypeInvalidRequest, Code: "weak_password"}
 	ErrPasswordUnchanged       = &Error{Type: TypeInvalidRequest, Code: "password_unchanged", Param: strPtr("new_password")}
 	ErrInvalidPermission       = &Error{Type: TypeInvalidRequest, Code: "invalid_permission"}
+	ErrMethodNotAllowed        = &Error{Type: TypeInvalidRequest, Code: "method_not_allowed"}
 	ErrInvalidCredentials      = &Error{Type: TypeAuthentication, Code: "invalid_credentials"}
 	ErrUnauthorized            = &Error{Type: TypeAuthentication, Code: "unauthorized"}
 	ErrTwoFactorRequired       = &Error{Type: TypeAuthentication, Code: "two_factor_required"}
@@ -63,6 +64,7 @@ var statusByCode = map[string]int{
 	"weak_password":              http.StatusBadRequest,
 	"password_unchanged":         http.StatusBadRequest,
 	"invalid_permission":         http.StatusBadRequest,
+	"method_not_allowed":         http.StatusMethodNotAllowed,
 	"invalid_credentials":        http.StatusUnauthorized,
 	"unauthorized":               http.StatusUnauthorized,
 	"two_factor_required":        http.StatusUnauthorized,

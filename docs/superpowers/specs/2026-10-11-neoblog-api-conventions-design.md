@@ -9,6 +9,7 @@
 - v1.1（2026-10-11）：并入端点规范化对照表（附录，含错误归类裁决与收敛点清单）；定稿 §14 决策 1–6（探针豁免与字段改名、分页一并接入、`invalid_credentials` 拆分、`not_found` 双语义拆分、`preset_group_locked` 改判 409、认证响应补 `id`）；正文 §4、§5、§7、§9、§10、§12 相应修订。
 - v1.2（2026-10-11）：按用户指示修订 D1——去除 v2 升级机制，全部接口与后续演进固定在 `/api/v1` 内，本规范的规范化改造直接在 v1 执行；§2 重写版本化规则，§9、§14 同步措辞。同批复查修正：§7.3 收编口径表述、附录排序备注与交叉引用、状态行决策计数。
 - v1.3（2026-10-11）：用户重新裁定实施范围并否决报错文案——新增 §0 范围裁定（效力高于正文冲突处）：本轮只实施错误结构（无 message 字段）与三处小修；分页、时间戳、补 id、`/healthy` 改造、`not_found`/`current_password_mismatch` 拆分、param 端点覆盖暂不实施。
+- v1.4（2026-10-12）：用户改判 §4 规则 2——启用 Gin 的 `HandleMethodNotAllowed`，方法不匹配由「并入 404」改为 405 / `method_not_allowed` / `invalid_request_error`（响应带 `Allow` 头），路径不存在仍 404。§4 状态码清单、§7.2、§7.3 同步；实现随 0.11.0 入库。
 
 ## 0. 实施范围裁定（v1.3，2026-10-11，用户裁定）
 
@@ -156,6 +157,7 @@ POST /api/v1/v1/posts          禁止：重复版本段
 | 401 | 未登录、会话失效、用户已删除、凭证错误 | `authentication_error` |
 | 403 | 已登录但缺权限或触发保护规则 | `permission_error` |
 | 404 | 资源不存在（含未匹配路由兜底） | `not_found_error` |
+| 405 | 路径存在但该路径未注册此方法（响应带 `Allow` 头） | `invalid_request_error` |
 | 409 | 与现状冲突（重名、非空、竞态、预设组锁定） | `conflict_error` |
 | 429 | 触发限流（当前无产生点，词汇保留） | `rate_limit_error` |
 | 500 | 服务器内部错误兜底 | `server_error` |
@@ -164,7 +166,7 @@ POST /api/v1/v1/posts          禁止：重复版本段
 规则：
 
 1. **废除 204**：不存在无 body 的成功响应，任何 2xx 都必须带 JSON body（至少 `{}`）。现状三处 204 待改：`backend/internal/modules/auth/controller.go:85`（logout）、`backend/internal/modules/auth/controller.go:158`（changePassword）、`backend/internal/modules/access/controller.go:126`（deleteGroup）。
-2. 方法不匹配不启用 Gin 的 `HandleMethodNotAllowed`：未匹配路由（含方法不对的请求）统一走 `NoRoute` 兜底，返回 404 + `not_found_error` / `not_found` 的标准错误结构（现状 Gin 默认行为即为 404，需补 JSON 兜底，见 §12）。
+2. 方法不匹配启用 Gin 的 `HandleMethodNotAllowed`（v1.4 改判，此前裁定为不启用）：路径存在但该路径未注册该方法 → 405 + `invalid_request_error` / `method_not_allowed`，`Allow` 头由 Gin 按 RFC 9110 列出该路径允许的方法；路径不存在仍走 `NoRoute` 兜底，404 + `not_found_error` / `not_found` 且不带 `Allow`。`NoMethod` 与 `NoRoute` 都在 `app.go` 装配、认证中间件之前生效，故匿名请求也能借 `Allow` 确认端点存在——用户知情后选定的取舍，代价与回退开关记在 `backend/README.md`。
 3. 所有请求与响应 body 一律 `application/json`（UTF-8）；`ctx.JSON` 已满足，不需要额外头。
 4. 401 响应不要求 `WWW-Authenticate` 头（session cookie 认证，无 challenge 语义；对标裁剪见 §11）。
 5. **探针豁免**：`/healthy` 是机器探针端点，200 / 503 的 body 保持 `Status` 对象（`status` / `database` 等字段），不受 §7 错误信封约束；时间字段仍按 §10 规范化（§14 决策 1）。
@@ -372,17 +374,17 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 
 | type | HTTP 状态码 | 说明 |
 | --- | --- | --- |
-| `invalid_request_error` | 400 | 请求体形状、字段值、查询参数非法 |
+| `invalid_request_error` | 400 / 405 | 请求体形状、字段值、查询参数非法；405 为方法不匹配（v1.4 改判） |
 | `authentication_error` | 401 | 未登录、会话失效、凭证错误 |
 | `permission_error` | 403 | 已登录但缺权限点或触发保护规则 |
-| `not_found_error` | 404 | 资源不存在、路由未匹配（含方法不匹配按 404 处理，§4） |
+| `not_found_error` | 404 | 资源不存在、路由未匹配（方法不匹配自 v1.4 起为 405，不再并入 404） |
 | `conflict_error` | 409 | 与当前状态冲突（重名、非空、竞态、预设组锁定、保护计数） |
 | `rate_limit_error` | 429 | 触发限流（**词汇保留**，当前无产生点，见 §11） |
 | `server_error` | >=500 | 服务器内部错误（503 仅 `/healthy` 降级，探针豁免错误信封，§4 规则 5） |
 
 ### 7.3 code 词汇表（收编现有 token；此后只增不改义）
 
-19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`：
+19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`：
 
 | code | HTTP | type | 默认 param | 场景 | 建议默认 message（注册表基线，可润色） |
 | --- | --- | --- | --- | --- | --- |
@@ -390,6 +392,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `weak_password` | 400 | `invalid_request_error` | 按端点（`password` / `new_password`） | 密码强度不足 | 密码强度不足 |
 | `password_unchanged` | 400 | `invalid_request_error` | `new_password` | 新旧密码相同 | 新密码不能与当前密码相同 |
 | `invalid_permission` | 400 | `invalid_request_error` | `permissions` / `extra_permissions` | 权限 key 不在目录 | 包含未知的权限项 |
+| `method_not_allowed` | 405 | `invalid_request_error` | null | 路径存在但该路径未注册此方法（响应带 `Allow`；路径不存在仍用 `not_found`） | 请求方法不被支持 |
 | `invalid_credentials` | 401 | `authentication_error` | null | 登录凭证错误；改密的当前密码确认、2FA disable 与 recovery-codes 的密码确认也用它（`current_password_mismatch` 拆分按 §0 v1.3 暂不实施，见下） | 账号或密码不正确 |
 | `current_password_mismatch` | 400 | `invalid_request_error` | `current_password` | 改密时当前密码不匹配（用户已认证，仅请求值错误） | 当前密码不正确 |
 | `unauthorized` | 401 | `authentication_error` | null | 未登录 / 会话失效 / 用户已删除 / 无「待二段」会话却调 verify | 请先登录 |
@@ -401,7 +404,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `owner_protected` | 403 | `permission_error` | null | 非 owner 改动 owner / admin 组成员 | 该成员只能由所有者修改 |
 | `cannot_modify_self` | 403 | `permission_error` | null | 改自己的组或额外权限 | 不能修改自己的组或额外权限 |
 | `preset_group_locked` | 409 | `conflict_error` | null | 改 / 删预设组的锁死字段（锁来自资源状态，owner 亦被拒；现状 403，改判见 §14 决策 5） | 预设组不可修改 |
-| `not_found` | 404 | `not_found_error` | null | 资源不存在（含路由未匹配兜底；路径 / 字段值**格式**非法归 `invalid_request`，§14 决策 4） | 资源不存在 |
+| `not_found` | 404 | `not_found_error` | null | 资源不存在（含路由未匹配兜底；方法不匹配自 v1.4 起归 `method_not_allowed`；路径 / 字段值**格式**非法归 `invalid_request`，§14 决策 4） | 资源不存在 |
 | `email_taken` | 409 | `conflict_error` | `email` | 邮箱已注册 | 该邮箱已被使用 |
 | `nickname_taken` | 409 | `conflict_error` | `nickname` | 昵称已占用 | 该昵称已被使用 |
 | `already_taken` | 409 | `conflict_error` | null | 注册并发竞态兜底 | 该邮箱或昵称已被使用 |

@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-10-12 · 方法不匹配改判 405（路由层错误分流）
+
+**版本**：0.10.0 → **0.11.0**（minor：新增对外 HTTP 行为 + 1 个错误码）
+
+### 做了什么
+
+- 起点是用户要「方法用错也返回 404 隐藏端点」，实测确认 gin 默认行为已经是 404 信封（`HandleMethodNotAllowed` 默认 `false`，方法不匹配当作路由未匹配走 `NoRoute`）；用户随后改判取规范口径：**方法不匹配 405 + `method_not_allowed` / `invalid_request_error` + `Allow` 头**，路径不存在仍 404 + `not_found` 且不带 `Allow`。这推翻 API 规范 v1.3 的 §4 规则 2，规范补 v1.4 修订记录并同步 §4 状态码清单、§7.2、§7.3。
+- `apierror` 注册表 +1（26 → **27** 条）：哨兵 `ErrMethodNotAllowed` 与 `"method_not_allowed" → 405` 映射。`Allow` 头由 gin 自己按 RFC 9110 填（`gin.go:738-752`），代码里不手拼方法列表。
+- `app.go`：`engine.HandleMethodNotAllowed = true` + `engine.NoMethod(...)` 写同一信封；`NoRoute` 原样保留。
+- 测试：`app_test.go` 新增 3 个用例函数——方法不匹配表驱动 4 例（POST-only 用 GET、GET-only 用 DELETE、PATCH+DELETE 路由用 PUT、OPTIONS），逐例断状态码 + `type` + `code` + `param` 为 `null` + `Allow` 集合（排序后比对，不依赖注册顺序）；HEAD 单独一例断 405 + `Allow: GET` + **响应体为空**；反空转守卫 2 条——不存在的路径用 GET/POST/DELETE 三种方法仍 404 且无 `Allow`、同一路径方法写对时仍进认证守卫拿 401（证明真路由没被 `NoMethod` 劫走）。`TestRegistryIntegrity` 的哨兵数与 `statusTypes`（405 → `invalid_request_error`）同步。
+- 文档：README 信封段补 405 / `Allow` / 回退开关 / HEAD 与 OPTIONS 边界；API 规范补 v1.4。
+
+### 关键决定
+
+- **405 而非 404**（用户知情选择）：`Allow` 头等于向匿名探测者确认该端点存在及其允许的方法。回退只需把 `HandleMethodNotAllowed` 关回 `false`，方法不匹配立刻与路径不存在同为 404——这条开关在 README 与规范里都写了。
+- **归 `invalid_request_error`，不新增 type**：400 与 405 同 type 不破坏「`type` 由状态码唯一决定」的不变式（状态码→type 仍是函数），也不必给 §7.2 加新分类。
+- **405 发生在认证之前**：gin 的 `NoMethod` 是引擎级处理链（只含全局 Logger / recovery），受保护分组的路由也在这里分出 405，未登录请求同样能拿到 `Allow`。
+
+### 实测到的边界（记下来免得下次重查）
+
+- **HEAD**：gin 没注册任何 HEAD 路由，`HandleMethodNotAllowed` 仍进 405 分支并把该路径的其它方法列进 `Allow`；按 HTTP 语义 HEAD 响应体必须为空，所以它拿到的是 405 + 空体而**不是**错误信封（通用信封断言对它不适用，故单独成例）。
+- **OPTIONS**：与 HEAD 同理按 405 + `Allow` 处理（`/api/v1/auth/login` 得 `Allow: POST`）。
+
+### 已知缺口
+
+- **跨域预检未开路**：将来若给浏览器跨域调用，`OPTIONS` 必须先绕开 405（预检会被现在的分流打回），届时 CORS 中间件要么注册 `OPTIONS` 要么在 `NoMethod` 之前放行。本轮前端仍无任何对 `/api/v1` 的调用（全仓 grep 无 fetch 与后端地址常量），不构成现行回归。
+- **HEAD 探活拿不到 2xx**：监控若用 HEAD 打 `/healthy` 仍是 405（改前是 404，同样不是本轮引入的回归），探活必须用 GET。
+
+---
+
 ## 2026-10-12 · 两步验证接口轮（TOTP + 恢复码 + 登录分叉 + 重放防护）
 
 **版本**：0.9.0 → **0.10.0**（minor：新能力域 + 5 条接口）

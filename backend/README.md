@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.10.0
+当前版本：0.11.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -124,7 +124,9 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 只提供后端接口（前端由前端侧接线）。层 1：登录 / 登出 / 当前用户；层 2：公开注册与更改密码。
 
-所有端点的错误响应统一为 `{"error":{"type","code","param"}}`：HTTP 状态码照常；`code` 即下表中的 token；`type` 由状态码唯一决定（400 `invalid_request_error` / 401 `authentication_error` / 403 `permission_error` / 404 `not_found_error` / 409 `conflict_error` / 500 `server_error`）；`param` 指向出错字段或为 `null`；错误体不含任何文案。唯一例外：`/healthy` 为探针端点豁免本信封，503 降级时仍返回 `Status` 对象。
+所有端点的错误响应统一为 `{"error":{"type","code","param"}}`：HTTP 状态码照常；`code` 即下表中的 token；`type` 由状态码唯一决定（400 `invalid_request_error` / 401 `authentication_error` / 403 `permission_error` / 404 `not_found_error` / 405 `invalid_request_error` / 409 `conflict_error` / 500 `server_error`）；`param` 指向出错字段或为 `null`；错误体不含任何文案。唯一例外：`/healthy` 为探针端点豁免本信封，503 降级时仍返回 `Status` 对象。
+
+请求方法不匹配（路径存在但该路径没注册这个方法）返回 405 `method_not_allowed`，并按 RFC 9110 带上 `Allow` 头列出该路径允许的方法；路径本身不存在仍是 404 `not_found`，且此时响应不带 `Allow`。这条分流由 `app.go` 的 `HandleMethodNotAllowed` + `NoMethod` 承担，在认证中间件之前生效，因此匿名请求也能拿到 `Allow`（即该端点存在）；要隐藏端点存在性就把 `HandleMethodNotAllowed` 关回 `false`，届时方法不匹配与路径不存在同为 404。`HEAD` 与 `OPTIONS` 没有任何端点注册，同样落进 405（`HEAD` 按 HTTP 语义响应体必为空，只有 `Allow` 头；将来接跨域时要先给 `OPTIONS` 预检让路）。
 
 | 方法 路径 | 认证 | 说明 |
 | --- | --- | --- |
