@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | `main.go` | `main.ts` | 启动引导：加载配置、创建应用、启动 |
 | `internal/app/app.go` | `app.module.ts` + `setGlobalPrefix` | 组装模块、全局前缀 `/api/v1`、HTTP 服务器（超时 / 优雅关闭） |
-| `internal/config` | `ConfigModule` | 读环境变量，产出 `Config` |
+| `internal/config` | `ConfigModule` | 读环境变量，产出 `Config`；`.env` 不存在时先自动生成一份（`EnsureDotEnv`，含随机 2FA 钥匙） |
 | `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close` / `Client`（ent）/ `SQL` / `StartupError`（首次探测失败原因，不致命） |
 | `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
 | `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
@@ -57,7 +57,7 @@ postsModule.Register(api)
 | `APP_ENV` | `development` | 环境标识，出现在健康检查响应里；`production` 时自动切到 Gin release 模式（关闭 debug 横幅与路由表打印） |
 | `APP_VERSION` | 编译进二进制的版本号 | 仅作运行时临时覆盖（本地调试），常规部署不设置 |
 | `SERVICE_NAME` | `website-backend` | 服务名 |
-| `DATABASE_URL` | 无（必需） | Postgres 连接串；可写在 `backend/.env`（启动时自动加载，环境变量优先）；**缺失时启动即失败**，串本身不可达时照常启动、进降级态（见「运行」的降级启动） |
+| `DATABASE_URL` | 无（必需） | Postgres 连接串；可写在 `backend/.env`（启动时自动加载，环境变量优先）；`.env` 整个不存在时首次启动会自动生成一份（见「运行」）；有了文件仍取不到值时**启动即失败**，串本身不可达时照常启动、进降级态（见「运行」的降级启动） |
 | `DATABASE_URL_TEST` | 无 | 集成测试专用连接串；不设置时集成用例自动 skip |
 | `DB_MAX_OPEN_CONNS` | `10` | 连接池最大连接数 |
 | `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
@@ -71,7 +71,7 @@ postsModule.Register(api)
 | `SMTP_FROM` | 无 | 发件地址；`SMTP_HOST` 非空时必填 |
 | `SMTP_FROM_NAME` | `NeoBlog` | 发件人显示名 |
 | `MAIL_TEST_RECIPIENT` | 空 | 仅测试用：与 `SMTP_*` 齐备时真实投递用例会向它发一封自检邮件 |
-| `TOTP_ENCRYPTION_KEY` | 无（必需） | 两步验证密钥的 AES-256-GCM 加密钥匙；base64 且解码后恰 32 字节；**缺失或非法启动即失败**；丢失后已启用 2FA 的用户验码报 500，只能清列重置 |
+| `TOTP_ENCRYPTION_KEY` | 无（必需） | 两步验证密钥的 AES-256-GCM 加密钥匙；base64 且解码后恰 32 字节；**`.env` 缺失时由后端随机生成并写进新建的 `.env`**，给了但非法仍启动即失败；丢失后已启用 2FA 的用户验码报 500，只能清列重置 |
 | `POSTGRES_PASSWORD` | `neoblog` | 本地容器密码（compose 读 `.env`）；改动需同步 `DATABASE_URL` |
 
 ## 版本号
@@ -252,6 +252,10 @@ go run .                # 启动时自动加载工作目录下的 .env；默认 
 bash scripts/dev.sh     # 同上（先定位到 backend/，可在任意目录执行）
 ADDR=:9090 go run .     # 自定义端口
 ```
+
+**首次启动自动建 `.env`**：`main.go` 在读配置之前先调 `config.EnsureDotEnv()`——工作目录没有 `.env` 就写一份（`DATABASE_URL` / `DATABASE_URL_TEST` 按 compose 的本地库、`POSTGRES_PASSWORD`、以及随机生成的 32 字节 `TOTP_ENCRYPTION_KEY`），并打一条 `created .env …` 日志。创建用 `O_EXCL`，**已有文件绝不覆盖**，第二次启动只是照常加载。所以「忘了配 `.env`」不再让进程退出：`go run .` / `bash scripts/dev.sh` 开箱即跑。文件按 0600 请求创建，Windows 上由 ACL 决定实际权限（本机显示为 644）。
+
+两件事要跟着一并记住：生成的那把 2FA 钥匙只活在这份文件里，文件没了等于钥匙丢了（已启用 2FA 的账号验码一律 500），所以容器每次重建都会换新钥匙——生产要么把 `.env` 放持久卷，要么显式给环境变量、让它走「已存在就不动」的分支；自动写入的连接串是本地 compose 的形状，生产仍需用自己的配置覆盖，覆盖不了也不会退出，而是按下面的降级启动跑。
 
 健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"<当前版本>","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
 

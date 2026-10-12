@@ -10,6 +10,14 @@ import (
 )
 
 func main() {
+	created, err := config.EnsureDotEnv()
+	if err != nil {
+		log.Printf("dotenv bootstrap: %v", err)
+	}
+	if created {
+		log.Printf("created .env with a freshly generated TOTP_ENCRYPTION_KEY; keep this file, losing it breaks 2FA for accounts that enabled it")
+	}
+
 	if err := config.LoadDotEnv(); err != nil {
 		log.Printf("dotenv: %v", err)
 	}

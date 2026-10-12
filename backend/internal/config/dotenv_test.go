@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,5 +147,124 @@ func TestLoadDotEnvFileReadsGivenPath(t *testing.T) {
 func TestLoadDotEnvFileMissingFileIsNotAnError(t *testing.T) {
 	if err := LoadDotEnvFile(filepath.Join(t.TempDir(), "absent.env")); err != nil {
 		t.Fatalf("expected nil for missing file, got %v", err)
+	}
+}
+
+func unsetEnv(t *testing.T, keys ...string) {
+	t.Helper()
+
+	for _, key := range keys {
+		original, had := os.LookupEnv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv(key, original)
+			} else {
+				_ = os.Unsetenv(key)
+			}
+		})
+	}
+}
+
+func TestEnsureDotEnvFileCreatesWhenAbsent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+
+	created, err := EnsureDotEnvFile(path)
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if !created {
+		t.Fatal("expected the file to be created")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	values, err := parseDotEnv(string(data))
+	if err != nil {
+		t.Fatalf("generated file must parse: %v", err)
+	}
+	if strings.Contains(string(data), "#") {
+		t.Fatalf("generated .env must carry plain key=value only, got: %q", data)
+	}
+	if len(values) != 4 {
+		t.Fatalf("generated .env has %d keys, want 4: %q", len(values), data)
+	}
+	if values["DATABASE_URL"] == "" {
+		t.Fatalf("generated file has no DATABASE_URL: %q", data)
+	}
+	if values["DATABASE_URL_TEST"] == "" {
+		t.Fatalf("generated file has no DATABASE_URL_TEST: %q", data)
+	}
+
+	key, err := base64.StdEncoding.DecodeString(values["TOTP_ENCRYPTION_KEY"])
+	if err != nil {
+		t.Fatalf("TOTP_ENCRYPTION_KEY is not base64: %v", err)
+	}
+	if len(key) != totpKeyBytes {
+		t.Fatalf("TOTP_ENCRYPTION_KEY decodes to %d bytes, want %d", len(key), totpKeyBytes)
+	}
+}
+
+func TestEnsureDotEnvFileNeverOverwrites(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	original := []byte("DATABASE_URL=postgresql://mine/db\nTOTP_ENCRYPTION_KEY=keepme\n")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	created, err := EnsureDotEnvFile(path)
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if created {
+		t.Fatal("an existing .env must not be reported as created")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if string(data) != string(original) {
+		t.Fatalf("existing .env was rewritten: %q", data)
+	}
+
+	again, err := EnsureDotEnvFile(path)
+	if err != nil || again {
+		t.Fatalf("second ensure = (%v, %v), want (false, nil)", again, err)
+	}
+}
+
+func TestEnsuredDotEnvMakesLoadSucceed(t *testing.T) {
+	t.Chdir(t.TempDir())
+	unsetEnv(t, "DATABASE_URL", "DATABASE_URL_TEST", "TOTP_ENCRYPTION_KEY", "POSTGRES_PASSWORD")
+
+	created, err := EnsureDotEnv()
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if !created {
+		t.Fatal("expected .env to be created in the working directory")
+	}
+
+	if err := LoadDotEnv(); err != nil {
+		t.Fatalf("load dotenv: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("config.Load after first-run bootstrap: %v", err)
+	}
+	if cfg.DatabaseURL == "" {
+		t.Fatal("expected a database url from the generated file")
+	}
+	if len(cfg.TOTPEncryptionKey) != totpKeyBytes {
+		t.Fatalf("TOTP key length = %d, want %d", len(cfg.TOTPEncryptionKey), totpKeyBytes)
+	}
+	if cfg.SMTPHost != "" {
+		t.Fatalf("SMTP_HOST = %q, want empty so mail stays log-only", cfg.SMTPHost)
 	}
 }

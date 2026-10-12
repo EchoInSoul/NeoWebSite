@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -8,8 +10,60 @@ import (
 	"strings"
 )
 
+const dotEnvPath = ".env"
+
+const generatedDotEnvTemplate = `DATABASE_URL=postgresql://neoblog:neoblog@127.0.0.1:5434/neoblog?sslmode=disable
+DATABASE_URL_TEST=postgresql://neoblog:neoblog@127.0.0.1:5434/neoblog_test?sslmode=disable
+POSTGRES_PASSWORD=neoblog
+TOTP_ENCRYPTION_KEY=%s
+`
+
 func LoadDotEnv() error {
-	return LoadDotEnvFile(".env")
+	return LoadDotEnvFile(dotEnvPath)
+}
+
+func EnsureDotEnv() (bool, error) {
+	return EnsureDotEnvFile(dotEnvPath)
+}
+
+func EnsureDotEnvFile(path string) (bool, error) {
+	if _, err := os.Stat(path); err == nil {
+		return false, nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return false, fmt.Errorf("dotenv: stat %s: %w", path, err)
+	}
+
+	key, err := generateTOTPEncryptionKey()
+	if err != nil {
+		return false, err
+	}
+
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("dotenv: create %s: %w", path, err)
+	}
+
+	if _, err := file.WriteString(fmt.Sprintf(generatedDotEnvTemplate, key)); err != nil {
+		_ = file.Close()
+		return false, fmt.Errorf("dotenv: write %s: %w", path, err)
+	}
+
+	if err := file.Close(); err != nil {
+		return false, fmt.Errorf("dotenv: close %s: %w", path, err)
+	}
+
+	return true, nil
+}
+
+func generateTOTPEncryptionKey() (string, error) {
+	buf := make([]byte, totpKeyBytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("dotenv: generate TOTP key: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(buf), nil
 }
 
 func LoadDotEnvFile(path string) error {
