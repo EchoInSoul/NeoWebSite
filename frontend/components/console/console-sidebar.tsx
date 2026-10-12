@@ -6,7 +6,7 @@ import {
 
 import { ConsoleSidebarFooter } from "./console-sidebar-footer";
 
-export function ConsoleSidebar() {
+export function ConsoleSidebar({ displayName }: { displayName?: string }) {
   return (
     <Sidebar
       id="console-sidebar"
@@ -15,7 +15,7 @@ export function ConsoleSidebar() {
     >
       <SidebarContent />
       <SidebarFooter className="border-t border-border">
-        <ConsoleSidebarFooter />
+        <ConsoleSidebarFooter displayName={displayName} />
       </SidebarFooter>
     </Sidebar>
   );
