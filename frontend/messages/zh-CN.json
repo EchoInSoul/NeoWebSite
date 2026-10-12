@@ -29,6 +29,11 @@
       "identifier": "用户名或邮箱",
       "password": "密码",
       "submit": "登录",
+      "requiredIdentifier": "请输入用户名或邮箱",
+      "requiredPassword": "请输入密码",
+      "invalidCredentials": "用户名或密码错误",
+      "twoFactorUnsupported": "该账号已开启两步验证，当前登录入口暂不支持",
+      "failed": "登录失败，请稍后重试",
       "prompt": "没有账号？",
       "link": "去注册"
     },
@@ -42,6 +47,15 @@
       "passwordHint": "密码长度至少 {minLength} 位，须包含：字母/数字",
       "submit": "注册",
       "mismatch": "两次输入的密码不一致",
+      "invalidEmail": "邮箱格式不正确",
+      "invalidName": "用户名需 {minLength}-{maxLength} 位，不能含空格和 @",
+      "weakPassword": "密码不符合要求",
+      "emailTaken": "该邮箱已被注册",
+      "nameTaken": "该用户名已被占用",
+      "alreadyTaken": "该邮箱或用户名已被占用",
+      "invalidRequest": "填写内容有误，请检查后重试",
+      "failed": "注册失败，请稍后重试",
+      "success": "注册成功，请登录",
       "prompt": "已有账号？",
       "link": "去登录"
     }
