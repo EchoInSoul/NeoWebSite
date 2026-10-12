@@ -87,6 +87,20 @@ func (_c *UserCreate) SetNillableTotpEnabledAt(v *time.Time) *UserCreate {
 	return _c
 }
 
+// SetTotpLastCounter sets the "totp_last_counter" field.
+func (_c *UserCreate) SetTotpLastCounter(v int64) *UserCreate {
+	_c.mutation.SetTotpLastCounter(v)
+	return _c
+}
+
+// SetNillableTotpLastCounter sets the "totp_last_counter" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTotpLastCounter(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetTotpLastCounter(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *UserCreate) SetCreatedAt(v time.Time) *UserCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -311,6 +325,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldTotpEnabledAt, field.TypeTime, value)
 		_node.TotpEnabledAt = &value
 	}
+	if value, ok := _c.mutation.TotpLastCounter(); ok {
+		_spec.SetField(user.FieldTotpLastCounter, field.TypeInt64, value)
+		_node.TotpLastCounter = &value
+	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(user.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
@@ -504,6 +522,30 @@ func (u *UserUpsert) ClearTotpEnabledAt() *UserUpsert {
 	return u
 }
 
+// SetTotpLastCounter sets the "totp_last_counter" field.
+func (u *UserUpsert) SetTotpLastCounter(v int64) *UserUpsert {
+	u.Set(user.FieldTotpLastCounter, v)
+	return u
+}
+
+// UpdateTotpLastCounter sets the "totp_last_counter" field to the value that was provided on create.
+func (u *UserUpsert) UpdateTotpLastCounter() *UserUpsert {
+	u.SetExcluded(user.FieldTotpLastCounter)
+	return u
+}
+
+// AddTotpLastCounter adds v to the "totp_last_counter" field.
+func (u *UserUpsert) AddTotpLastCounter(v int64) *UserUpsert {
+	u.Add(user.FieldTotpLastCounter, v)
+	return u
+}
+
+// ClearTotpLastCounter clears the value of the "totp_last_counter" field.
+func (u *UserUpsert) ClearTotpLastCounter() *UserUpsert {
+	u.SetNull(user.FieldTotpLastCounter)
+	return u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (u *UserUpsert) SetUpdatedAt(v time.Time) *UserUpsert {
 	u.Set(user.FieldUpdatedAt, v)
@@ -662,6 +704,34 @@ func (u *UserUpsertOne) UpdateTotpEnabledAt() *UserUpsertOne {
 func (u *UserUpsertOne) ClearTotpEnabledAt() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.ClearTotpEnabledAt()
+	})
+}
+
+// SetTotpLastCounter sets the "totp_last_counter" field.
+func (u *UserUpsertOne) SetTotpLastCounter(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTotpLastCounter(v)
+	})
+}
+
+// AddTotpLastCounter adds v to the "totp_last_counter" field.
+func (u *UserUpsertOne) AddTotpLastCounter(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTotpLastCounter(v)
+	})
+}
+
+// UpdateTotpLastCounter sets the "totp_last_counter" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateTotpLastCounter() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTotpLastCounter()
+	})
+}
+
+// ClearTotpLastCounter clears the value of the "totp_last_counter" field.
+func (u *UserUpsertOne) ClearTotpLastCounter() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearTotpLastCounter()
 	})
 }
 
@@ -992,6 +1062,34 @@ func (u *UserUpsertBulk) UpdateTotpEnabledAt() *UserUpsertBulk {
 func (u *UserUpsertBulk) ClearTotpEnabledAt() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.ClearTotpEnabledAt()
+	})
+}
+
+// SetTotpLastCounter sets the "totp_last_counter" field.
+func (u *UserUpsertBulk) SetTotpLastCounter(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTotpLastCounter(v)
+	})
+}
+
+// AddTotpLastCounter adds v to the "totp_last_counter" field.
+func (u *UserUpsertBulk) AddTotpLastCounter(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTotpLastCounter(v)
+	})
+}
+
+// UpdateTotpLastCounter sets the "totp_last_counter" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateTotpLastCounter() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTotpLastCounter()
+	})
+}
+
+// ClearTotpLastCounter clears the value of the "totp_last_counter" field.
+func (u *UserUpsertBulk) ClearTotpLastCounter() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearTotpLastCounter()
 	})
 }
 

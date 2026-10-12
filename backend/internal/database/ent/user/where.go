@@ -86,6 +86,11 @@ func TotpEnabledAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldTotpEnabledAt, v))
 }
 
+// TotpLastCounter applies equality check predicate on the "totp_last_counter" field. It's identical to TotpLastCounterEQ.
+func TotpLastCounter(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpLastCounter, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldCreatedAt, v))
@@ -434,6 +439,56 @@ func TotpEnabledAtIsNil() predicate.User {
 // TotpEnabledAtNotNil applies the NotNil predicate on the "totp_enabled_at" field.
 func TotpEnabledAtNotNil() predicate.User {
 	return predicate.User(sql.FieldNotNull(FieldTotpEnabledAt))
+}
+
+// TotpLastCounterEQ applies the EQ predicate on the "totp_last_counter" field.
+func TotpLastCounterEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpLastCounter, v))
+}
+
+// TotpLastCounterNEQ applies the NEQ predicate on the "totp_last_counter" field.
+func TotpLastCounterNEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTotpLastCounter, v))
+}
+
+// TotpLastCounterIn applies the In predicate on the "totp_last_counter" field.
+func TotpLastCounterIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldTotpLastCounter, vs...))
+}
+
+// TotpLastCounterNotIn applies the NotIn predicate on the "totp_last_counter" field.
+func TotpLastCounterNotIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldTotpLastCounter, vs...))
+}
+
+// TotpLastCounterGT applies the GT predicate on the "totp_last_counter" field.
+func TotpLastCounterGT(v int64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldTotpLastCounter, v))
+}
+
+// TotpLastCounterGTE applies the GTE predicate on the "totp_last_counter" field.
+func TotpLastCounterGTE(v int64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldTotpLastCounter, v))
+}
+
+// TotpLastCounterLT applies the LT predicate on the "totp_last_counter" field.
+func TotpLastCounterLT(v int64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldTotpLastCounter, v))
+}
+
+// TotpLastCounterLTE applies the LTE predicate on the "totp_last_counter" field.
+func TotpLastCounterLTE(v int64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldTotpLastCounter, v))
+}
+
+// TotpLastCounterIsNil applies the IsNil predicate on the "totp_last_counter" field.
+func TotpLastCounterIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldTotpLastCounter))
+}
+
+// TotpLastCounterNotNil applies the NotNil predicate on the "totp_last_counter" field.
+func TotpLastCounterNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldTotpLastCounter))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

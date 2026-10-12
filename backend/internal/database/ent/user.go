@@ -31,6 +31,8 @@ type User struct {
 	TotpSecret *string `json:"totp_secret,omitempty"`
 	// TotpEnabledAt holds the value of the "totp_enabled_at" field.
 	TotpEnabledAt *time.Time `json:"totp_enabled_at,omitempty"`
+	// TotpLastCounter holds the value of the "totp_last_counter" field.
+	TotpLastCounter *int64 `json:"totp_last_counter,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -88,6 +90,8 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case user.FieldTotpLastCounter:
+			values[i] = new(sql.NullInt64)
 		case user.FieldEmail, user.FieldNickname, user.FieldPasswordHash, user.FieldTotpSecret:
 			values[i] = new(sql.NullString)
 		case user.FieldTotpEnabledAt, user.FieldCreatedAt, user.FieldUpdatedAt:
@@ -152,6 +156,13 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.TotpEnabledAt = new(time.Time)
 				*_m.TotpEnabledAt = value.Time
+			}
+		case user.FieldTotpLastCounter:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field totp_last_counter", values[i])
+			} else if value.Valid {
+				_m.TotpLastCounter = new(int64)
+				*_m.TotpLastCounter = value.Int64
 			}
 		case user.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -236,6 +247,11 @@ func (_m *User) String() string {
 	if v := _m.TotpEnabledAt; v != nil {
 		builder.WriteString("totp_enabled_at=")
 		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.TotpLastCounter; v != nil {
+		builder.WriteString("totp_last_counter=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")

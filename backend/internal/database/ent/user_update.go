@@ -128,6 +128,33 @@ func (_u *UserUpdate) ClearTotpEnabledAt() *UserUpdate {
 	return _u
 }
 
+// SetTotpLastCounter sets the "totp_last_counter" field.
+func (_u *UserUpdate) SetTotpLastCounter(v int64) *UserUpdate {
+	_u.mutation.ResetTotpLastCounter()
+	_u.mutation.SetTotpLastCounter(v)
+	return _u
+}
+
+// SetNillableTotpLastCounter sets the "totp_last_counter" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTotpLastCounter(v *int64) *UserUpdate {
+	if v != nil {
+		_u.SetTotpLastCounter(*v)
+	}
+	return _u
+}
+
+// AddTotpLastCounter adds value to the "totp_last_counter" field.
+func (_u *UserUpdate) AddTotpLastCounter(v int64) *UserUpdate {
+	_u.mutation.AddTotpLastCounter(v)
+	return _u
+}
+
+// ClearTotpLastCounter clears the value of the "totp_last_counter" field.
+func (_u *UserUpdate) ClearTotpLastCounter() *UserUpdate {
+	_u.mutation.ClearTotpLastCounter()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *UserUpdate) SetUpdatedAt(v time.Time) *UserUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -313,6 +340,15 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.TotpEnabledAtCleared() {
 		_spec.ClearField(user.FieldTotpEnabledAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TotpLastCounter(); ok {
+		_spec.SetField(user.FieldTotpLastCounter, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTotpLastCounter(); ok {
+		_spec.AddField(user.FieldTotpLastCounter, field.TypeInt64, value)
+	}
+	if _u.mutation.TotpLastCounterCleared() {
+		_spec.ClearField(user.FieldTotpLastCounter, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
@@ -552,6 +588,33 @@ func (_u *UserUpdateOne) ClearTotpEnabledAt() *UserUpdateOne {
 	return _u
 }
 
+// SetTotpLastCounter sets the "totp_last_counter" field.
+func (_u *UserUpdateOne) SetTotpLastCounter(v int64) *UserUpdateOne {
+	_u.mutation.ResetTotpLastCounter()
+	_u.mutation.SetTotpLastCounter(v)
+	return _u
+}
+
+// SetNillableTotpLastCounter sets the "totp_last_counter" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTotpLastCounter(v *int64) *UserUpdateOne {
+	if v != nil {
+		_u.SetTotpLastCounter(*v)
+	}
+	return _u
+}
+
+// AddTotpLastCounter adds value to the "totp_last_counter" field.
+func (_u *UserUpdateOne) AddTotpLastCounter(v int64) *UserUpdateOne {
+	_u.mutation.AddTotpLastCounter(v)
+	return _u
+}
+
+// ClearTotpLastCounter clears the value of the "totp_last_counter" field.
+func (_u *UserUpdateOne) ClearTotpLastCounter() *UserUpdateOne {
+	_u.mutation.ClearTotpLastCounter()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *UserUpdateOne) SetUpdatedAt(v time.Time) *UserUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -767,6 +830,15 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if _u.mutation.TotpEnabledAtCleared() {
 		_spec.ClearField(user.FieldTotpEnabledAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TotpLastCounter(); ok {
+		_spec.SetField(user.FieldTotpLastCounter, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTotpLastCounter(); ok {
+		_spec.AddField(user.FieldTotpLastCounter, field.TypeInt64, value)
+	}
+	if _u.mutation.TotpLastCounterCleared() {
+		_spec.ClearField(user.FieldTotpLastCounter, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
