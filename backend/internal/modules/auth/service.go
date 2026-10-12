@@ -13,6 +13,12 @@ import (
 	"website/backend/internal/database/ent"
 )
 
+const (
+	pendingUserIDKey   = "auth.pending_2fa_user_id"
+	pendingAttemptsKey = "auth.pending_2fa_attempts"
+	maxVerifyAttempts  = 5
+)
+
 const recoveryCodesPerBatch = 10
 
 type Service struct {
@@ -99,6 +105,13 @@ func (s *Service) Login(ctx context.Context, identifier, password string) (User,
 	if err := s.sessions.RenewToken(ctx); err != nil {
 		return User{}, err
 	}
+
+	if found.TotpEnabledAt != nil {
+		s.sessions.Remove(ctx, guard.SessionUserIDKey)
+		s.sessions.Put(ctx, pendingUserIDKey, found.ID.String())
+		return User{}, apierror.ErrTwoFactorRequired
+	}
+
 	s.sessions.Put(ctx, guard.SessionUserIDKey, found.ID.String())
 
 	return toUser(found), nil
@@ -322,4 +335,84 @@ func issueRecoveryCodes() ([]string, []string, error) {
 		hashes = append(hashes, hashRecoveryCode(code))
 	}
 	return codes, hashes, nil
+}
+
+func (s *Service) VerifySecondFactor(ctx context.Context, code string) (User, error) {
+	pendingUserID := s.sessions.GetString(ctx, pendingUserIDKey)
+	if pendingUserID == "" {
+		return User{}, apierror.ErrUnauthorized
+	}
+
+	found, err := s.repo.findUserByID(ctx, pendingUserID)
+	if err != nil {
+		if errors.Is(err, errUserNotFound) {
+			s.sessions.Destroy(ctx)
+			return User{}, apierror.ErrUnauthorized
+		}
+		return User{}, err
+	}
+	if found.TotpEnabledAt == nil {
+		s.sessions.Destroy(ctx)
+		return User{}, apierror.ErrUnauthorized
+	}
+
+	verified, err := s.matchTOTP(ctx, found, code)
+	if err != nil {
+		return User{}, err
+	}
+	if !verified {
+		consumed, err := s.repo.consumeRecoveryCode(ctx, found.ID, hashRecoveryCode(code))
+		if err != nil {
+			return User{}, err
+		}
+		verified = consumed
+	}
+	if !verified {
+		return User{}, s.failSecondFactor(ctx)
+	}
+
+	if err := s.sessions.RenewToken(ctx); err != nil {
+		return User{}, err
+	}
+	s.sessions.Put(ctx, guard.SessionUserIDKey, found.ID.String())
+	s.sessions.Remove(ctx, pendingUserIDKey)
+	s.sessions.Remove(ctx, pendingAttemptsKey)
+
+	return toUser(found), nil
+}
+
+func (s *Service) matchTOTP(ctx context.Context, found *ent.User, code string) (bool, error) {
+	if found.TotpSecret == nil {
+		return false, apierror.ErrInternal
+	}
+
+	secret, err := openSecret(s.totpKey, *found.TotpSecret)
+	if err != nil {
+		return false, apierror.ErrInternal
+	}
+
+	counter, matched, err := matchTOTPCounter(code, secret, totpNow())
+	if err != nil {
+		return false, apierror.ErrInternal
+	}
+	if !matched {
+		return false, nil
+	}
+
+	claimed, err := s.repo.claimTOTPCounter(ctx, found.ID, counter)
+	if err != nil {
+		return false, err
+	}
+	return claimed, nil
+}
+
+func (s *Service) failSecondFactor(ctx context.Context) error {
+	attempts := s.sessions.GetInt(ctx, pendingAttemptsKey) + 1
+	if attempts >= maxVerifyAttempts {
+		s.sessions.Destroy(ctx)
+		return apierror.ErrTwoFactorLocked
+	}
+
+	s.sessions.Put(ctx, pendingAttemptsKey, attempts)
+	return apierror.ErrTwoFactorInvalidCode
 }

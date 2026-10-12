@@ -1,9 +1,10 @@
 package auth
 
 type User struct {
-	ID       string
-	Email    string
-	Nickname string
+	ID               string
+	Email            string
+	Nickname         string
+	TwoFactorEnabled bool
 }
 
 type LoginRequest struct {
@@ -22,7 +23,7 @@ type PasswordChangeRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
-type TwoFactorEnableRequest struct {
+type TwoFactorCodeRequest struct {
 	Code string `json:"code"`
 }
 
@@ -51,8 +52,9 @@ type GroupResponse struct {
 }
 
 type MeResponse struct {
-	Email       string        `json:"email"`
-	Nickname    string        `json:"nickname"`
-	Group       GroupResponse `json:"group"`
-	Permissions []string      `json:"permissions"`
+	Email            string        `json:"email"`
+	Nickname         string        `json:"nickname"`
+	Group            GroupResponse `json:"group"`
+	Permissions      []string      `json:"permissions"`
+	TwoFactorEnabled bool          `json:"two_factor_enabled"`
 }

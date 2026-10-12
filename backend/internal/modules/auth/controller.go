@@ -20,6 +20,7 @@ func newController(service *Service) *controller {
 func (c *controller) register(r *gin.RouterGroup) {
 	r.POST("/auth/login", c.login)
 	r.POST("/auth/register", c.signup)
+	r.POST("/auth/2fa/verify", c.verifySecondFactor)
 }
 
 func (c *controller) registerProtected(r *gin.RouterGroup) {
@@ -101,7 +102,8 @@ func (c *controller) me(ctx *gin.Context) {
 			SystemKey: systemKey,
 			Name:      identity.GroupName,
 		},
-		Permissions: permissions,
+		Permissions:      permissions,
+		TwoFactorEnabled: user.TwoFactorEnabled,
 	})
 }
 
@@ -139,7 +141,7 @@ func (c *controller) setupTwoFactor(ctx *gin.Context) {
 }
 
 func (c *controller) enableTwoFactor(ctx *gin.Context) {
-	var req TwoFactorEnableRequest
+	var req TwoFactorCodeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Code == "" {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
@@ -196,4 +198,20 @@ func (c *controller) regenerateRecoveryCodes(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resp)
+}
+
+func (c *controller) verifySecondFactor(ctx *gin.Context) {
+	var req TwoFactorCodeRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Code == "" {
+		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, "code"))
+		return
+	}
+
+	user, err := c.service.VerifySecondFactor(ctx.Request.Context(), req.Code)
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname})
 }

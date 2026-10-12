@@ -53,7 +53,7 @@ func setup2FA(t *testing.T, client *http.Client, tsURL string) TwoFactorSetupRes
 func enable2FA(t *testing.T, client *http.Client, tsURL, secret string) RecoveryCodesResponse {
 	t.Helper()
 
-	resp := post2FA(t, client, tsURL, "enable", TwoFactorEnableRequest{Code: codeAt(t, secret, currentWindow())})
+	resp := post2FA(t, client, tsURL, "enable", TwoFactorCodeRequest{Code: codeAt(t, secret, currentWindow())})
 	return decodeJSON[RecoveryCodesResponse](t, resp, http.StatusOK)
 }
 
@@ -344,7 +344,7 @@ func TestTwoFactorSetupOverwritesSecret(t *testing.T) {
 		t.Fatalf("totp_last_counter = %d after overwrite, want nil", *row.TotpLastCounter)
 	}
 
-	stale := post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: codeAt(t, first.Secret, currentWindow())})
+	stale := post2FA(t, client, ts.URL, "enable", TwoFactorCodeRequest{Code: codeAt(t, first.Secret, currentWindow())})
 	assertErrorCode(t, stale, http.StatusUnauthorized, "two_factor_invalid_code")
 
 	replacement := enable2FA(t, client, ts.URL, second.Secret)
@@ -376,7 +376,7 @@ func TestTwoFactorEnableWithoutSetup(t *testing.T) {
 	client := testClient(t)
 	loginOK(t, client, ts.URL, u.Email, password)
 
-	resp := post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: "123456"})
+	resp := post2FA(t, client, ts.URL, "enable", TwoFactorCodeRequest{Code: "123456"})
 	assertErrorCode(t, resp, http.StatusConflict, "two_factor_not_setup")
 }
 
@@ -404,7 +404,7 @@ func TestTwoFactorEnableWrongCode(t *testing.T) {
 	setup := setup2FA(t, client, ts.URL)
 	wrong := wrongCodesFor(t, setup.Secret, 1)[0]
 
-	resp := post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: wrong})
+	resp := post2FA(t, client, ts.URL, "enable", TwoFactorCodeRequest{Code: wrong})
 	if resp.StatusCode != http.StatusUnauthorized {
 		resp.Body.Close()
 		t.Fatalf("status = %d, want 401", resp.StatusCode)
@@ -558,6 +558,308 @@ func TestTwoFactorEnableRevokesOtherSessions(t *testing.T) {
 	mine.Body.Close()
 	if mine.StatusCode != http.StatusOK {
 		t.Fatalf("client A status = %d, want 200 (current session must survive)", mine.StatusCode)
+	}
+}
+
+func loginRaw(t *testing.T, client *http.Client, tsURL, identifier, password string) *http.Response {
+	t.Helper()
+
+	return postJSON(t, client, tsURL+"/api/v1/auth/login", LoginRequest{Identifier: identifier, Password: password})
+}
+
+func logoutOK(t *testing.T, client *http.Client, tsURL string) {
+	t.Helper()
+
+	resp := postRaw(t, client, tsURL+"/api/v1/auth/logout", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("logout status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func verify2FA(t *testing.T, client *http.Client, tsURL, code string) *http.Response {
+	t.Helper()
+
+	return postJSON(t, client, tsURL+"/api/v1/auth/2fa/verify", TwoFactorCodeRequest{Code: code})
+}
+
+func nextWindowCode(t *testing.T, secret string) string {
+	t.Helper()
+
+	return pinWindow(t, secret, currentWindow()+2)
+}
+
+func meStatus(t *testing.T, client *http.Client, tsURL string) int {
+	t.Helper()
+
+	resp, err := client.Get(tsURL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func meBody(t *testing.T, client *http.Client, tsURL string) MeResponse {
+	t.Helper()
+
+	resp, err := client.Get(tsURL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	return decodeJSON[MeResponse](t, resp, http.StatusOK)
+}
+
+func unusedCodeCount(t *testing.T, db *database.Database, id uuid.UUID, code string) int {
+	t.Helper()
+
+	count, err := db.Client.RecoveryCode.Query().
+		Where(
+			recoverycode.UserIDEQ(id),
+			recoverycode.CodeHashEQ(hashRecoveryCode(code)),
+			recoverycode.UsedAtIsNil(),
+		).
+		Count(context.Background())
+	if err != nil {
+		t.Fatalf("count unused codes: %v", err)
+	}
+	return count
+}
+
+func TestTwoFactorLoginSecondStageLifecycle(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup := setup2FA(t, client, ts.URL)
+	enable2FA(t, client, ts.URL, setup.Secret)
+	logoutOK(t, client, ts.URL)
+
+	first := loginRaw(t, client, ts.URL, u.Email, password)
+	assertErrorCode(t, first, http.StatusUnauthorized, "two_factor_required")
+
+	if status := meStatus(t, client, ts.URL); status != http.StatusUnauthorized {
+		t.Fatalf("pending me status = %d, want 401", status)
+	}
+
+	wrong := verify2FA(t, client, ts.URL, wrongCodesFor(t, setup.Secret, 1)[0])
+	assertErrorCode(t, wrong, http.StatusUnauthorized, "two_factor_invalid_code")
+
+	code := nextWindowCode(t, setup.Secret)
+	body := decodeJSON[UserResponse](t, verify2FA(t, client, ts.URL, code), http.StatusOK)
+	if body.Email != u.Email {
+		t.Fatalf("verify email = %q, want %q", body.Email, u.Email)
+	}
+
+	if me := meBody(t, client, ts.URL); !me.TwoFactorEnabled {
+		t.Fatal("me two_factor_enabled = false, want true")
+	}
+
+	replay := verify2FA(t, client, ts.URL, code)
+	assertErrorCode(t, replay, http.StatusUnauthorized, "unauthorized")
+}
+
+func TestTwoFactorLoginClearsExistingSession(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup := setup2FA(t, client, ts.URL)
+	enable2FA(t, client, ts.URL, setup.Secret)
+	if status := meStatus(t, client, ts.URL); status != http.StatusOK {
+		t.Fatalf("me before relogin = %d, want 200", status)
+	}
+
+	relogin := loginRaw(t, client, ts.URL, u.Email, password)
+	assertErrorCode(t, relogin, http.StatusUnauthorized, "two_factor_required")
+
+	if status := meStatus(t, client, ts.URL); status != http.StatusUnauthorized {
+		t.Fatalf("me after entering pending = %d, want 401 (auth.user_id must be cleared)", status)
+	}
+
+	decodeJSON[UserResponse](t, verify2FA(t, client, ts.URL, nextWindowCode(t, setup.Secret)), http.StatusOK)
+	if status := meStatus(t, client, ts.URL); status != http.StatusOK {
+		t.Fatalf("me after verify = %d, want 200", status)
+	}
+}
+
+func TestTwoFactorRecoveryCodeLoginAndSingleUse(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup := setup2FA(t, client, ts.URL)
+	issued := enable2FA(t, client, ts.URL, setup.Secret)
+	logoutOK(t, client, ts.URL)
+
+	relogin := loginRaw(t, client, ts.URL, u.Email, password)
+	assertErrorCode(t, relogin, http.StatusUnauthorized, "two_factor_required")
+
+	reused := "  " + strings.ToUpper(issued.RecoveryCodes[0]) + "  "
+	decodeJSON[UserResponse](t, verify2FA(t, client, ts.URL, reused), http.StatusOK)
+	if count := unusedCodeCount(t, db, id, issued.RecoveryCodes[0]); count != 0 {
+		t.Fatalf("unused rows for consumed code = %d, want 0", count)
+	}
+
+	logoutOK(t, client, ts.URL)
+	third := loginRaw(t, client, ts.URL, u.Email, password)
+	assertErrorCode(t, third, http.StatusUnauthorized, "two_factor_required")
+
+	secondUse := verify2FA(t, client, ts.URL, reused)
+	assertErrorCode(t, secondUse, http.StatusUnauthorized, "two_factor_invalid_code")
+}
+
+func TestTwoFactorReplayRejected(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup := setup2FA(t, client, ts.URL)
+	enable2FA(t, client, ts.URL, setup.Secret)
+	logoutOK(t, client, ts.URL)
+
+	code := nextWindowCode(t, setup.Secret)
+	loginRaw(t, client, ts.URL, u.Email, password).Body.Close()
+	decodeJSON[UserResponse](t, verify2FA(t, client, ts.URL, code), http.StatusOK)
+
+	logoutOK(t, client, ts.URL)
+	loginRaw(t, client, ts.URL, u.Email, password).Body.Close()
+	replay := verify2FA(t, client, ts.URL, code)
+	assertErrorCode(t, replay, http.StatusUnauthorized, "two_factor_invalid_code")
+}
+
+func TestTwoFactorVerifyLockout(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup := setup2FA(t, client, ts.URL)
+	enable2FA(t, client, ts.URL, setup.Secret)
+	logoutOK(t, client, ts.URL)
+	loginRaw(t, client, ts.URL, u.Email, password).Body.Close()
+
+	code := nextWindowCode(t, setup.Secret)
+	wrong := wrongCodesFor(t, setup.Secret, 5)
+
+	for _, value := range wrong[:4] {
+		resp := verify2FA(t, client, ts.URL, value)
+		assertErrorCode(t, resp, http.StatusUnauthorized, "two_factor_invalid_code")
+	}
+
+	locked := verify2FA(t, client, ts.URL, wrong[4])
+	assertErrorCode(t, locked, http.StatusUnauthorized, "two_factor_locked")
+
+	freshSession := verify2FA(t, client, ts.URL, code)
+	assertErrorCode(t, freshSession, http.StatusUnauthorized, "unauthorized")
+
+	relogin := loginRaw(t, client, ts.URL, u.Email, password)
+	assertErrorCode(t, relogin, http.StatusUnauthorized, "two_factor_required")
+	decodeJSON[UserResponse](t, verify2FA(t, client, ts.URL, code), http.StatusOK)
+}
+
+func TestTwoFactorDecryptFailureIsServerError(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ctx := context.Background()
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup := setup2FA(t, client, ts.URL)
+	enable2FA(t, client, ts.URL, setup.Secret)
+
+	claimed := userRow(t, db, id).TotpLastCounter
+	if claimed == nil {
+		t.Fatal("totp_last_counter nil after enable, want claimed window")
+	}
+
+	if err := db.Client.User.UpdateOneID(id).SetTotpSecret(setup.Secret).Exec(ctx); err != nil {
+		t.Fatalf("corrupt secret column: %v", err)
+	}
+
+	logoutOK(t, client, ts.URL)
+	loginRaw(t, client, ts.URL, u.Email, password).Body.Close()
+
+	code := nextWindowCode(t, setup.Secret)
+	failed := verify2FA(t, client, ts.URL, code)
+	assertErrorCode(t, failed, http.StatusInternalServerError, "internal_error")
+
+	after := userRow(t, db, id).TotpLastCounter
+	if after == nil || *after != *claimed {
+		t.Fatalf("counter after decrypt failure = %v, want unchanged %v", after, *claimed)
+	}
+
+	sealed, err := sealSecret(testTOTPKey, setup.Secret)
+	if err != nil {
+		t.Fatalf("reseal secret: %v", err)
+	}
+	if err := db.Client.User.UpdateOneID(id).SetTotpSecret(sealed).Exec(ctx); err != nil {
+		t.Fatalf("repair secret column: %v", err)
+	}
+
+	decodeJSON[UserResponse](t, verify2FA(t, client, ts.URL, code), http.StatusOK)
+}
+
+func TestTwoFactorUnchangedForDisabledUsers(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	login := loginRaw(t, client, ts.URL, u.Email, password)
+	decodeJSON[UserResponse](t, login, http.StatusOK)
+
+	if me := meBody(t, client, ts.URL); me.TwoFactorEnabled {
+		t.Fatal("me two_factor_enabled = true, want false for user without 2FA")
+	}
+
+	noPending := verify2FA(t, client, ts.URL, "123456")
+	assertErrorCode(t, noPending, http.StatusUnauthorized, "unauthorized")
+}
+
+func TestTwoFactorDisableRevokesOtherSessions(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	clientA := testClient(t)
+	clientC := testClient(t)
+	loginOK(t, clientA, ts.URL, u.Email, password)
+
+	setup := setup2FA(t, clientA, ts.URL)
+	enable2FA(t, clientA, ts.URL, setup.Secret)
+
+	cLogin := loginRaw(t, clientC, ts.URL, u.Email, password)
+	assertErrorCode(t, cLogin, http.StatusUnauthorized, "two_factor_required")
+	decodeJSON[UserResponse](t, verify2FA(t, clientC, ts.URL, nextWindowCode(t, setup.Secret)), http.StatusOK)
+
+	disable := post2FA(t, clientC, ts.URL, "disable", TwoFactorDisableRequest{Password: password})
+	decodeJSON[map[string]any](t, disable, http.StatusOK)
+
+	if status := meStatus(t, clientA, ts.URL); status != http.StatusUnauthorized {
+		t.Fatalf("client A status = %d, want 401 after disable from another session", status)
+	}
+	if status := meStatus(t, clientC, ts.URL); status != http.StatusOK {
+		t.Fatalf("client C status = %d, want 200 (current session must survive)", status)
 	}
 }
 

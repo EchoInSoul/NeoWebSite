@@ -76,9 +76,10 @@ func (r *repository) updatePasswordHash(ctx context.Context, id string, password
 
 func toUser(u *ent.User) User {
 	return User{
-		ID:       u.ID.String(),
-		Email:    u.Email,
-		Nickname: u.Nickname,
+		ID:               u.ID.String(),
+		Email:            u.Email,
+		Nickname:         u.Nickname,
+		TwoFactorEnabled: u.TotpEnabledAt != nil,
 	}
 }
 
