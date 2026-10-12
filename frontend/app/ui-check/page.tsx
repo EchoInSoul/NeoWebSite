@@ -353,6 +353,13 @@ export default function UiCheckPage() {
       <Separator />
 
       <Section title="按钮与视觉标记">
+        <p className="max-w-prose text-sm text-muted-foreground">
+          default 主操作（每屏一个，登录/注册的提交按钮）；secondary
+          次要操作；outline 描边（对话框取消按钮，见 AlertDialogCancel）；ghost
+          幽灵按钮与图标按钮；destructive 危险操作（删除）；link
+          链接样式，业务暂无用法。尺寸按信息密度选 xs / sm / default /
+          lg，图标按钮用 icon 系（size-9 为基准，与控制台 36px 按钮齐平）。
+        </p>
         <Demo label="button">
           <div className="flex flex-wrap items-center gap-2">
             <Button>默认</Button>
@@ -452,6 +459,13 @@ export default function UiCheckPage() {
       <Separator />
 
       <Section title="输入与表单">
+        <p className="max-w-prose text-sm text-muted-foreground">
+          业务表单照登录页组合：Label + Input（或 InputGroupInput +
+          密码可见切换）+ auth/FieldError，错误时输入框挂 aria-invalid 并用
+          aria-describedby 绑报错 id（范例见
+          app/signin/signin-form.tsx）。业务不许用 ui/field 的 FieldError，本页
+          field 那块 demo 只做展示。
+        </p>
         <Demo label="input">
           <Input placeholder="请输入标题" className="w-64" />
         </Demo>
@@ -840,6 +854,10 @@ export default function UiCheckPage() {
           </Tabs>
         </Demo>
         <Demo label="sidebar" wide>
+          <p className="max-w-prose text-sm text-muted-foreground">
+            控制台专用，别处不许用；此 demo 仅展示，业务落点见
+            app/console/layout.tsx + components/console/。
+          </p>
           <div className="h-72 w-full overflow-hidden rounded-lg border">
             <SidebarProvider>
               <Sidebar collapsible="none" className="h-full">
@@ -878,6 +896,11 @@ export default function UiCheckPage() {
       <Separator />
 
       <Section title="浮层与菜单">
+        <p className="max-w-prose text-sm text-muted-foreground">
+          用户菜单顺序：访问前台 → 主题 → 语言 → 分隔线 → 退出登录（落点
+          components/console/console-user-menu.tsx）；分隔线用现成
+          DropdownMenuSeparator，不自造。
+        </p>
         <Demo label="dialog">
           <Dialog>
             <DialogTrigger render={<Button variant="outline" />}>
@@ -1047,6 +1070,10 @@ export default function UiCheckPage() {
           </div>
         </Demo>
         <Demo label="sonner（点击按钮）">
+          <p className="max-w-prose text-sm text-muted-foreground">
+            成功/失败 toast（注册成功、登出失败）；走全局 Toaster，业务只调
+            toast.success / toast.error。
+          </p>
           <Button
             variant="outline"
             onClick={() =>
