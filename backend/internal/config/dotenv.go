@@ -33,6 +33,14 @@ func EnsureDotEnvFile(path string) (bool, error) {
 		return false, fmt.Errorf("dotenv: stat %s: %w", path, err)
 	}
 
+	environment, err := EffectiveEnvironment()
+	if err != nil {
+		return false, fmt.Errorf("dotenv: %w", err)
+	}
+	if environment == EnvironmentProduction {
+		return false, nil
+	}
+
 	key, err := generateTOTPEncryptionKey()
 	if err != nil {
 		return false, err

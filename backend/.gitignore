@@ -8,3 +8,6 @@
 
 # local env
 .env
+
+# local probes and scratch files
+.scratch/

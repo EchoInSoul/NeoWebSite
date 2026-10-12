@@ -2,6 +2,8 @@ package config
 
 import (
 	"encoding/base64"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -240,7 +242,7 @@ func TestEnsureDotEnvFileNeverOverwrites(t *testing.T) {
 
 func TestEnsuredDotEnvMakesLoadSucceed(t *testing.T) {
 	t.Chdir(t.TempDir())
-	unsetEnv(t, "DATABASE_URL", "DATABASE_URL_TEST", "TOTP_ENCRYPTION_KEY", "POSTGRES_PASSWORD")
+	unsetEnv(t, "DATABASE_URL", "DATABASE_URL_TEST", "TOTP_ENCRYPTION_KEY", "POSTGRES_PASSWORD", "APP_ENV")
 
 	created, err := EnsureDotEnv()
 	if err != nil {
@@ -266,5 +268,36 @@ func TestEnsuredDotEnvMakesLoadSucceed(t *testing.T) {
 	}
 	if cfg.SMTPHost != "" {
 		t.Fatalf("SMTP_HOST = %q, want empty so mail stays log-only", cfg.SMTPHost)
+	}
+}
+
+func TestEnsureDotEnvSkipsProduction(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("APP_ENV", EnvironmentProduction)
+
+	created, err := EnsureDotEnv()
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if created {
+		t.Fatal("production must not bootstrap a dev-shaped .env")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".env")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a .env appeared in %s despite production environment: %v", dir, err)
+	}
+}
+
+func TestEnsureDotEnvStillBootstrapsTestEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("APP_ENV", EnvironmentTest)
+
+	created, err := EnsureDotEnv()
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if !created {
+		t.Fatal("test environment must keep the dev-shaped bootstrap so integration tests can run")
 	}
 }

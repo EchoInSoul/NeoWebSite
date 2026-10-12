@@ -13,6 +13,80 @@ func TestLoadRequiresDatabaseURL(t *testing.T) {
 	}
 }
 
+func TestLoadFallsBackToCompiledDefaultEnvironment(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
+	unsetEnv(t, "APP_ENV")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Environment != DefaultEnvironment {
+		t.Fatalf("Environment = %q, want compiled default %q", cfg.Environment, DefaultEnvironment)
+	}
+	if cfg.IsProduction() != (DefaultEnvironment == EnvironmentProduction) {
+		t.Fatalf("IsProduction = %v, want %v", cfg.IsProduction(), DefaultEnvironment == EnvironmentProduction)
+	}
+}
+
+func TestCompiledDefaultEnvironmentIsKnown(t *testing.T) {
+	switch DefaultEnvironment {
+	case EnvironmentDevelopment, EnvironmentProduction, EnvironmentTest:
+	default:
+		t.Fatalf("DefaultEnvironment = %q, which no build mode accepts", DefaultEnvironment)
+	}
+}
+
+func TestLoadRejectsEmptyEnvironment(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
+
+	for _, value := range []string{"", " ", "production x"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("APP_ENV", value)
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "APP_ENV") {
+				t.Fatalf("expected error mentioning APP_ENV, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadEnvironmentOverridesCompiledDefault(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
+
+	for _, value := range []string{EnvironmentDevelopment, EnvironmentProduction, EnvironmentTest} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("APP_ENV", value)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Environment != value {
+				t.Fatalf("Environment = %q, want %q", cfg.Environment, value)
+			}
+			if cfg.IsProduction() != (value == EnvironmentProduction) {
+				t.Fatalf("IsProduction = %v for %q", cfg.IsProduction(), value)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsUnknownEnvironment(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
+
+	for _, value := range []string{"prod", "Production", "staging", "dev"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("APP_ENV", value)
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "APP_ENV") {
+				t.Fatalf("expected error mentioning APP_ENV, got %v", err)
+			}
+		})
+	}
+}
+
 func TestLoadDatabaseDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://neoblog:neoblog@127.0.0.1:5434/neoblog?sslmode=disable")
 	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)

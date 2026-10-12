@@ -115,7 +115,7 @@ func sessionCookie(resp *http.Response) *http.Cookie {
 }
 
 func TestAuthFlowEndToEnd(t *testing.T) {
-	ts, db := newTestServer(t, "development")
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
@@ -181,7 +181,7 @@ func TestAuthFlowEndToEnd(t *testing.T) {
 }
 
 func TestMeRevokesSessionWhenUserDeleted(t *testing.T) {
-	ts, db := newTestServer(t, "development")
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
@@ -211,7 +211,7 @@ func TestMeRevokesSessionWhenUserDeleted(t *testing.T) {
 }
 
 func TestProductionCookieIsSecure(t *testing.T) {
-	ts, db := newTestServer(t, "production")
+	ts, db := newTestServer(t, config.EnvironmentProduction)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
@@ -226,8 +226,30 @@ func TestProductionCookieIsSecure(t *testing.T) {
 	}
 }
 
+func TestGinModeFollowsEnvironment(t *testing.T) {
+	previous := gin.Mode()
+	t.Cleanup(func() { gin.SetMode(previous) })
+
+	for _, tc := range []struct {
+		environment string
+		want        string
+	}{
+		{config.EnvironmentProduction, gin.ReleaseMode},
+		{config.EnvironmentDevelopment, gin.DebugMode},
+		{config.EnvironmentTest, gin.TestMode},
+		{"bogus", gin.ReleaseMode},
+	} {
+		t.Run(tc.environment, func(t *testing.T) {
+			gin.SetMode(ginMode(tc.environment))
+			if got := gin.Mode(); got != tc.want {
+				t.Errorf("gin mode = %q, want %q for environment %q", got, tc.want, tc.environment)
+			}
+		})
+	}
+}
+
 func TestSessionCookieMaxAgeMatchesLifetime(t *testing.T) {
-	ts, db := newTestServer(t, "development")
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
@@ -245,7 +267,7 @@ func TestSessionCookieMaxAgeMatchesLifetime(t *testing.T) {
 }
 
 func TestAnonymousLogoutRejected(t *testing.T) {
-	ts, _ := newTestServer(t, "development")
+	ts, _ := newTestServer(t, config.EnvironmentDevelopment)
 	client := newClient(t)
 
 	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
@@ -263,7 +285,7 @@ func TestAnonymousLogoutRejected(t *testing.T) {
 }
 
 func TestNoRouteReturnsErrorEnvelope(t *testing.T) {
-	ts, _ := newTestServer(t, "development")
+	ts, _ := newTestServer(t, config.EnvironmentDevelopment)
 
 	resp, err := http.Get(ts.URL + "/api/v1/nope")
 	if err != nil {
@@ -326,7 +348,7 @@ func sortedMethods(methods ...string) string {
 }
 
 func TestMethodMismatchReturns405Envelope(t *testing.T) {
-	ts, _ := newTestServer(t, "development")
+	ts, _ := newTestServer(t, config.EnvironmentDevelopment)
 
 	cases := []struct {
 		name      string
@@ -363,7 +385,7 @@ func TestMethodMismatchReturns405Envelope(t *testing.T) {
 }
 
 func TestHeadMismatchSendsNoBody(t *testing.T) {
-	ts, _ := newTestServer(t, "development")
+	ts, _ := newTestServer(t, config.EnvironmentDevelopment)
 
 	req, err := http.NewRequest(http.MethodHead, ts.URL+"/api/v1/healthy", nil)
 	if err != nil {
@@ -391,7 +413,7 @@ func TestHeadMismatchSendsNoBody(t *testing.T) {
 }
 
 func TestUnknownPathStaysNotFound(t *testing.T) {
-	ts, _ := newTestServer(t, "development")
+	ts, _ := newTestServer(t, config.EnvironmentDevelopment)
 
 	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
 		resp, body := sendBare(t, ts.URL, method, "/api/v1/definitely/not/a/route")
@@ -408,7 +430,7 @@ func TestUnknownPathStaysNotFound(t *testing.T) {
 }
 
 func TestMatchingMethodIsNotHijackedByNoMethod(t *testing.T) {
-	ts, _ := newTestServer(t, "development")
+	ts, _ := newTestServer(t, config.EnvironmentDevelopment)
 	path := "/api/v1/admin/groups/" + uuid.NewString()
 
 	wrong, wrongBody := sendBare(t, ts.URL, http.MethodPut, path)
@@ -455,7 +477,7 @@ func TestPanicReturnsErrorEnvelope(t *testing.T) {
 }
 
 func TestHealthyEndpointStillWorks(t *testing.T) {
-	ts, _ := newTestServer(t, "development")
+	ts, _ := newTestServer(t, config.EnvironmentDevelopment)
 
 	resp, err := http.Get(ts.URL + "/api/v1/healthy")
 	if err != nil {
@@ -478,7 +500,7 @@ func TestHealthyEndpointStillWorks(t *testing.T) {
 func degradedConfig() config.Config {
 	return config.Config{
 		Addr:              ":0",
-		Environment:       "development",
+		Environment:       config.EnvironmentDevelopment,
 		ServiceName:       "website-backend-test",
 		DatabaseURL:       "postgresql://nobody:nobody@127.0.0.1:1/nowhere?sslmode=disable",
 		DBMaxOpenConns:    2,
@@ -580,7 +602,7 @@ func TestDegradedHealthReportsDatabaseError(t *testing.T) {
 }
 
 func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
-	ts, db := newTestServer(t, "development")
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
@@ -616,7 +638,7 @@ func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
 }
 
 func TestShutdownClosesMailer(t *testing.T) {
-	cfg := testConfig(t, "development")
+	cfg := testConfig(t, config.EnvironmentDevelopment)
 	db, err := database.Open(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -656,7 +678,7 @@ type meAccessBody struct {
 }
 
 func TestAccessEndToEnd(t *testing.T) {
-	ts, db := newTestServer(t, "development")
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	tag := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	plainUser, plainPassword := createGroupUser(t, db, rbac.GroupIDUser)
@@ -775,7 +797,7 @@ func TestAccessEndToEnd(t *testing.T) {
 }
 
 func TestMailMessagesEndpointEndToEnd(t *testing.T) {
-	ts, db := newTestServer(t, "development")
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 
 	postMessage := func(client *http.Client) *http.Response {
 		t.Helper()

@@ -20,6 +20,14 @@ const (
 )
 
 const (
+	EnvironmentDevelopment = "development"
+	EnvironmentProduction  = "production"
+	EnvironmentTest        = "test"
+)
+
+var DefaultEnvironment = EnvironmentDevelopment
+
+const (
 	defaultSMTPPort     = 587
 	defaultSMTPFromName = "NeoBlog"
 	maxSMTPPort         = 65535
@@ -46,10 +54,19 @@ type Config struct {
 	TOTPEncryptionKey []byte
 }
 
+func (c Config) IsProduction() bool {
+	return c.Environment == EnvironmentProduction
+}
+
 func Load() (Config, error) {
 	databaseURL := getEnv("DATABASE_URL", "")
 	if databaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required (add it to .env or export it)")
+	}
+
+	environment, err := EffectiveEnvironment()
+	if err != nil {
+		return Config{}, err
 	}
 
 	maxOpen, err := getEnvInt("DB_MAX_OPEN_CONNS", 10)
@@ -88,7 +105,7 @@ func Load() (Config, error) {
 
 	return Config{
 		Addr:              getEnv("ADDR", ":5732"),
-		Environment:       getEnv("APP_ENV", "development"),
+		Environment:       environment,
 		Version:           getEnv("APP_VERSION", version.Version),
 		ServiceName:       getEnv("SERVICE_NAME", "website-backend"),
 		DatabaseURL:       databaseURL,
@@ -115,6 +132,18 @@ type smtpConfig struct {
 	Password string
 	From     string
 	FromName string
+}
+
+func EffectiveEnvironment() (string, error) {
+	value := DefaultEnvironment
+	if v, ok := os.LookupEnv("APP_ENV"); ok {
+		value = strings.TrimSpace(v)
+	}
+	switch value {
+	case EnvironmentDevelopment, EnvironmentProduction, EnvironmentTest:
+		return value, nil
+	}
+	return "", fmt.Errorf("APP_ENV must be one of %q, %q or %q, got %q", EnvironmentDevelopment, EnvironmentProduction, EnvironmentTest, value)
 }
 
 func loadSMTP() (smtpConfig, error) {

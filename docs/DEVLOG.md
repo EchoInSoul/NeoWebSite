@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-10-13 · 后端环境口径收口：构建产物即生产，开发态只属于 `go run`
+
+**版本**：后端 **0.11.0**（本轮未进位）；接口字段名与类型不变，但 `/api/v1/healthy` 的 `environment` **取值**现在随**构建方式**而变（`development` → `production`），依赖该字段判断环境的按变更处理。
+
+注：本节写于本轮改动入库前；其中「未做 / 未验证」各条在同日的审查修复轮里已处理掉两条（`APP_ENV` 空值口径、生产态 `.env` 自举），下方补记标注了实际落地形状。
+
+起因是把「日志有没有颜色 / 有没有路由表」当成了生产与开发的判据，核查后发现两个 exe 跑的都是开发态，且所谓「生产实例」在自己脚边生成了一份开发形状的 `.env`。
+
+### 做了什么
+
+- `internal/config/config.go`：新增 `var DefaultEnvironment = "development"`（发布构建用 `-X` 覆盖）与 `EnvironmentDevelopment/Production/Test` 三常量；`APP_ENV` 从「任意字符串」收紧成只认这三个值，非法值 `Load()` 直接报错点名 `APP_ENV`（此前 `prod` / `Production` / `staging` 会静默按非生产跑）；新增 `Config.IsProduction()` 作为唯一判定入口。
+- `internal/app/app.go`：`gin.SetMode` 从「只管 production」改成按环境三分（production→release、development→debug、test→test）；`Cookie.Secure` 改走 `cfg.IsProduction()`。
+- `scripts/build.sh`（新）：发布构建唯一入口——`CGO_ENABLED=0` + `-trimpath` + `-ldflags "-s -w -X website/backend/internal/config.DefaultEnvironment=production"`；版本号从 `internal/version/version.go` 读，产物名 `bin/neoblog-<版本>-<GOOS>-<GOARCH>[.exe]`，支持位置参数指定输出路径与 `GOOS`/`GOARCH` 交叉构建。
+- 测试：`config_test.go` 新增 3 条（编译期默认值 / 显式覆盖三值 / 非法值拒绝）；`app_test.go` 的 `TestGinModeFollowsEnvironment` 直接对 `ginMode()` 纯函数断言四值（含兜底 release），不依赖数据库、且退出时恢复 gin 全局模式。`go test ./...` 全绿、`gofmt -l` 空、`go vet` 干净。
+- 文档：`backend/README.md` 新增「环境与构建」章节；同步 `APP_ENV` 行、目录对照表加 `scripts/build.sh` 行、「认证」章节 cookie `Secure` 的口径、「运行」章节加指针。
+
+### 关键决定
+
+- **环境不做成两份代码，靠编译期注入一个变量**：源码一份，`go run .` / 裸 `go build` 出开发态，`scripts/build.sh` 出生产态。与 `internal/version.Version` 同一个 `-X` 机制。
+- **`APP_ENV` 刻意不进 `.env` 与 `.env.example`**：写进 `.env` 会让同一目录下的发布二进制静默退回开发态——那正是本轮起因那类误判的来源。环境开关只能来自「怎么构建的」或「显式设环境变量」（代码仍会读 `.env` 里的 `APP_ENV`，已在「未验证 / 已知缺口」标注为可选的后续硬拦项）。
+- **gin 模式完全由 `APP_ENV` 决定，`GIN_MODE` 不再能单独生效**：此前两个开关脱钩（只设 `GIN_MODE=release` 会日志安静、但 cookie 仍非 Secure、health 仍报 development）。代价是 `APP_ENV=development` 现在会强制把 gin 打回 debug，即使用户同时设了 `GIN_MODE=release`——取单一真源。
+- **本轮只收口环境，`.env` 自举语义按同一轮审查结论另行收紧**：自举从「无条件」改为「仅开发态 / `test`」，生产态不自举，见缺口第一条的处理结果。
+
+### 实测到的边界（2026-10-13，同一份源码四种跑法，探针在 `backend/.scratch/modeprobe/`，该目录已进 `.gitignore` 且临时钥匙文件已删）
+
+| 跑法 | `[GIN-debug]` 行数 | `/healthy` 的 `environment` |
+| --- | --- | --- |
+| `build.sh` 产物，不设 `APP_ENV` | **0** | **production** |
+| `build.sh` 产物，`APP_ENV=development` | 21 | development |
+| 裸 `go build` 产物，不设 `APP_ENV` | 21 | development |
+| `build.sh` 产物，`APP_ENV=prod` | 0 | 启动即失败：`APP_ENV must be one of "development", "production" or "test", got "prod"` |
+
+顺带钉死两条日志口径（此前被当作环境判据，是错的）：`[GIN-debug]` 路由表**只在启动那一刻打印、且永不上色**（`gin/debug.go:69` 那句 `Fprintf` 里没有任何 ANSI 码）；`[GIN] 时间 | 状态码 | 耗时 | IP | 方法 "路径"` 是每条请求都打的访问日志，**debug 与 release 都打**（`app.go` 无条件 `engine.Use(gin.Logger())`），带不带颜色只取决于 stdout 是不是终端（`gin/logger.go:258-262` 算 `isTerm`、`:163` 用它决定上色，`SetMode` 不碰这个变量）。生产态那次实测照样打出 `[GIN] … | 503 | … | GET "/api/v1/healthy"`。（gin 行号以当时 `go.mod` 的版本为准，仅备查。）
+
+### 补记（同轮收尾时补齐两笔入库的日志）
+
+- `92e5afa`：没有 `.env` 时首次启动自动生成一份纯键值文件（`EnsureDotEnv`，`O_EXCL` 绝不覆盖、含随机 32 字节 2FA 钥匙），不再因缺环境变量退出。
+- `63ffbe9`：数据库连不上也照常启动，碰库端点统一 503 `service_unavailable`（连接级错误判定），连接池惰性重连、库恢复无需重启。
+- 同日审查修复：`APP_ENV` 空串也判非法（`LookupEnv` + trim，不再静默吃成默认值）；`.env` 自举收紧为**仅开发态 / `test`**，`production` 不生成文件（修复下方缺口第一条）；`ginMode()` 提成纯函数并补兜底 release，测试不再依赖数据库；`backend/.gitignore` 增加 `.scratch/`，探针产物与其中的临时钥匙文件不再有误入仓库的路径。
+
+### 未验证 / 已知缺口
+
+- **发布产物默认 `Cookie.Secure=true`，这条分支此前从未真跑过**：生产若走 `http://`（非 localhost 的明文域名 / IP），浏览器会直接丢弃 session cookie，症状是登录接口 200、下一步 `/auth/me` 全 401，看起来像「登录没生效」。**未做端到端验证**（需要真浏览器 + 非 localhost 明文地址）。
+- **`EnsureDotEnv` 生产态自举已修**（同日审查修复）：自举只在开发态 / `test` 生效，`production` 遇到缺 `.env` 不造文件。原缺口记为：生产产物在没有 `.env` 的目录里会自造一份开发形状配置（本地 compose 的 `DATABASE_URL`、`DATABASE_URL_TEST`、外加一把全新随机 2FA 钥匙）；本轮起因 `F:\backend.exe` 在 `F:\` 生成的正是这种文件（sha256 前缀 `c4ce87ff` vs `backend/.env` 的 `3124744e`）。
+- **没有容器镜像与部署定义**：`deploy/` 仍只有 postgres 的 `init.sql`，无 Dockerfile、无 app 服务、无 systemd 单元。用户口径里的「镜像」目前等价于 `build.sh` 产出的单个 exe。
+- **`APP_ENV` 加载层硬拦是可选后续项**：文档只做「约定不写进 `.env`」，代码仍会读 `.env` 里的 `APP_ENV`（`LoadDotEnvFile` 不按 key 过滤）。要在加载层过滤或告警，需按「用户点名才做」的惯例另行决定。
+- panic 日志随模式变（debug 额外 dump 整份请求，release 只打堆栈，见 `gin/recovery.go` 的 `IsDebugging()` 分支）——本轮未统一；10-12 定的「对内可诊断（500 / panic 日志 + request id）」仍未做。
+
+---
+
 ## 2026-10-13 · 后端连不上时三条路由不再 500（外壳 / 表单照常渲染 + 一条 toast）
 
 **版本**：前端 `package.json` 仍 **0.1.0**；本轮**零后端改动**、零接口契约变更。

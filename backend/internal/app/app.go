@@ -46,9 +46,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 		return nil, err
 	}
 
-	if cfg.Environment == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	gin.SetMode(ginMode(cfg.Environment))
 
 	engine := gin.New()
 	engine.Use(gin.Logger(), recoveryHandler())
@@ -104,6 +102,19 @@ func recoveryHandler() gin.HandlerFunc {
 	})
 }
 
+func ginMode(environment string) string {
+	switch environment {
+	case config.EnvironmentProduction:
+		return gin.ReleaseMode
+	case config.EnvironmentTest:
+		return gin.TestMode
+	case config.EnvironmentDevelopment:
+		return gin.DebugMode
+	default:
+		return gin.ReleaseMode
+	}
+}
+
 func newSessionManager(cfg config.Config, db *database.Database) *scs.SessionManager {
 	sm := scs.New()
 	sm.Lifetime = cfg.SessionLifetime
@@ -112,7 +123,7 @@ func newSessionManager(cfg config.Config, db *database.Database) *scs.SessionMan
 	sm.Cookie.HttpOnly = true
 	sm.Cookie.SameSite = http.SameSiteLaxMode
 	sm.Cookie.Path = "/"
-	sm.Cookie.Secure = cfg.Environment == "production"
+	sm.Cookie.Secure = cfg.IsProduction()
 	return sm
 }
 
