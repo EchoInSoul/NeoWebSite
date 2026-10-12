@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"website/backend/internal/database"
+	"website/backend/internal/modules/settings"
 )
 
 type Module struct {
@@ -13,8 +14,8 @@ type Module struct {
 	controller *controller
 }
 
-func New(db *database.Database, sessions *scs.SessionManager, totpKey []byte) *Module {
-	service := newService(db, sessions, totpKey)
+func New(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service) *Module {
+	service := newService(db, sessions, totpKey, settingsService)
 	return &Module{
 		Service:    service,
 		controller: newController(service),

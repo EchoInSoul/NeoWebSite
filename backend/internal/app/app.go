@@ -62,7 +62,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 
 	mailModule := mail.New(cfg)
 
-	authModule := auth.New(db, sessions, cfg.TOTPEncryptionKey)
+	authModule := auth.New(db, sessions, cfg.TOTPEncryptionKey, settingsModule.Service)
 	authModule.Register(api)
 
 	accessModule := access.New(db)

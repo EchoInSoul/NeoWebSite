@@ -22,9 +22,17 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/modules/access"
+	"website/backend/internal/modules/settings"
 )
 
 func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Server, *scs.SessionManager) {
+	t.Helper()
+
+	ts, sm, _ := newTestAppWithSessionsAndSettings(t, db)
+	return ts, sm
+}
+
+func newTestAppWithSessionsAndSettings(t *testing.T, db *database.Database) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
 
 	sm := scs.New()
@@ -34,7 +42,11 @@ func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Serv
 	engine := gin.New()
 	api := engine.Group("/api/v1")
 
-	module := New(db, sm, testTOTPKey)
+	settingsModule, err := settings.New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	module := New(db, sm, testTOTPKey, settingsModule.Service)
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.LoadIdentity(accessModule.Service, sm))
@@ -42,7 +54,7 @@ func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Serv
 
 	ts := httptest.NewServer(sm.LoadAndSave(engine))
 	t.Cleanup(ts.Close)
-	return ts, sm
+	return ts, sm, settingsModule.Service
 }
 
 func newTestApp(t *testing.T, db *database.Database) *httptest.Server {

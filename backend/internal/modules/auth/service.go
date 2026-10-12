@@ -11,6 +11,7 @@ import (
 	"website/backend/internal/common/guard"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
+	"website/backend/internal/modules/settings"
 )
 
 const (
@@ -26,9 +27,10 @@ type Service struct {
 	sessions  *scs.SessionManager
 	dummyHash []byte
 	totpKey   []byte
+	settings  *settings.Service
 }
 
-func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte) *Service {
+func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service) *Service {
 	dummy, err := bcrypt.GenerateFromPassword([]byte("timing-defense-placeholder"), bcrypt.DefaultCost)
 	if err != nil {
 		dummy = nil
@@ -38,10 +40,19 @@ func newService(db *database.Database, sessions *scs.SessionManager, totpKey []b
 		sessions:  sessions,
 		dummyHash: dummy,
 		totpKey:   totpKey,
+		settings:  settingsService,
 	}
 }
 
 func (s *Service) Register(ctx context.Context, email, nickname, password string) (User, error) {
+	enabled, err := s.settings.GetBool(ctx, "register", "enabled")
+	if err != nil {
+		return User{}, err
+	}
+	if !enabled {
+		return User{}, apierror.ErrRegistrationClosed
+	}
+
 	email = normalizeEmail(email)
 	nickname = normalizeNickname(nickname)
 
