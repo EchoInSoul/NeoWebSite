@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -21,6 +22,7 @@ func newController(service *Service) *controller {
 
 func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.GET("/admin/settings/:group", guard.RequirePermission(rbac.PermissionSettingsView), c.getGroup)
+	r.PATCH("/admin/settings/:group", guard.RequirePermission(rbac.PermissionSettingsEdit), c.patchGroup)
 }
 
 func (c *controller) getGroup(ctx *gin.Context) {
@@ -32,7 +34,28 @@ func (c *controller) getGroup(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, values)
 }
 
+func (c *controller) patchGroup(ctx *gin.Context) {
+	var raw map[string]json.RawMessage
+	if err := ctx.ShouldBindJSON(&raw); err != nil {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	values, err := c.service.PatchGroup(ctx.Request.Context(), ctx.Param("group"), raw)
+	if err != nil {
+		writeSettingError(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, values)
+}
+
 func writeSettingError(ctx *gin.Context, err error) {
+	var itemErr *ItemError
+	if errors.As(err, &itemErr) {
+		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, itemErr.Item))
+		return
+	}
+
 	switch {
 	case errors.Is(err, ErrUnknownGroup):
 		apierror.Write(ctx, apierror.ErrNotFound)

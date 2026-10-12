@@ -229,3 +229,130 @@ func TestSettingsGetForbiddenForPlainUser(t *testing.T) {
 		t.Fatalf("code = %q, want forbidden", code)
 	}
 }
+
+func TestSettingsPatchTurnsRegistrationOff(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": false})
+	expectStatus(t, resp, http.StatusOK)
+	if values := decodeValues(t, resp); values["enabled"] != false {
+		t.Fatalf("patch response = %v, want enabled false", values)
+	}
+
+	after := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/settings/register", nil)
+	expectStatus(t, after, http.StatusOK)
+	if values := decodeValues(t, after); values["enabled"] != false {
+		t.Fatalf("get after patch = %v, want enabled false", values)
+	}
+	if count := registerRowCount(t, db); count != 1 {
+		t.Fatalf("register rows = %d, want the single explicit write", count)
+	}
+}
+
+func TestSettingsPatchUnknownItem(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": false, "nope": 1})
+	expectStatus(t, resp, http.StatusBadRequest)
+	errObj := decodeError(t, resp)
+	if errObj["code"] != "invalid_request" {
+		t.Fatalf("code = %v, want invalid_request", errObj["code"])
+	}
+	if errObj["param"] != "nope" {
+		t.Fatalf("param = %v, want nope", errObj["param"])
+	}
+	if count := registerRowCount(t, db); count != 0 {
+		t.Fatalf("register rows = %d, want 0 — the legal item must not be half-written", count)
+	}
+}
+
+func TestSettingsPatchTypeMismatch(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": "no"})
+	expectStatus(t, resp, http.StatusBadRequest)
+	errObj := decodeError(t, resp)
+	if errObj["code"] != "invalid_request" || errObj["param"] != "enabled" {
+		t.Fatalf("error = %v, want invalid_request with param enabled", errObj)
+	}
+	if count := registerRowCount(t, db); count != 0 {
+		t.Fatalf("register rows = %d, want 0 after rejected write", count)
+	}
+}
+
+func TestSettingsPatchEmptyBody(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{})
+	expectStatus(t, resp, http.StatusBadRequest)
+	errObj := decodeError(t, resp)
+	if errObj["code"] != "invalid_request" {
+		t.Fatalf("code = %v, want invalid_request", errObj["code"])
+	}
+	if errObj["param"] != nil {
+		t.Fatalf("param = %v, want absent for a zero-item patch", errObj["param"])
+	}
+}
+
+func TestSettingsPatchMalformedBody(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	for _, payload := range []string{"{not json", `["enabled"]`, `"enabled"`, ""} {
+		resp := doRaw(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", payload)
+		expectStatus(t, resp, http.StatusBadRequest)
+		if code := decodeErrorCode(t, resp); code != "invalid_request" {
+			t.Fatalf("payload %q: code = %q, want invalid_request", payload, code)
+		}
+	}
+	if count := registerRowCount(t, db); count != 0 {
+		t.Fatalf("register rows = %d, want 0 after malformed bodies", count)
+	}
+}
+
+func TestSettingsPatchUnknownGroup(t *testing.T) {
+	db := testDB(t)
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/nope", map[string]any{"enabled": false})
+	expectStatus(t, resp, http.StatusNotFound)
+	if code := decodeErrorCode(t, resp); code != "not_found" {
+		t.Fatalf("code = %q, want not_found", code)
+	}
+}
+
+func TestSettingsPatchNeedsEditPermission(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	ts := newSettingsTestApp(t, db)
+	plain := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDUser))
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	denied := doJSON(t, plain, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": false})
+	expectStatus(t, denied, http.StatusForbidden)
+	if code := decodeErrorCode(t, denied); code != "forbidden" {
+		t.Fatalf("code = %q, want forbidden", code)
+	}
+	if count := registerRowCount(t, db); count != 0 {
+		t.Fatalf("register rows = %d, want 0 after forbidden patch", count)
+	}
+
+	allowed := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": false})
+	expectStatus(t, allowed, http.StatusOK)
+	allowed.Body.Close()
+}
