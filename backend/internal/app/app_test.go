@@ -547,6 +547,7 @@ func TestDegradedServerStillServesRoutes(t *testing.T) {
 		{"login needs the database", http.MethodPost, "/api/v1/auth/login", `{"identifier":"a@b.c","password":"pass-12345"}`, http.StatusServiceUnavailable, "service_unavailable"},
 		{"register needs the database", http.MethodPost, "/api/v1/auth/register", `{"email":"a@b.c","nickname":"ab","password":"pass-12345"}`, http.StatusServiceUnavailable, "service_unavailable"},
 		{"admin list needs the database", http.MethodPost, "/api/v1/admin/groups", `{"name":"G"}`, http.StatusUnauthorized, "unauthorized"},
+		{"settings read needs the database", http.MethodGet, "/api/v1/admin/settings/register", "", http.StatusUnauthorized, "unauthorized"},
 		{"validation does not need the database", http.MethodPost, "/api/v1/auth/login", `{}`, http.StatusBadRequest, "invalid_request"},
 		{"unknown route is still 404", http.MethodGet, "/api/v1/definitely/not/a/route", "", http.StatusNotFound, "not_found"},
 		{"method mismatch is still 405", http.MethodGet, "/api/v1/auth/login", "", http.StatusMethodNotAllowed, "method_not_allowed"},
@@ -656,6 +657,101 @@ func TestShutdownClosesMailer(t *testing.T) {
 	err = a.mailer.Send(context.Background(), mail.Message{To: "user@example.com", Subject: "s", Body: mail.Body{Text: "t"}})
 	if !errors.Is(err, mail.ErrClosed) {
 		t.Fatalf("send after shutdown = %v, want mail.ErrClosed", err)
+	}
+}
+
+func exchangeJSON(t *testing.T, client *http.Client, method, endpoint string, body any) (int, map[string]any) {
+	t.Helper()
+
+	var payload []byte
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		payload = encoded
+	}
+
+	request, err := http.NewRequest(method, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, endpoint, err)
+	}
+	defer resp.Body.Close()
+
+	var decoded map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode %s %s: %v", method, endpoint, err)
+	}
+	return resp.StatusCode, decoded
+}
+
+func envelopeCode(decoded map[string]any) string {
+	errObj, ok := decoded["error"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	code, _ := errObj["code"].(string)
+	return code
+}
+
+func TestRegistrationControlEndToEnd(t *testing.T) {
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
+	owner, ownerPassword := createGroupUser(t, db, rbac.GroupIDOwner)
+
+	tag := fmt.Sprintf("%d", time.Now().UnixNano())
+	email := "regctl+" + tag + "@example.com"
+	regBody := map[string]any{"email": email, "nickname": "regctl" + tag, "password": "pass-12345"}
+	endpoint := ts.URL + "/api/v1/admin/settings/register"
+
+	clearSettings := func() {
+		if _, err := db.SQL().Exec("DELETE FROM setting_values WHERE setting_group = $1", "register"); err != nil {
+			t.Fatalf("clear register settings: %v", err)
+		}
+	}
+	clearSettings()
+	t.Cleanup(func() {
+		_, _ = db.SQL().Exec("DELETE FROM setting_values WHERE setting_group = $1", "register")
+		_, _ = db.SQL().Exec("DELETE FROM users WHERE email = $1", email)
+	})
+
+	ownerClient := newClient(t)
+	loginResp := login(t, ownerClient, ts.URL, owner.Email, ownerPassword)
+	if loginResp.StatusCode != http.StatusOK {
+		loginResp.Body.Close()
+		t.Fatalf("owner login status = %d, want 200", loginResp.StatusCode)
+	}
+	loginResp.Body.Close()
+
+	status, values := exchangeJSON(t, ownerClient, http.MethodGet, endpoint, nil)
+	if status != http.StatusOK || values["enabled"] != true {
+		t.Fatalf("default get = %d %v, want 200 with enabled true", status, values)
+	}
+
+	status, values = exchangeJSON(t, ownerClient, http.MethodPatch, endpoint, map[string]any{"enabled": false})
+	if status != http.StatusOK || values["enabled"] != false {
+		t.Fatalf("close patch = %d %v, want 200 with enabled false", status, values)
+	}
+
+	anonymous := newClient(t)
+	status, values = exchangeJSON(t, anonymous, http.MethodPost, ts.URL+"/api/v1/auth/register", regBody)
+	if status != http.StatusForbidden || envelopeCode(values) != "registration_closed" {
+		t.Fatalf("closed register = %d %v, want 403 registration_closed", status, values)
+	}
+
+	status, values = exchangeJSON(t, ownerClient, http.MethodPatch, endpoint, map[string]any{"enabled": true})
+	if status != http.StatusOK || values["enabled"] != true {
+		t.Fatalf("reopen patch = %d %v, want 200 with enabled true", status, values)
+	}
+
+	status, values = exchangeJSON(t, anonymous, http.MethodPost, ts.URL+"/api/v1/auth/register", regBody)
+	if status != http.StatusCreated {
+		t.Fatalf("reopened register = %d %v, want 201", status, values)
 	}
 }
 
