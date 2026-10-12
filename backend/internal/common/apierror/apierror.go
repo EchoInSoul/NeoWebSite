@@ -30,49 +30,61 @@ func (e *Error) Error() string {
 }
 
 var (
-	ErrInvalidRequest     = &Error{Type: TypeInvalidRequest, Code: "invalid_request"}
-	ErrWeakPassword       = &Error{Type: TypeInvalidRequest, Code: "weak_password"}
-	ErrPasswordUnchanged  = &Error{Type: TypeInvalidRequest, Code: "password_unchanged", Param: strPtr("new_password")}
-	ErrInvalidPermission  = &Error{Type: TypeInvalidRequest, Code: "invalid_permission"}
-	ErrInvalidCredentials = &Error{Type: TypeAuthentication, Code: "invalid_credentials"}
-	ErrUnauthorized       = &Error{Type: TypeAuthentication, Code: "unauthorized"}
-	ErrForbidden          = &Error{Type: TypePermission, Code: "forbidden"}
-	ErrGrantForbidden     = &Error{Type: TypePermission, Code: "grant_forbidden"}
-	ErrOwnerProtected     = &Error{Type: TypePermission, Code: "owner_protected"}
-	ErrCannotModifySelf   = &Error{Type: TypePermission, Code: "cannot_modify_self"}
-	ErrNotFound           = &Error{Type: TypeNotFound, Code: "not_found"}
-	ErrPresetGroupLocked  = &Error{Type: TypeConflict, Code: "preset_group_locked"}
-	ErrEmailTaken         = &Error{Type: TypeConflict, Code: "email_taken", Param: strPtr("email")}
-	ErrNicknameTaken      = &Error{Type: TypeConflict, Code: "nickname_taken", Param: strPtr("nickname")}
-	ErrAlreadyTaken       = &Error{Type: TypeConflict, Code: "already_taken"}
-	ErrGroupNameTaken     = &Error{Type: TypeConflict, Code: "group_name_taken", Param: strPtr("name")}
-	ErrGroupNotEmpty      = &Error{Type: TypeConflict, Code: "group_not_empty"}
-	ErrLastOwner          = &Error{Type: TypeConflict, Code: "last_owner"}
-	ErrMailDeliveryFailed = &Error{Type: TypeServer, Code: "mail_delivery_failed"}
-	ErrInternal           = &Error{Type: TypeServer, Code: "internal_error"}
+	ErrInvalidRequest          = &Error{Type: TypeInvalidRequest, Code: "invalid_request"}
+	ErrWeakPassword            = &Error{Type: TypeInvalidRequest, Code: "weak_password"}
+	ErrPasswordUnchanged       = &Error{Type: TypeInvalidRequest, Code: "password_unchanged", Param: strPtr("new_password")}
+	ErrInvalidPermission       = &Error{Type: TypeInvalidRequest, Code: "invalid_permission"}
+	ErrInvalidCredentials      = &Error{Type: TypeAuthentication, Code: "invalid_credentials"}
+	ErrUnauthorized            = &Error{Type: TypeAuthentication, Code: "unauthorized"}
+	ErrTwoFactorRequired       = &Error{Type: TypeAuthentication, Code: "two_factor_required"}
+	ErrTwoFactorInvalidCode    = &Error{Type: TypeAuthentication, Code: "two_factor_invalid_code", Param: strPtr("code")}
+	ErrTwoFactorLocked         = &Error{Type: TypeAuthentication, Code: "two_factor_locked"}
+	ErrForbidden               = &Error{Type: TypePermission, Code: "forbidden"}
+	ErrGrantForbidden          = &Error{Type: TypePermission, Code: "grant_forbidden"}
+	ErrOwnerProtected          = &Error{Type: TypePermission, Code: "owner_protected"}
+	ErrCannotModifySelf        = &Error{Type: TypePermission, Code: "cannot_modify_self"}
+	ErrNotFound                = &Error{Type: TypeNotFound, Code: "not_found"}
+	ErrPresetGroupLocked       = &Error{Type: TypeConflict, Code: "preset_group_locked"}
+	ErrEmailTaken              = &Error{Type: TypeConflict, Code: "email_taken", Param: strPtr("email")}
+	ErrNicknameTaken           = &Error{Type: TypeConflict, Code: "nickname_taken", Param: strPtr("nickname")}
+	ErrAlreadyTaken            = &Error{Type: TypeConflict, Code: "already_taken"}
+	ErrGroupNameTaken          = &Error{Type: TypeConflict, Code: "group_name_taken", Param: strPtr("name")}
+	ErrGroupNotEmpty           = &Error{Type: TypeConflict, Code: "group_not_empty"}
+	ErrLastOwner               = &Error{Type: TypeConflict, Code: "last_owner"}
+	ErrTwoFactorAlreadyEnabled = &Error{Type: TypeConflict, Code: "two_factor_already_enabled"}
+	ErrTwoFactorNotSetup       = &Error{Type: TypeConflict, Code: "two_factor_not_setup"}
+	ErrTwoFactorNotEnabled     = &Error{Type: TypeConflict, Code: "two_factor_not_enabled"}
+	ErrMailDeliveryFailed      = &Error{Type: TypeServer, Code: "mail_delivery_failed"}
+	ErrInternal                = &Error{Type: TypeServer, Code: "internal_error"}
 )
 
 var statusByCode = map[string]int{
-	"invalid_request":      http.StatusBadRequest,
-	"weak_password":        http.StatusBadRequest,
-	"password_unchanged":   http.StatusBadRequest,
-	"invalid_permission":   http.StatusBadRequest,
-	"invalid_credentials":  http.StatusUnauthorized,
-	"unauthorized":         http.StatusUnauthorized,
-	"forbidden":            http.StatusForbidden,
-	"grant_forbidden":      http.StatusForbidden,
-	"owner_protected":      http.StatusForbidden,
-	"cannot_modify_self":   http.StatusForbidden,
-	"not_found":            http.StatusNotFound,
-	"preset_group_locked":  http.StatusConflict,
-	"email_taken":          http.StatusConflict,
-	"nickname_taken":       http.StatusConflict,
-	"already_taken":        http.StatusConflict,
-	"group_name_taken":     http.StatusConflict,
-	"group_not_empty":      http.StatusConflict,
-	"last_owner":           http.StatusConflict,
-	"mail_delivery_failed": http.StatusInternalServerError,
-	"internal_error":       http.StatusInternalServerError,
+	"invalid_request":            http.StatusBadRequest,
+	"weak_password":              http.StatusBadRequest,
+	"password_unchanged":         http.StatusBadRequest,
+	"invalid_permission":         http.StatusBadRequest,
+	"invalid_credentials":        http.StatusUnauthorized,
+	"unauthorized":               http.StatusUnauthorized,
+	"two_factor_required":        http.StatusUnauthorized,
+	"two_factor_invalid_code":    http.StatusUnauthorized,
+	"two_factor_locked":          http.StatusUnauthorized,
+	"forbidden":                  http.StatusForbidden,
+	"grant_forbidden":            http.StatusForbidden,
+	"owner_protected":            http.StatusForbidden,
+	"cannot_modify_self":         http.StatusForbidden,
+	"not_found":                  http.StatusNotFound,
+	"preset_group_locked":        http.StatusConflict,
+	"email_taken":                http.StatusConflict,
+	"nickname_taken":             http.StatusConflict,
+	"already_taken":              http.StatusConflict,
+	"group_name_taken":           http.StatusConflict,
+	"group_not_empty":            http.StatusConflict,
+	"last_owner":                 http.StatusConflict,
+	"two_factor_already_enabled": http.StatusConflict,
+	"two_factor_not_setup":       http.StatusConflict,
+	"two_factor_not_enabled":     http.StatusConflict,
+	"mail_delivery_failed":       http.StatusInternalServerError,
+	"internal_error":             http.StatusInternalServerError,
 }
 
 type paramOverride struct {
