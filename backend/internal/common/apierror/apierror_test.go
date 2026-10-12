@@ -177,13 +177,13 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrInvalidCredentials, ErrUnauthorized, ErrForbidden, ErrGrantForbidden,
 		ErrOwnerProtected, ErrCannotModifySelf, ErrNotFound, ErrPresetGroupLocked,
 		ErrEmailTaken, ErrNicknameTaken, ErrAlreadyTaken, ErrGroupNameTaken,
-		ErrGroupNotEmpty, ErrLastOwner, ErrInternal,
+		ErrGroupNotEmpty, ErrLastOwner, ErrMailDeliveryFailed, ErrInternal,
 	}
-	if len(all) != 19 {
-		t.Fatalf("sentinel count = %d, want 19", len(all))
+	if len(all) != 20 {
+		t.Fatalf("sentinel count = %d, want 20", len(all))
 	}
-	if len(statusByCode) != 19 {
-		t.Fatalf("statusByCode entries = %d, want 19", len(statusByCode))
+	if len(statusByCode) != 20 {
+		t.Fatalf("statusByCode entries = %d, want 20", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,
@@ -193,11 +193,16 @@ func TestRegistryIntegrity(t *testing.T) {
 		http.StatusConflict:            TypeConflict,
 		http.StatusInternalServerError: TypeServer,
 	}
+	seenCodes := make(map[string]struct{}, len(all))
 	for _, sentinel := range all {
 		status, ok := statusByCode[sentinel.Code]
 		if !ok {
 			t.Fatalf("code %q not registered in statusByCode; Body would silently degrade to internal_error", sentinel.Code)
 		}
+		if _, dup := seenCodes[sentinel.Code]; dup {
+			t.Fatalf("code %q claimed by more than one sentinel", sentinel.Code)
+		}
+		seenCodes[sentinel.Code] = struct{}{}
 		if want := statusTypes[status]; want == "" || sentinel.Type != want {
 			t.Fatalf("code %q: type %q inconsistent with status %d (want %q)", sentinel.Code, sentinel.Type, status, want)
 		}

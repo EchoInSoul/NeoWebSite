@@ -4,6 +4,53 @@
 
 ---
 
+## 2026-10-11 · 管理端发信接口（邮件模块升级为路由模块）
+
+**版本**：0.8.0 → **0.9.0**（minor：新 HTTP 能力）
+
+### 做了什么
+
+- 邮件模块获得第一个路由 `POST /api/v1/admin/mail/messages`（创建邮件消息即发送）：body `{"to"}` → 用当前 SMTP 配置**同步真发**一封 `example` 自检邮件 → 201 `{"to","subject","sent":true}`；400 `invalid_request`（`param:"to"`，`net/mail.ParseAddress`，支持 `Name <addr>` 取纯地址）/ 401 `unauthorized` / 403 `forbidden` / 500 `mail_delivery_failed`。主题与正文由服务器控制（`example` 模板），请求方不能指定内容。
+- 模块形状统一（兑现邮件 spec v4 时期「若以后要形式统一」的预案）：`mail.New(cfg)` 改返回 `*Module`（`m.Mailer` 暴露能力接口，app.go 装配处同步）；新增 `module.go` / `controller.go`，硬性规则 1、5 的「无路由模块」清单只剩 `settings`。
+- `Mailer` 接口新增 `SendSync(ctx, msg) error`：同步单次尝试、不重试、拨号死线 20s（go-mail 逐命令续期，非总上限；`Close` 后同样返回 `ErrClosed`），失败记结构化日志；异步 `Send`（队列 + 3 次重试）语义不变，将来业务流程一律走它。
+- 守卫新增 `guard.RequirePresetGroup(keys...)`（预设组白名单，owner/admin 过、其余 403 `forbidden`、无 identity 500）：路由链 `RequireAuth → LoadIdentity → RequirePresetGroup(owner, admin)`。**刻意不走权限目录**——SMTP 是服务器级配置（环境变量），不属于可授出的业务权限域，自建组不可授；将来邮件配置若搬进设置系统，可再切权限点。
+- `apierror` 新增哨兵 `ErrMailDeliveryFailed`（`server_error` / 500，错误码注册表第 20 条）。
+- 测试：guard 预设组守卫单测（owner 过 / 普通用户与自建组 403 / 未接线 500）、`SendSync` 单测（成功一次调用 / 失败不重试 / `Close` 后 `ErrClosed` / 失败日志）、controller HTTP 用例（201 + 内容断言 / 展示名地址提取 / 三种 400 / 两种 403 / 500 映射）；`TestRegistryIntegrity` 同步 20 条。
+- 文档：README 目录对照表（mail 行、guard 行）、硬性规则 1 / 5、邮件章节重写（接口表 + SendSync 语义）；邮件 spec v5 修订记录。
+
+### 关键决定
+
+- **路由命名**：初稿 `POST /admin/mail/test` 被用户否决（不要动词尾巴、要求严格按既有 API 规范、不自造轮子）。按 API 规范 §3 资源名词复数，三选一由用户点名 `POST /admin/mail/messages`（对标 OpenAI「操作即资源」，创建即发送；`POST /<集合>/:id/<动作>` 子动作形态本项目仍无先例）。
+- **同步而非入队**：自检接口的意义在于即时告知 SMTP 通不通；异步队列只能回「已入队」，对排障无用。`SendSync` 单次不重试（最多等 20s），失败由操作者自行重试。
+- **权限用预设组守卫而非权限点**：权限目录动作只有 `view`/`edit`，`mail.test` 之类的第三动作会破坏既有命名规则；`RequirePresetGroup` 不动目录、不加戏。
+
+### 已知缺口
+
+- 无限流（与登录/注册同属已知缺口，等统一补）。
+- 发信成功 ≠ 对方收件箱收到（SPF/DKIM/DMARC 与服务商合规仍见邮件 spec §11）。
+- `SendSync` 与队列 worker 可能并发各起一条 SMTP 连接（自检请求与后台投递同时发生时）；对 SMTP 服务商的并发连接数无压力，暂不互斥。
+- **20s 不是总上限**：go-mail 只在拨号阶段吃 ctx 死线（`client.go:1197`），之后对每条 SMTP 命令续期（`client.go:1237/1811`），慢速对端总耗时可超 20s（异步 `Send` 同构，既有行为）。
+- `SendSync` 死线 20s 大于关停预算 10s：SIGTERM 撞上在途自检请求时 `server.Shutdown` 带 DeadlineExceeded 返回、SMTP 事务被硬切（`writeTimeout` 60s 不构成额外问题）。
+
+### 终审
+
+独立子代理整分支终审（fresh context）：**0 Critical / 4 Important / 8 Minor**，门禁全绿（`go test -count=1` 强制非缓存）、无越界文件、异步 `Send` 零改动、`RequirePresetGroup` 的身份来源链（自建组无法携带预设 `system_key`）源码取证通过。
+
+- **已修（按用户裁定）**：
+  1. **I-1 状态码违规**——`mail_delivery_failed` 初版 502 违反 API 规范 §4「500 之外的 5xx 一律归并为 500」的白名单；用户裁定**改回 500**（语义区分交给 code，不动冻结规范）。I-3（README:126 type 枚举缺 502）随本条自动消解。
+  2. **I-2 词汇表漏登记**——API 规范 §7.3 补 `mail_delivery_failed` 行（500 / `server_error` / param null）+ 引言记账。
+  3. **I-4 spec 正文未随修订**——邮件 spec §2 决策表 / §5 接口块（`SendSync` + `New` 签名）/ §6 装配与消费方四处按 v5 改写，修订记录不再「只记账不修文」。
+  4. **M-1 超时措辞失实**——README 与 spec 的「20s 超时」改为「拨号 20s 死线、逐命令续期、非总上限」（go-mail 源码取证）。
+  5. **M-2 ctx 断言缺失**——补 `TestSendSyncAppliesDeadline`（死线 ≈20s）与 `TestSendSyncPropagatesParentCancellation`（父取消传导到 transport）。
+  6. **M-4 关停预算**——已知缺口补 `SendSync` 20s > `shutdownTimeout` 10s 一条。
+  7. **M-5 同码不设防**——`TestRegistryIntegrity` 加「code 去重后仍 20 条」断言（两个哨兵共用 code 原本可静默通过）。
+  8. **M-6 集成腿缺失**——补 `TestMailMessagesEndpointEndToEnd`：匿名 401 / 普通用户 403 / 自建组 403 / owner 201（走真实 app 装配 + 登录会话，`DATABASE_URL_TEST` 缺省 skip）。
+- **留档不修（用户裁定）**：M-3（`ErrClosed` 单列错误码——其建议的 503 本身违反 §4 白名单，503 仅 `/healthy` 豁免；且该窗口实际不可达）；M-7（「操作即资源」判定标准待出现第二个此类端点时写入规范 §3/§4）；M-8（未跟踪的 2FA 两份文档写着 0.8.0 → 0.9.0，本轮已占用 0.9.0，2FA 轮启动时需重编版本号）。
+- **审查手段缺陷记录**：本机 `-race` 不可用（`CGO_ENABLED=1` 缺 gcc），数据竞争结论以 go-mail v0.8.1 源码取证替代（每次投递新建连接 + `c.mutex.RLock()`）；`gofmt -l` 恒退出 0、`-race` 首跑退出码被管道吞掉——两处都要求门禁脚本用显式判定，不信工具默认行为。
+- **过程中撞出的存量 flake（非本轮引入，未修待点名）**：全仓并行跑时 auth 一次 `TestLoginRejectsWrongPasswordAndUnknownAccount` 报 `email or nickname already exists`——`auth` 与 `access/service_test.go` 的建号昵称同为 `"nick"+UnixNano`，两个测试进程共用 `neoblog_test` 并行执行，取到同一时钟刻度即撞唯一约束；单独重跑与后续两轮全仓 `-count=1` 均绿。tag 生成器无进程间唯一成分（pid/随机量），属测试基建隐患；修法（tag 加 pid 或随机后缀）待用户点名。
+
+---
+
 ## 2026-10-11 · 设置组存储机制（内部能力，无路由）
 
 **版本**：0.7.0 → **0.8.0**（minor：新能力域）

@@ -67,6 +67,25 @@ func RequirePermission(permission string) gin.HandlerFunc {
 	}
 }
 
+func RequirePresetGroup(keys ...string) gin.HandlerFunc {
+	allowed := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		allowed[key] = struct{}{}
+	}
+	return func(c *gin.Context) {
+		identity, ok := IdentityFrom(c)
+		if !ok {
+			apierror.Abort(c, apierror.ErrInternal)
+			return
+		}
+		if _, ok := allowed[identity.GroupKey]; !ok {
+			apierror.Abort(c, apierror.ErrForbidden)
+			return
+		}
+		c.Next()
+	}
+}
+
 func IdentityFrom(c *gin.Context) (Identity, bool) {
 	value, exists := c.Get(SessionIdentityKey)
 	if !exists {

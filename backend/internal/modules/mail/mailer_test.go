@@ -260,3 +260,103 @@ func TestConcurrentSendCloseDoesNotPanic(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 }
+
+func TestSendSyncDeliversOnce(t *testing.T) {
+	stub := newStubTransport(nil)
+	m := testMailer(t, stub, []time.Duration{time.Second})
+
+	err := m.SendSync(context.Background(), Message{To: "user@example.com", Subject: "s", Body: Body{Text: "t"}})
+	if err != nil {
+		t.Fatalf("send sync: %v", err)
+	}
+	assertCallCount(t, stub, 1)
+}
+
+func TestSendSyncReturnsDeliveryErrorWithoutRetry(t *testing.T) {
+	deliveryErr := &deliveryError{err: errors.New("smtp refused"), temporary: true}
+	stub := newStubTransport(deliveryErr)
+	m := testMailer(t, stub, []time.Duration{time.Millisecond})
+
+	err := m.SendSync(context.Background(), Message{To: "user@example.com", Subject: "s", Body: Body{Text: "t"}})
+	if !errors.Is(err, deliveryErr) {
+		t.Fatalf("send sync = %v, want delivery error", err)
+	}
+	assertCallCount(t, stub, 1)
+}
+
+func TestSendSyncAfterCloseReturnsErrClosed(t *testing.T) {
+	stub := newStubTransport(nil)
+	m := testMailer(t, stub, nil)
+	go m.run()
+	closeMailer(t, m)
+
+	err := m.SendSync(context.Background(), Message{To: "user@example.com", Subject: "s", Body: Body{Text: "t"}})
+	if !errors.Is(err, ErrClosed) {
+		t.Fatalf("send sync after close = %v, want ErrClosed", err)
+	}
+	assertCallCount(t, stub, 0)
+}
+
+func TestSendSyncLogsFailure(t *testing.T) {
+	stub := newStubTransport(&deliveryError{err: errors.New("boom"), temporary: false})
+	buffer := &bytes.Buffer{}
+	logger := slog.New(slog.NewTextHandler(buffer, nil))
+	m := newMailer(stub, logger)
+
+	_ = m.SendSync(context.Background(), Message{To: "user@example.com", Subject: "s", Body: Body{Text: "t"}})
+	if !strings.Contains(buffer.String(), "mail delivery failed") {
+		t.Fatalf("log = %q, want mail delivery failed entry", buffer.String())
+	}
+}
+
+type funcTransport struct {
+	deliverFunc func(ctx context.Context, msg Message) error
+}
+
+func (f *funcTransport) deliver(ctx context.Context, msg Message) error {
+	return f.deliverFunc(ctx, msg)
+}
+
+func TestSendSyncAppliesDeadline(t *testing.T) {
+	var gotCtx context.Context
+	stub := &funcTransport{deliverFunc: func(ctx context.Context, _ Message) error {
+		gotCtx = ctx
+		return nil
+	}}
+	m := newMailer(stub, discardLogger())
+
+	if err := m.SendSync(context.Background(), Message{To: "a@example.com"}); err != nil {
+		t.Fatalf("send sync: %v", err)
+	}
+	if gotCtx == nil {
+		t.Fatalf("transport was not called")
+	}
+	deadline, ok := gotCtx.Deadline()
+	if !ok {
+		t.Fatalf("deliver ctx has no deadline, want ~%v", sendTimeout)
+	}
+	delta := time.Until(deadline)
+	if delta > sendTimeout || delta < sendTimeout-time.Second {
+		t.Fatalf("deadline delta = %v, want within 1s of %v", delta, sendTimeout)
+	}
+}
+
+func TestSendSyncPropagatesParentCancellation(t *testing.T) {
+	var gotErr error
+	stub := &funcTransport{deliverFunc: func(ctx context.Context, _ Message) error {
+		gotErr = ctx.Err()
+		return ctx.Err()
+	}}
+	m := newMailer(stub, discardLogger())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := m.SendSync(ctx, Message{To: "a@example.com"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("send sync = %v, want context.Canceled", err)
+	}
+	if !errors.Is(gotErr, context.Canceled) {
+		t.Fatalf("transport ctx err = %v, want context.Canceled", gotErr)
+	}
+}

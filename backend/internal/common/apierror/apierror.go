@@ -48,29 +48,31 @@ var (
 	ErrGroupNameTaken     = &Error{Type: TypeConflict, Code: "group_name_taken", Param: strPtr("name")}
 	ErrGroupNotEmpty      = &Error{Type: TypeConflict, Code: "group_not_empty"}
 	ErrLastOwner          = &Error{Type: TypeConflict, Code: "last_owner"}
+	ErrMailDeliveryFailed = &Error{Type: TypeServer, Code: "mail_delivery_failed"}
 	ErrInternal           = &Error{Type: TypeServer, Code: "internal_error"}
 )
 
 var statusByCode = map[string]int{
-	"invalid_request":     http.StatusBadRequest,
-	"weak_password":       http.StatusBadRequest,
-	"password_unchanged":  http.StatusBadRequest,
-	"invalid_permission":  http.StatusBadRequest,
-	"invalid_credentials": http.StatusUnauthorized,
-	"unauthorized":        http.StatusUnauthorized,
-	"forbidden":           http.StatusForbidden,
-	"grant_forbidden":     http.StatusForbidden,
-	"owner_protected":     http.StatusForbidden,
-	"cannot_modify_self":  http.StatusForbidden,
-	"not_found":           http.StatusNotFound,
-	"preset_group_locked": http.StatusConflict,
-	"email_taken":         http.StatusConflict,
-	"nickname_taken":      http.StatusConflict,
-	"already_taken":       http.StatusConflict,
-	"group_name_taken":    http.StatusConflict,
-	"group_not_empty":     http.StatusConflict,
-	"last_owner":          http.StatusConflict,
-	"internal_error":      http.StatusInternalServerError,
+	"invalid_request":      http.StatusBadRequest,
+	"weak_password":        http.StatusBadRequest,
+	"password_unchanged":   http.StatusBadRequest,
+	"invalid_permission":   http.StatusBadRequest,
+	"invalid_credentials":  http.StatusUnauthorized,
+	"unauthorized":         http.StatusUnauthorized,
+	"forbidden":            http.StatusForbidden,
+	"grant_forbidden":      http.StatusForbidden,
+	"owner_protected":      http.StatusForbidden,
+	"cannot_modify_self":   http.StatusForbidden,
+	"not_found":            http.StatusNotFound,
+	"preset_group_locked":  http.StatusConflict,
+	"email_taken":          http.StatusConflict,
+	"nickname_taken":       http.StatusConflict,
+	"already_taken":        http.StatusConflict,
+	"group_name_taken":     http.StatusConflict,
+	"group_not_empty":      http.StatusConflict,
+	"last_owner":           http.StatusConflict,
+	"mail_delivery_failed": http.StatusInternalServerError,
+	"internal_error":       http.StatusInternalServerError,
 }
 
 type paramOverride struct {

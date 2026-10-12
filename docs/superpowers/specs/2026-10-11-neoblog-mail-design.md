@@ -8,6 +8,7 @@
 - v1（2026-10-11，初版）：选型与结论源自同日三路并行调研（Go 库与参考实现 / 服务商 / 投递合规），关键项均以源码或官方文档复核，证据摘要见 §13。
 - v2（2026-10-11，审查后修订）：两路独立审查（技术事实核验 + 计划质量审查）发现的缺陷已并入——§5 补导出哨兵 `ErrClosed` 与「`Close` 后 `Send` 恒返回它」的确定性要求、补关闭窗口语义；§10 测试缝签名与真实签名对齐、补并发冒烟用例；§12 补「`Close` 返回错误 ≠ worker 已停」；§14 第 3、5 条改为有可执行触发手段的测试取证。
 - v4（2026-10-11，归位审查后修订）：两路独立只读审查 + 实测坐实——归位把真实投递测试里写死的 `../../.env` 变成了 `backend/internal/.env`（不存在），且 `LoadDotEnvFile` 对缺文件静默，导致按文档操作只会 SKIP。已改为从包目录向上查找 `.env`（`findEnvFile`，深度上限 5）并补三个用例钉住（含「从包目录能找到 backend/.env」的守护用例）；§10 第 5 条与 §3 / §14 的版本表述同步；README 补「无路由模块」的规则说明。完整过程见 DEVLOG 同日条目。
+- v5（2026-10-11，管理端发信接口轮修订）：模块升级为路由模块（兑现 v4 时期「若以后要形式统一」的预案）——`New(cfg)` 改返回 `*Module`（`m.Mailer` 暴露能力接口），新增 controller（`POST /admin/mail/messages`，body `{"to"}` → 201 `{"to","subject","sent":true}`；400 `invalid_request`/`param:to`、403 `forbidden`、500 `mail_delivery_failed`，状态码归并遵守 API 规范 §4）与 `Mailer.SendSync`（同步单次尝试、不重试、拨号死线 20s——go-mail 逐命令续期非总上限，专供管理端自检即时反馈；异步 `Send` 语义不变，业务流程一律走它）；新增守卫 `guard.RequirePresetGroup`（owner/admin 白名单，**不走权限目录**——SMTP 是服务器级配置，不属于可授出权限域；自建组不可授）。用户裁定：路由命名按 API 规范 §3 资源名词复数（`/messages`，创建即发送），拒绝 `/test` 动词尾巴。版本 0.8.0 → 0.9.0。
 
 ## 1. 意图与背景
 
@@ -28,10 +29,10 @@
 | 项 | 决定 | 落地时点 |
 | --- | --- | --- |
 | 库 | `github.com/wneessen/go-mail` v0.8.1（2026-07-09 发布；依赖仅 `golang.org/x/crypto` + `x/text`，均已在依赖树） | 本轮 |
-| 包位置 | `internal/modules/mail/`——按 README 硬性规则 1（一个功能一个模块目录）归入 modules；该模块无路由，故不含 controller / dto / Register，对外入口是 `New(cfg) Mailer` | 本轮 |
+| 包位置 | `internal/modules/mail/`——按 README 硬性规则 1（一个功能一个模块目录）归入 modules；初版无路由（不含 controller / dto / Register），0.9.0（v5）升级为路由模块（module + controller，`RegisterProtected` 挂守卫链），对外入口 `New(cfg) *Module`，能力接口经 `m.Mailer` 暴露 | 本轮；v5 升级 |
 | 对外形状 | 导出 `Mailer` 接口 + `Message` / `Body`；`New(cfg) Mailer`、`Render(name, data)`；业务代码不 import go-mail | 本轮 |
 | 投递模型 | 内存队列（缓冲 channel，容量 32）+ 单 worker 串行投递（一次只有一个 SMTP 连接）；**不做持久化 outbox** | 本轮 |
-| 重试 | 每封最多 3 次尝试（首次 + 2 次重试），退避 1s / 5s，单次投递 20s 超时；**服务端 4xx 或传输层错误重试，服务端 5xx 不重试**（判定依据见 §13） | 本轮 |
+| 重试 | 每封最多 3 次尝试（首次 + 2 次重试），退避 1s / 5s，单次投递拨号死线 20s（go-mail 对每条 SMTP 命令续期，非总上限）；**服务端 4xx 或传输层错误重试，服务端 5xx 不重试**（判定依据见 §13） | 本轮 |
 | 降级 | `SMTP_HOST` 为空 → log sender（把邮件写日志），启动不报错——这是 fail-fast 原则的唯一例外，开发机无凭据也能全流程跑通 | 本轮 |
 | AUTH | go-mail `SMTPAuthAutoDiscover`（源码实证：优先列表不含 XOAUTH2；未加密连接只允许不裸传密码的机制）；用户名为空则 `SMTPAuthNoAuth`；不提供手工机制开关 | 本轮 |
 | TLS | `SMTP_TLS=starttls`（默认，587）或 `ssl`（465）；一律加密，不提供明文模式 | 本轮 |
@@ -80,10 +81,11 @@ type Message struct {
 
 type Mailer interface {
     Send(ctx context.Context, msg Message) error
+    SendSync(ctx context.Context, msg Message) error
     Close(ctx context.Context) error
 }
 
-func New(cfg config.Config) Mailer
+func New(cfg config.Config) *Module
 
 func Render(name string, data any) (Body, error)
 
@@ -93,8 +95,9 @@ var ErrClosed = errors.New("mailer closed")
 语义（零注释风格下以本文为准）：
 
 - `Send`：消息入队后立即返回，不等投递结果。`ctx` 只约束入队——队列满（容量 32）时阻塞等位，ctx 到期即返回其错误。**`Close` 之后调用 `Send` 必须确定性返回 `ErrClosed`**：实现上要在 `select` 前做一次非阻塞优先检查（`closing` 已关闭时「入队」与「已关闭」会同时就绪，Go 对同时就绪的分支随机选择，不做优先检查会有约一半概率静默返回 nil 而消息无人消费）。与 `Close` 真并发时，已入队的消息仍会被 drain 尽力投递；drain 判定排空退出后入队的边界消息不保证投递（关闭窗口内的在途消息）。投递失败不从这里返回，走后台重试 + 日志。
+- `SendSync`（v5）：同步单次投递，不走队列、不重试；死线由实现套上（拨号 20s，go-mail 对每条 SMTP 命令续期，**非总上限**）；`Close` 之后调用必须确定性返回 `ErrClosed`，失败原样返回 transport 错误并记结构化日志。当前唯一消费方是管理端自检接口（结果即时反馈给操作者），业务流程一律走 `Send`。
 - `Close`：停止接收新消息，把队列中剩余消息投完（受 ctx 限制）；**幂等**，可重复调用。
-- `New`：`SMTP_HOST` 为空 → 返回 log 实现；非空 → 返回 SMTP 实现。构造即启动 worker goroutine。
+- `New`：返回 `*Module`，`SMTP_HOST` 为空 → log 实现；非空 → SMTP 实现。构造即启动 worker goroutine。
 - `Render`：把 `templates/<name>.html` 与 `<name>.txt` 各渲染一份（HTML 用 `html/template`，纯文本用 `text/template`），返回 `Body`；模板不存在或执行出错即返回错误。
 - 主题由调用方给出、不进模板：主题通常携带动态值（如验证码），放进模板反而绕。
 
@@ -110,9 +113,9 @@ return mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自
 
 ## 6. 装配与生命周期
 
-- `app.New`：`mailer := mail.New(cfg)`，存入 `App` 新增字段。
-- `app.Run` 关闭路径：`server.Shutdown(ctx)` 之后调用 `mailer.Close(ctx)`，共用同一条 10s `shutdownTimeout` 预算；若 HTTP 关闭已耗尽预算，`Close` 拿到已到期 ctx 便立即返回（在途邮件放弃，可接受）。
-- 本轮无任何模块消费 `Mailer`；将来消费方一律在 `app.go` 注入（规则 5），例如 `auth.New(db, sessions, mailer)`。
+- `app.New`：`mailModule := mail.New(cfg)`；`mailModule.Mailer` 存入 `App` 字段，`mailModule.RegisterProtected(protected)` 挂守卫链（v5）。
+- `app.Run` 关闭路径：`server.Shutdown(ctx)` 之后调用 `mailer.Close(ctx)`，共用同一条 10s `shutdownTimeout` 预算；若 HTTP 关闭已耗尽预算，`Close` 拿到已到期 ctx 便立即返回（在途邮件放弃，可接受）。注意 `SendSync` 的拨号死线（20s）大于关停预算：SIGTERM 撞上在途自检请求时 SMTP 事务会被硬切。
+- v5 起管理端自检接口是第一个消费方（controller 经注入的 `Mailer` 调 `SendSync`）；后续业务消费方一律在 `app.go` 注入（规则 5），例如 `auth.New(db, sessions, mailer)`。
 - 两个方向约束：业务模块禁止自建 SMTP 客户端/连接（类比规则 7）；`internal/modules/mail` 不得 import 任何业务模块（类比规则 8）。
 
 ## 7. 模板机制与示例邮件

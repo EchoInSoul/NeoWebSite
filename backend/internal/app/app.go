@@ -62,6 +62,8 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	healthModule := health.New(cfg, db)
 	healthModule.Register(api)
 
+	mailModule := mail.New(cfg)
+
 	authModule := auth.New(db, sessions)
 	authModule.Register(api)
 
@@ -69,6 +71,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	protected := api.Group("", guard.RequireAuth(sessions), guard.LoadIdentity(accessModule.Service, sessions))
 	authModule.RegisterProtected(protected)
 	accessModule.RegisterProtected(protected)
+	mailModule.RegisterProtected(protected)
 
 	engine.NoRoute(func(c *gin.Context) {
 		apierror.Write(c, apierror.ErrNotFound)
@@ -85,7 +88,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 			WriteTimeout:      writeTimeout,
 			IdleTimeout:       idleTimeout,
 		},
-		mailer:   mail.New(cfg),
+		mailer:   mailModule.Mailer,
 		settings: settingsService,
 	}, nil
 }

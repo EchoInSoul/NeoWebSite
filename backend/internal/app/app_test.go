@@ -526,3 +526,107 @@ func TestAccessEndToEnd(t *testing.T) {
 		t.Fatalf("permissions after group change = %v, want [users.view]", afterBody.Permissions)
 	}
 }
+
+func TestMailMessagesEndpointEndToEnd(t *testing.T) {
+	ts, db := newTestServer(t, "development")
+
+	postMessage := func(client *http.Client) *http.Response {
+		t.Helper()
+		resp, err := client.Post(ts.URL+"/api/v1/admin/mail/messages", "application/json", bytes.NewReader([]byte(`{"to":"someone@example.com"}`)))
+		if err != nil {
+			t.Fatalf("post messages: %v", err)
+		}
+		return resp
+	}
+
+	anonymous := postMessage(newClient(t))
+	anonymous.Body.Close()
+	if anonymous.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous status = %d, want 401", anonymous.StatusCode)
+	}
+
+	plainUser, plainPassword := createGroupUser(t, db, rbac.GroupIDUser)
+	ownerUser, ownerPassword := createGroupUser(t, db, rbac.GroupIDOwner)
+
+	plainClient := newClient(t)
+	plainLogin := login(t, plainClient, ts.URL, plainUser.Email, plainPassword)
+	plainLogin.Body.Close()
+
+	plain := postMessage(plainClient)
+	plain.Body.Close()
+	if plain.StatusCode != http.StatusForbidden {
+		t.Fatalf("plain user status = %d, want 403", plain.StatusCode)
+	}
+
+	tag := fmt.Sprintf("%d", time.Now().UnixNano())
+	groupPayload, err := json.Marshal(map[string]any{"name": "MailCustom-" + tag, "permissions": []string{}})
+	if err != nil {
+		t.Fatalf("marshal group: %v", err)
+	}
+
+	ownerClient := newClient(t)
+	ownerLogin := login(t, ownerClient, ts.URL, ownerUser.Email, ownerPassword)
+	ownerLogin.Body.Close()
+
+	createResp, err := ownerClient.Post(ts.URL+"/api/v1/admin/groups", "application/json", bytes.NewReader(groupPayload))
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+	if createResp.StatusCode != http.StatusCreated {
+		createResp.Body.Close()
+		t.Fatalf("create group status = %d, want 201", createResp.StatusCode)
+	}
+	var groupBody struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&groupBody); err != nil {
+		t.Fatalf("decode group: %v", err)
+	}
+	createResp.Body.Close()
+	t.Cleanup(func() {
+		_ = db.Client.User.UpdateOneID(uuid.MustParse(plainUser.ID)).SetGroupID(rbac.GroupIDUser).Exec(context.Background())
+		_ = db.Client.Group.DeleteOneID(uuid.MustParse(groupBody.ID)).Exec(context.Background())
+	})
+
+	patchPayload, err := json.Marshal(map[string]any{"group_id": groupBody.ID})
+	if err != nil {
+		t.Fatalf("marshal patch: %v", err)
+	}
+	patchReq, err := http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/admin/users/"+plainUser.ID, bytes.NewReader(patchPayload))
+	if err != nil {
+		t.Fatalf("build patch: %v", err)
+	}
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchResp, err := ownerClient.Do(patchReq)
+	if err != nil {
+		t.Fatalf("patch user: %v", err)
+	}
+	patchResp.Body.Close()
+	if patchResp.StatusCode != http.StatusOK {
+		t.Fatalf("patch status = %d, want 200", patchResp.StatusCode)
+	}
+
+	custom := postMessage(plainClient)
+	custom.Body.Close()
+	if custom.StatusCode != http.StatusForbidden {
+		t.Fatalf("custom group status = %d, want 403", custom.StatusCode)
+	}
+
+	owner := postMessage(ownerClient)
+	if owner.StatusCode != http.StatusCreated {
+		owner.Body.Close()
+		t.Fatalf("owner status = %d, want 201", owner.StatusCode)
+	}
+	var sentBody struct {
+		To      string `json:"to"`
+		Subject string `json:"subject"`
+		Sent    bool   `json:"sent"`
+	}
+	if err := json.NewDecoder(owner.Body).Decode(&sentBody); err != nil {
+		t.Fatalf("decode sent: %v", err)
+	}
+	owner.Body.Close()
+	if sentBody.To != "someone@example.com" || !sentBody.Sent || sentBody.Subject == "" {
+		t.Fatalf("sent body = %+v, want to/sent/subject", sentBody)
+	}
+}

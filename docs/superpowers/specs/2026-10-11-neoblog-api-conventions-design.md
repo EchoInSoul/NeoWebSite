@@ -108,6 +108,7 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 12 | `GET /api/v1/admin/users` | `backend/internal/modules/access/controller.go:51` |
 | 13 | `GET /api/v1/admin/users/:id` | `backend/internal/modules/access/controller.go:52` |
 | 14 | `PATCH /api/v1/admin/users/:id` | `backend/internal/modules/access/controller.go:53` |
+| 15 | `POST /api/v1/admin/mail/messages` | `backend/internal/modules/mail/controller.go:36`（0.9.0 新增，域 `admin` 下资源 `mail/messages`，创建即发送） |
 
 正例（新端点命名，资源复数 + 子动作）：
 
@@ -376,7 +377,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 
 ### 7.3 code 词汇表（收编现有 token；此后只增不改义）
 
-19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`：
+19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`：
 
 | code | HTTP | type | 默认 param | 场景 | 建议默认 message（注册表基线，可润色） |
 | --- | --- | --- | --- | --- | --- |
@@ -399,6 +400,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `group_name_taken` | 409 | `conflict_error` | `name` | 组名重复 | 该组名已被使用 |
 | `group_not_empty` | 409 | `conflict_error` | null | 删有成员的自建组 | 组内仍有成员，无法删除 |
 | `last_owner` | 409 | `conflict_error` | null | 移出最后一个 owner | 至少需要保留一名所有者 |
+| `mail_delivery_failed` | 500 | `server_error` | null | SMTP 投递失败（管理端发信自检；不回传对端应答细节，0.9.0 新增） | 邮件发送失败 |
 | `internal_error` | 500 | `server_error` | null | 一切未知错误兜底 | 服务器内部错误 |
 
 规则：

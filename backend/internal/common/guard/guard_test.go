@@ -132,7 +132,13 @@ func newPermissionTestServer(t *testing.T, resolver IdentityResolver) *httptest.
 	r.GET("/gated", RequireAuth(sm), LoadIdentity(resolver, sm), RequirePermission("system.users.edit"), func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
+	r.GET("/gated-preset", RequireAuth(sm), LoadIdentity(resolver, sm), RequirePresetGroup("owner", "admin"), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
 	r.GET("/gated-unwired", RequirePermission("system.users.edit"), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	r.GET("/gated-preset-unwired", RequirePresetGroup("owner"), func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
 
@@ -243,6 +249,69 @@ func TestRequirePermissionWithoutIdentity(t *testing.T) {
 	resp, err := http.Get(ts.URL + "/gated-unwired")
 	if err != nil {
 		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", resp.StatusCode)
+	}
+	if code := decodeErrorBody(t, resp); code != "internal_error" {
+		t.Fatalf("error = %q, want internal_error", code)
+	}
+}
+
+func TestRequirePresetGroup(t *testing.T) {
+	ts := newPermissionTestServer(t, fakeResolver{identities: map[string]Identity{
+		"u1": {UserID: "u1", GroupKey: "owner"},
+	}})
+	client := seededClient(t, ts)
+
+	allowed, err := client.Get(ts.URL + "/gated-preset")
+	if err != nil {
+		t.Fatalf("get gated-preset: %v", err)
+	}
+	defer allowed.Body.Close()
+	if allowed.StatusCode != http.StatusNoContent {
+		t.Fatalf("owner status = %d, want 204", allowed.StatusCode)
+	}
+
+	tsUser := newPermissionTestServer(t, fakeResolver{identities: map[string]Identity{
+		"u1": {UserID: "u1", GroupKey: "user"},
+	}})
+	tsCustom := newPermissionTestServer(t, fakeResolver{identities: map[string]Identity{
+		"u1": {UserID: "u1", GroupKey: ""},
+	}})
+
+	for _, who := range []struct {
+		name   string
+		server *httptest.Server
+		client *http.Client
+	}{
+		{name: "regular user", server: tsUser, client: seededClient(t, tsUser)},
+		{name: "custom group", server: tsCustom, client: seededClient(t, tsCustom)},
+	} {
+		resp, err := who.client.Get(who.server.URL + "/gated-preset")
+		if err != nil {
+			t.Fatalf("%s: get gated-preset: %v", who.name, err)
+		}
+		if resp.StatusCode != http.StatusForbidden {
+			resp.Body.Close()
+			t.Fatalf("%s status = %d, want 403", who.name, resp.StatusCode)
+		}
+		code := decodeErrorBody(t, resp)
+		resp.Body.Close()
+		if code != "forbidden" {
+			t.Fatalf("%s error = %q, want forbidden", who.name, code)
+		}
+	}
+}
+
+func TestRequirePresetGroupWithoutIdentity(t *testing.T) {
+	ts := newPermissionTestServer(t, fakeResolver{identities: map[string]Identity{}})
+
+	resp, err := http.Get(ts.URL + "/gated-preset-unwired")
+	if err != nil {
+		t.Fatalf("get gated-preset-unwired: %v", err)
 	}
 	defer resp.Body.Close()
 

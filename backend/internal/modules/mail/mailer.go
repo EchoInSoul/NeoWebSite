@@ -31,6 +31,7 @@ type Message struct {
 
 type Mailer interface {
 	Send(ctx context.Context, msg Message) error
+	SendSync(ctx context.Context, msg Message) error
 	Close(ctx context.Context) error
 }
 
@@ -72,13 +73,6 @@ func newMailer(tr transport, logger *slog.Logger) *mailer {
 	}
 }
 
-func New(cfg config.Config) Mailer {
-	logger := slog.Default()
-	m := newMailer(newTransport(cfg, logger), logger)
-	go m.run()
-	return m
-}
-
 func newTransport(cfg config.Config, logger *slog.Logger) transport {
 	if cfg.SMTPHost == "" {
 		return newLogSender(cfg, logger)
@@ -101,6 +95,24 @@ func (m *mailer) Send(ctx context.Context, msg Message) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (m *mailer) SendSync(ctx context.Context, msg Message) error {
+	select {
+	case <-m.closing:
+		return ErrClosed
+	default:
+	}
+
+	deliverCtx, cancel := context.WithTimeout(ctx, sendTimeout)
+	defer cancel()
+
+	err := m.transport.deliver(deliverCtx, msg)
+	if err != nil {
+		m.logger.Error("mail delivery failed", "to", msg.To, "subject", msg.Subject, "attempt", 1, "err", err)
+		return err
+	}
+	return nil
 }
 
 func (m *mailer) Close(ctx context.Context) error {

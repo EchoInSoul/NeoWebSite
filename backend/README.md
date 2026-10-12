@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.8.0
+当前版本：0.9.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -23,19 +23,19 @@
 | `internal/modules/health/dto.go` | `dto/*.dto.ts` | 请求/响应数据结构 |
 | `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录 / 登出 / 当前用户 / 改密；`Register`（公开）与 `RegisterProtected`（受保护） |
 | `internal/modules/access/*` | `access.module.ts` 等 | 用户组与权限：组 CRUD、用户管理接口、生效权限解析；全部挂在权限守卫下 |
-| `internal/modules/mail` | `@nestjs-modules/mailer`（对照位） | 无路由模块（无 controller / dto / Register，对外入口 `New(cfg) Mailer` 与 `Render`）：`Mailer` 接口（Send / Close）+ SMTP / 日志双实现 + `templates/` 模板；`SMTP_HOST` 为空时降级为日志 |
+| `internal/modules/mail/*` | `@nestjs-modules/mailer`（对照位） | 邮件能力 + 管理端发信接口：`Mailer` 接口（Send / SendSync / Close）+ SMTP / 日志双实现 + `templates/` 模板；异步 `Send` 走后台队列重试，同步 `SendSync` 单次尝试（管理端即时反馈用）；`POST /admin/mail/messages` 挂守卫链 + 预设组守卫；`SMTP_HOST` 为空时降级为日志 |
 | `internal/modules/settings` | `@nestjs/config`（存储对照位） | 无路由模块（无 controller / dto / Register，对外入口 `New(db) (*Service, error)`）：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；清单为空 = 全默认，加设置见「设置」章节配方 |
-| `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）；常量 `auth.user_id` / `auth.identity` |
+| `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）+ `RequirePresetGroup`（预设组白名单，owner / admin 这类不入权限目录的服务器级操作用）；常量 `auth.user_id` / `auth.identity` |
 | `internal/common/rbac` | `src/common`（权限目录） | 权限点目录与预设组常量（固定 UUID）；纯 Go，不依赖 gin / DB |
 | `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
 
 ## 硬性规则
 
-1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。**无路由的能力模块（当前 `mail`、`settings`）可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件。**
+1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。**无路由的能力模块（当前 `settings`）可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件。**
 2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。
 3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app、`internal/common/guard`（中间件）和 `internal/common/apierror`（统一错误写出）；service 一律不 import gin。
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
-5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**另一个例外：无路由的能力模块由 `New` 直接返回能力接口（当前 `mail.New(cfg) Mailer` 与 `settings.New(db) (*Service, error)`，后者是唯一返回 error 的模块构造器，错误沿启动链返回）；无状态的包级纯函数可直接导出（如 `mail.Render`）——都不算对外暴露内部实现。**
+5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**另一个例外：无路由的能力模块由 `New` 直接返回能力接口（当前 `settings.New(db) (*Service, error)`，它是唯一返回 error 的模块构造器，错误沿启动链返回）；无状态的包级纯函数可直接导出（如 `mail.Render`）——都不算对外暴露内部实现。**
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
 7. 模块禁止自建数据库连接（禁止 `sql.Open` 等），只能用注入进来的连接；**同理禁止自建 SMTP 客户端，发信一律用注入的 `mail.Mailer`**。
 8. `internal/database` 不得 import 任何业务模块。
@@ -174,15 +174,30 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 ## 邮件
 
-只做后端发信能力（无路由模块，无 controller / dto），**当前没有任何模块消费它**（注册不验证邮箱）。`internal/modules/mail` 对外暴露 `Mailer` 接口与 `Render`，以及 `Message` / `Body` 数据结构、构造入口 `New` 和哨兵 `ErrClosed`：
+后端发信能力 + 管理端发信接口。`internal/modules/mail` 对外暴露 `*Module`（`New(cfg) *Module`，`m.Mailer` 是 `Mailer` 接口）与 `Render`，以及 `Message` / `Body` 数据结构和哨兵 `ErrClosed`：
 
 ```go
 body, err := mail.Render("example", map[string]string{"Time": "...", "Site": "NeoBlog"})
 mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", Body: body})
 ```
 
-- `Send` 只保证入队（缓冲 32），投递由后台 worker 串行执行：每封最多 3 次尝试、退避 1s / 5s、单次 20s 超时；**服务端 4xx 与连接类错误重试，5xx 不重试**，失败记结构化日志（`log/slog`）。
-- `Close(ctx)` 停收新消息并把队列投完（`app.Run` 关闭路径中先 `server.Shutdown` 再 `mailer.Close`，共用 10s 预算）；`Close` 之后 `Send` 返回 `mail.ErrClosed`。
+### 管理端接口
+
+| 方法 路径 | 认证 | 说明 |
+| --- | --- | --- |
+| `POST /api/v1/admin/mail/messages` | 登录 + 预设组守卫 | body `{"to":"收件邮箱"}` → 用当前 SMTP 配置**同步真发**一封 `example` 自检邮件 → 201 `{"to","subject","sent":true}`；收件地址不合法 400 `invalid_request`（`param:"to"`）；非 owner / admin 403 `forbidden`；SMTP 投递失败 500 `mail_delivery_failed` |
+
+规则：
+
+- 守卫链 `RequireAuth` → `LoadIdentity` → `RequirePresetGroup(owner, admin)`。**不走权限目录**：SMTP 配置是服务器级设置（环境变量），不属于可授出的业务权限域；owner / admin 天然持有全部权限，自建组不可授。
+- 投递走 `SendSync`：**单次尝试、不重试**；死线为拨号 20s（go-mail 对每条 SMTP 命令续期死线，**慢速对端总耗时可超 20s**，不是硬性总上限），失败时操作者可自行重试；失败细节看服务端结构化日志。收件地址经 `net/mail.ParseAddress` 解析（支持 `Name <addr>` 形式，取纯地址），主题与正文由服务器控制（`example` 模板），请求方不能指定内容。
+- 开发环境（`SMTP_HOST` 为空）降级为日志实现，接口永远 201（邮件全文在日志里，不真发）。
+
+### 发信能力
+
+- `Send` 只保证入队（缓冲 32），投递由后台 worker 串行执行：每封最多 3 次尝试、退避 1s / 5s、单次投递拨号死线 20s（go-mail 逐命令续期，非总上限）；**服务端 4xx 与连接类错误重试，5xx 不重试**，失败记结构化日志（`log/slog`）。业务流程（如验证邮件）一律用它。
+- `SendSync` 是同步单次投递，当前仅管理端自检接口使用。
+- `Close(ctx)` 停收新消息并把队列投完（`app.Run` 关闭路径中先 `server.Shutdown` 再 `mailer.Close`，共用 10s 预算）；`Close` 之后 `Send` / `SendSync` 返回 `mail.ErrClosed`。
 - 模板：`internal/modules/mail/templates/<name>.html` 与 `<name>.txt` 成对（HTML 侧用 `html/template` 自动转义）；内置一封 `example`（邮件配置自检）。
 - `SMTP_HOST` 为空时降级为日志实现：邮件全文写进日志但不发送，开发环境无需凭据即可跑通全流程。
 - 真实投递测试（可选）：`backend/.env` 填好 `SMTP_*` 与 `MAIL_TEST_RECIPIENT` 后跑 `go test ./internal/modules/mail/ -run TestRealDelivery -v`（测试会从包目录向上查找 `.env`，深度上限 5，不写死相对路径）。
