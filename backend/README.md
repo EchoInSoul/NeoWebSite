@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.9.0
+当前版本：0.10.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -21,7 +21,7 @@
 | `internal/modules/health/controller.go` | `health.controller.ts` | 本模块的路由声明与 HTTP 编解码（包内私有） |
 | `internal/modules/health/service.go` | `health.service.ts` | 业务逻辑，模块对外暴露的能力 |
 | `internal/modules/health/dto.go` | `dto/*.dto.ts` | 请求/响应数据结构 |
-| `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录 / 登出 / 当前用户 / 改密；`Register`（公开）与 `RegisterProtected`（受保护） |
+| `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录（含 2FA 分叉）/ 登出 / 当前用户 / 改密 / 两步验证五接口；`Register`（公开）与 `RegisterProtected`（受保护）；`totp.go` + `secretbox.go` 承载 TOTP 窗匹配与 secret 加密 |
 | `internal/modules/access/*` | `access.module.ts` 等 | 用户组与权限：组 CRUD、用户管理接口、生效权限解析；全部挂在权限守卫下 |
 | `internal/modules/mail/*` | `@nestjs-modules/mailer`（对照位） | 邮件能力 + 管理端发信接口：`Mailer` 接口（Send / SendSync / Close）+ SMTP / 日志双实现 + `templates/` 模板；异步 `Send` 走后台队列重试，同步 `SendSync` 单次尝试（管理端即时反馈用）；`POST /admin/mail/messages` 挂守卫链 + 预设组守卫；`SMTP_HOST` 为空时降级为日志 |
 | `internal/modules/settings` | `@nestjs/config`（存储对照位） | 无路由模块（无 controller / dto / Register，对外入口 `New(db) (*Service, error)`）：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；清单为空 = 全默认，加设置见「设置」章节配方 |
@@ -71,6 +71,7 @@ postsModule.Register(api)
 | `SMTP_FROM` | 无 | 发件地址；`SMTP_HOST` 非空时必填 |
 | `SMTP_FROM_NAME` | `NeoBlog` | 发件人显示名 |
 | `MAIL_TEST_RECIPIENT` | 空 | 仅测试用：与 `SMTP_*` 齐备时真实投递用例会向它发一封自检邮件 |
+| `TOTP_ENCRYPTION_KEY` | 无（必需） | 两步验证密钥的 AES-256-GCM 加密钥匙；base64 且解码后恰 32 字节；**缺失或非法启动即失败**；丢失后已启用 2FA 的用户验码报 500，只能清列重置 |
 | `POSTGRES_PASSWORD` | `neoblog` | 本地容器密码（compose 读 `.env`）；改动需同步 `DATABASE_URL` |
 
 ## 版本号
@@ -117,7 +118,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 应用启动绝不自动迁移；`ATLAS_DEV_URL` 缺省指向空的 `neoblog_atlas_dev`（脚本内默认值）。迁移文件里含数据（预设组 seed）或手工改造过 SQL 时，必须重算校验和：`atlas migrate hash --dir "file://migrations"` 再 `atlas migrate validate`（用户组与权限迁移是第一个带 seed 的）。工具链细节与已验证事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节。
 
-当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）。
+当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）→ `totp_last_counter`（`users` 加一列可空 bigint：TOTP 已认领的窗号，用于重放防护，纯 DDL 零数据）。
 
 ## 认证
 
@@ -128,10 +129,15 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 | 方法 路径 | 认证 | 说明 |
 | --- | --- | --- |
 | `POST /api/v1/auth/register` | 公开 | body `{"email","nickname","password"}` → 201 `{"email","nickname"}` + 会话 cookie（注册即登录）；400 `invalid_request` / `weak_password`；409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底） |
-| `POST /api/v1/auth/login` | 公开 | body `{"identifier":"邮箱或昵称","password":"..."}` → 200 + 会话 cookie；401 `invalid_credentials`；400 `invalid_request` |
+| `POST /api/v1/auth/login` | 公开 | body `{"identifier":"邮箱或昵称","password":"..."}` → 200 + 会话 cookie；401 `invalid_credentials`；400 `invalid_request`；**已启用 2FA 的账号密码正确也不算登录完成**：换发会话后返回 401 `two_factor_required`，会话转入「待二段」状态 |
 | `POST /api/v1/auth/logout` | 需登录 | 销毁会话，返回 200 `{}` |
-| `GET /api/v1/auth/me` | 需登录 | 返回 `{"email","nickname","group":{"id","system_key","name"},"permissions":["..."]}`（自建组 `system_key` 为 `null`，`permissions` 是展开后的生效权限）；未登录 401 `unauthorized` |
+| `GET /api/v1/auth/me` | 需登录 | 返回 `{"email","nickname","group":{"id","system_key","name"},"permissions":["..."],"two_factor_enabled":bool}`（自建组 `system_key` 为 `null`，`permissions` 是展开后的生效权限）；未登录 401 `unauthorized` |
 | `POST /api/v1/auth/password` | 需登录 | body `{"current_password","new_password"}` → 200 `{}`；旧密码错 401 `invalid_credentials`；400 `weak_password` / `password_unchanged` / `invalid_request` |
+| `POST /api/v1/auth/2fa/verify` | 公开（靠「待二段」会话） | body `{"code"}` → 200 与登录成功同形（验证码或恢复码皆可）；码错 401 `two_factor_invalid_code`（`param:"code"`）；连错 5 次 401 `two_factor_locked` 并销毁会话；无待验会话 401 `unauthorized`；空 body 400 `invalid_request`；密钥解密失败 500 `internal_error` |
+| `POST /api/v1/auth/2fa/setup` | 需登录 | 无 body → 200 `{"secret","otpauth_url"}`（明文 secret 只回这一次，二维码由前端渲染）；重复调用覆盖旧 secret（旧码作废、已认领窗号归零）；已启用 409 `two_factor_already_enabled` |
+| `POST /api/v1/auth/2fa/enable` | 需登录 | body `{"code"}` → 200 `{"recovery_codes":[…共 10 条]}`（明文只回这一次）；未 setup 409 `two_factor_not_setup`；码错 401 `two_factor_invalid_code`；**成功吊销该用户其它设备的会话**；密钥解密失败 500 `internal_error` |
+| `POST /api/v1/auth/2fa/disable` | 需登录 | body `{"password"}` → 200 `{}`；清空 secret / 启用时间 / 窗号并删除全部恢复码行；「设置中」也允许调（中途放弃）；未 setup 409 `two_factor_not_setup`；密码错 401 `invalid_credentials`；**同样吊销其它会话** |
+| `POST /api/v1/auth/2fa/recovery-codes` | 需登录 | body `{"password"}` → 200 `{"recovery_codes":[…共 10 条]}`；旧批（含已用过的）整体作废；未启用 409 `two_factor_not_enabled`；密码错 401 `invalid_credentials`；不吊销会话（要密码且已登录） |
 
 规则：
 
@@ -141,9 +147,18 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当 `APP_ENV=production`；登录与注册成功都会换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
 
-**已知缺口**：登录与注册**暂无限流**（防刷号 / 防撞库，计划下一轮优先补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效。
+**已知缺口**：登录、注册与两步验证 verify **暂无限流**（防刷号 / 防撞库 / 防在线暴破，计划下一轮一起补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效。
 
-**两步验证（TOTP + 自管恢复码）**：表结构已预留（见上方迁移清单），接口与登录分叉下一轮（spec：`docs/superpowers/specs/2026-10-11-neoblog-2fa-schema-design.md`）；当前无用户启用、无任何写入路径。
+**两步验证（TOTP + 自管恢复码）**：已实现（设计：`docs/superpowers/specs/2026-10-11-neoblog-2fa-design.md`；表结构见上方迁移清单的 `totp_and_recovery_codes` 与 `totp_last_counter`）。
+
+- 三态由两个可空列组合：`totp_secret` 空 = 未设置，非空且 `totp_enabled_at` 空 = 设置中，两者都非空 = 已启用。**登录分叉只看 `totp_enabled_at`**，「设置中」不拦登录（setup 可重复覆盖，disable 可中途放弃）。
+- 参数：TOTP 固定 SHA1 / 6 位 / 30 秒 / ±1 窗；恢复码每批 10 条、每条 16 随机字节的小写 hex（128 bit 熵），库里只存 sha256 hex、无有效期；输入侧的 trim + 转小写只在 `hashRecoveryCode` 一处归一。
+- secret 经 AES-256-GCM 加密后入列（密钥 `TOTP_ENCRYPTION_KEY`，随机 12 字节 nonce 前置、整体 base64）。**解密失败或 secret 本身非法 → 500 `internal_error`，且不消耗限次、不销毁会话**——密钥轮换或数据损坏不能伪装成验证码错误。
+- **重放防护**：命中的时间窗号必须大于 `totp_last_counter`，并用单条条件 UPDATE 的「影响行数 = 1」原子认领（并发提交同一枚码恰一人成功）。代价：该码所在的 30 秒窗整窗作废——刚验完又登出再登录要等下一窗，启用那一刻也占掉当窗（RFC 6238 §5.2 的标准取舍）。
+- 二段限次：会话内计数，连错 5 次销毁会话并返回 `two_factor_locked`；重走登录即续杯，**所以它不是在线暴破防御**，真正的闸门在登录限流那一轮（login 与 verify 同做）。
+- 待验态用独立会话键 `auth.pending_2fa_user_id` / `auth.pending_2fa_attempts` 承载，**guard 包零改动**；进入待验态会清除 `auth.user_id`，因此待验会话打任何受保护接口都是 401；登录与 verify 各换发一次会话 token（防会话固定）。
+- enable / disable **在验码或密码通过之后、落库之前**吊销其它设备会话（复用改密在用的 `revokeOtherSessions`）：怀疑密码泄露才开 2FA 时，攻击者的旧会话必须立刻失效。吊销失败则本次动作整体不生效（500、库里不变），不留「已启用但没领到恢复码」的死角。
+- 多写操作各自单事务：enable（置启用时间 + 插 10 码）、disable（清三列 + 删全部码行）、recovery-codes（删旧 + 插新）；setup 覆盖 secret 时一并清窗号。
 
 ### 用户组与权限
 

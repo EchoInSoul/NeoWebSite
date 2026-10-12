@@ -4,6 +4,51 @@
 
 ---
 
+## 2026-10-12 · 两步验证接口轮（TOTP + 恢复码 + 登录分叉 + 重放防护）
+
+**版本**：0.9.0 → **0.10.0**（minor：新能力域 + 5 条接口）
+
+### 做了什么
+
+- 5 条接口全部落地：`POST /auth/2fa/setup` / `enable` / `disable` / `recovery-codes`（守卫内）+ `POST /auth/2fa/verify`（公开，靠「待二段」会话）；`GET /auth/me` 增加 `two_factor_enabled`。路由 15 → **20 条**。
+- **登录二段分叉**：bcrypt 通过后只看 `totp_enabled_at`——已启用则 `RenewToken` → 清除 `auth.user_id` → 写 `auth.pending_2fa_user_id` → 401 `two_factor_required`。「设置中」不拦登录，待验会话打受保护接口必 401（两态不并存）。`guard` 包零改动。
+- **重放防护兑现**（用户裁定加列）：新迁移 `totp_last_counter`（可空 bigint、无默认、零回填）；命中窗号必须大于存量，且靠单条条件 UPDATE「影响行数 = 1」原子认领；恢复码消费同样单条条件 UPDATE（`used_at IS NULL`），并发同码恰一人成功。
+- **secret 加密**：AES-256-GCM（12 字节随机 nonce 前置 + 整体 base64），密钥走新环境变量 `TOTP_ENCRYPTION_KEY`（base64、解码后恰 32 字节，缺失/非法启动即失败）。校验点 `loadTOTPKey()` 钉在 `Load()` 末尾，因此既有 8 个「断言错误里含某变量名」的负例零改动，只有 7 个要求 `Load()` 成功的用例补了合法 key。
+- **enable / disable 吊销其它会话**（用户裁定）：复用改密在用的 `revokeOtherSessions`，且排在落库之前——失败即 500 且库里不变，不留「已启用但没领到恢复码、重试又撞 409」的死角。
+- **半程失败收进单事务**：enable（启用时间 + 插 10 码）、disable（清三列 + 删全部码行）、recovery-codes（删旧 + 插新）各一条 `client.Tx`（照 access/settings 先例）；setup 覆盖 secret 时一并清窗号。
+- **解密失败不再伪装成验证码错误**：`openSecret` 失败、已启用但 secret 为 NULL 的损坏态、`matchTOTPCounter` 因 secret 非法返回 error——三种一律 500 `internal_error`，不消耗限次、不销毁会话、不认领窗号；把列修回密文后同一枚码仍 200（有用例钉住）。
+- `apierror` 新增 6 个码（三个 401 `authentication_error` + 三个 409 `conflict_error`），注册表 20 → **26 条**（`TestRegistryIntegrity` 同步）。
+- 测试：config 3 例 + secretbox 5 例 + totp 原语 7 例 + repository 并发改判 3 例 + 2FA 生命周期集成 18 例（含双 jar 吊销、同窗重放、连错 5 次锁定、密文落库反解）。集成用例**零 `sleep`**：时间只经包内 `totpNow` 一处取，测试用 `pinWindow` 把窗号确定性前移。
+- 文档：README（环境变量表、迁移清单、目录对照表 auth 行、认证接口表 +5 行、两步验证章节整段重写、已知缺口并入 verify）；API 规范 §3 端点表 +5 行、§7.3 注册表 +6 行并订正 `invalid_credentials` 的场景列（改密与 2FA 密码确认都在用，`current_password_mismatch` 拆分按 §0 v1.3 仍未实施）。
+
+### 关键决定
+
+- **待验态走 scs 独立会话键**，不加中间件、不改守卫：`RequireAuth` 仍只认 `auth.user_id`，待验会话天然拿不到权限。
+- **认领与后续会话写不在同一事务**：认领成功而会话写失败会废掉一个窗，重试要下一窗——换取「不因会话存储抖动而回滚已验证的凭据」，代价记进已知缺口。
+- **恢复码再生成不吊销会话**：要密码且已登录，旧码作废本身不扩大攻击面；enable/disable 才吊销（动机是「怀疑密码泄露才开 2FA」）。
+- **限次只是会话内闸门**：每轮登录 5 次、重登续杯，不构成在线暴破防御；真正的闸门在登录限流轮，届时 login 与 verify 同做。
+
+### 执行中的口径修正（与计划/上一轮的出入，逐条实测后定）
+
+- **auth 模块构造器由 `New(db, sessions)` 变 `New(db, sessions, totpKey)`**：推翻 2FA schema 轮「该模块不需要配置」的旧记录——密钥是配置项，必须经 `app.go` 显式注入（README 目录表与 spec §6 同步）。
+- `pquerna/otp` 的引入落在**第一个 import 它的提交**（TOTP 原语那条），不在依赖引入那条：`go mod tidy` 会把尚无人引用的依赖从 go.mod 剔回去，先 `go get` 再 tidy 等于白加。
+- 新增错误码必须连 `apierror_test.go` 的注册表计数一起改（20 → 26），否则门禁红；计划该任务的文件清单漏了这个文件。
+- 「disable 吊销其它会话」的集成用例从 Task 5 挪到本轮：Task 5 时二段登录还不存在，第二个会话只能用「未启用期的单段登录」造出来，那种写法到本轮必然红。
+- 测试接缝 `codeAt` 带 `t *testing.T`（计划写的是不带的形状），取码失败要 `t.Fatalf`，不该向上层返回 error 让用例各自处理。
+- 请求 DTO 用 `TwoFactorCodeRequest` 一个类型（enable 与 verify 的 body 同为 `{"code"}`），不留两个同名同形的结构。
+
+### 已知缺口
+
+- **`TOTP_ENCRYPTION_KEY` 是部署面新增强依赖**：缺失启动即失败；密钥丢失 = 已启用用户验码一律 500，只能 DB 清列重置（`.env.example` 与 README 都写了备份要求）。恢复码在密钥丢失时同样救不了——解密发生在恢复码分支之前。
+- **重放防护的代价**：一枚码用过之后它所在窗整窗作废；用户在同一 30 秒内登出再登录需等下一窗，**启用那一刻也占掉当窗**（RFC 6238 §5.2 标准取舍）。
+- **认领不回滚**：verify 的计数认领与会话写非同事务，会话写失败该窗已废；enable 的认领与落位分两步，落位事务失败同样废一窗。只影响一次重试体验，不产生权限或数据不一致。
+- **限次续杯**：见上，暴破闸门等登录限流轮。
+- **disable 删全部恢复码行**（含已消费的）：不留存根，无法统计用户消费过几个码；需审计得改成标记作废。
+- **「吊销失败 → 整个动作不生效」这条分支本轮未构造测试**：要造会话存储故障才触发，代价大于收益，只靠调用顺序本身保证（改密轮的同类用例可参照）。
+- **本机 `-race` 仍不可用**（`CGO_ENABLED=1` 缺 gcc）：并发改判的正确性依据是「单条条件 UPDATE + 判断影响行数」在 Postgres 侧的行锁语义，两个并发用例各断言「恰一人成功」；不是靠 race 检测器证明的。
+
+---
+
 ## 2026-10-11 · 管理端发信接口（邮件模块升级为路由模块）
 
 **版本**：0.8.0 → **0.9.0**（minor：新 HTTP 能力）
