@@ -13,6 +13,8 @@ func TestCatalogMatchesFixedValues(t *testing.T) {
 		{Key: PermissionUsersEdit, Name: "管理用户"},
 		{Key: PermissionGroupsView, Name: "查看用户组"},
 		{Key: PermissionGroupsEdit, Name: "管理用户组"},
+		{Key: PermissionSettingsView, Name: "查看设置"},
+		{Key: PermissionSettingsEdit, Name: "管理设置"},
 	}
 	if got := Catalog(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("Catalog() = %#v, want %#v", got, want)
@@ -20,7 +22,9 @@ func TestCatalogMatchesFixedValues(t *testing.T) {
 	if PermissionUsersView != "system.users.view" ||
 		PermissionUsersEdit != "system.users.edit" ||
 		PermissionGroupsView != "system.groups.view" ||
-		PermissionGroupsEdit != "system.groups.edit" {
+		PermissionGroupsEdit != "system.groups.edit" ||
+		PermissionSettingsView != "system.settings.view" ||
+		PermissionSettingsEdit != "system.settings.edit" {
 		t.Fatal("permission key constants drifted from the fixed keys")
 	}
 }

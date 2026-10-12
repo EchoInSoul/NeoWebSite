@@ -34,14 +34,13 @@ const (
 )
 
 type App struct {
-	handler  http.Handler
-	server   *http.Server
-	mailer   mail.Mailer
-	settings *settings.Service
+	handler http.Handler
+	server  *http.Server
+	mailer  mail.Mailer
 }
 
 func New(cfg config.Config, db *database.Database) (*App, error) {
-	settingsService, err := settings.New(db)
+	settingsModule, err := settings.New(db)
 	if err != nil {
 		return nil, err
 	}
@@ -71,6 +70,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	authModule.RegisterProtected(protected)
 	accessModule.RegisterProtected(protected)
 	mailModule.RegisterProtected(protected)
+	settingsModule.RegisterProtected(protected)
 
 	engine.NoRoute(func(c *gin.Context) {
 		apierror.Write(c, apierror.ErrNotFound)
@@ -91,8 +91,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 			WriteTimeout:      writeTimeout,
 			IdleTimeout:       idleTimeout,
 		},
-		mailer:   mailModule.Mailer,
-		settings: settingsService,
+		mailer: mailModule.Mailer,
 	}, nil
 }
 

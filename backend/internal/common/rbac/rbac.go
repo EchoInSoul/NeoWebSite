@@ -7,10 +7,12 @@ import (
 )
 
 const (
-	PermissionUsersView  = "system.users.view"
-	PermissionUsersEdit  = "system.users.edit"
-	PermissionGroupsView = "system.groups.view"
-	PermissionGroupsEdit = "system.groups.edit"
+	PermissionUsersView    = "system.users.view"
+	PermissionUsersEdit    = "system.users.edit"
+	PermissionGroupsView   = "system.groups.view"
+	PermissionGroupsEdit   = "system.groups.edit"
+	PermissionSettingsView = "system.settings.view"
+	PermissionSettingsEdit = "system.settings.edit"
 )
 
 const (
@@ -45,6 +47,8 @@ var catalog = []Permission{
 	{Key: PermissionUsersEdit, Name: "管理用户"},
 	{Key: PermissionGroupsView, Name: "查看用户组"},
 	{Key: PermissionGroupsEdit, Name: "管理用户组"},
+	{Key: PermissionSettingsView, Name: "查看设置"},
+	{Key: PermissionSettingsEdit, Name: "管理设置"},
 }
 
 var presetGroups = []PresetGroup{

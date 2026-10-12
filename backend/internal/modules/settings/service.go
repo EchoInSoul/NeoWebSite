@@ -32,10 +32,6 @@ type Service struct {
 	logger   *slog.Logger
 }
 
-func New(db *database.Database) (*Service, error) {
-	return newServiceWith(db, builtinRegistry, slog.Default())
-}
-
 func newServiceWith(db *database.Database, groups []Group, logger *slog.Logger) (*Service, error) {
 	registry, err := compileRegistry(groups)
 	if err != nil {
