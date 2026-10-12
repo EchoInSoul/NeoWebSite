@@ -26,6 +26,10 @@ func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.POST("/auth/logout", c.logout)
 	r.GET("/auth/me", c.me)
 	r.POST("/auth/password", c.changePassword)
+	r.POST("/auth/2fa/setup", c.setupTwoFactor)
+	r.POST("/auth/2fa/enable", c.enableTwoFactor)
+	r.POST("/auth/2fa/disable", c.disableTwoFactor)
+	r.POST("/auth/2fa/recovery-codes", c.regenerateRecoveryCodes)
 }
 
 func (c *controller) login(ctx *gin.Context) {
@@ -122,4 +126,74 @@ func (c *controller) changePassword(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{})
+}
+
+func (c *controller) setupTwoFactor(ctx *gin.Context) {
+	resp, err := c.service.SetupTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey))
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
+func (c *controller) enableTwoFactor(ctx *gin.Context) {
+	var req TwoFactorEnableRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Code == "" {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	currentToken, err := ctx.Cookie("session")
+	if err != nil || currentToken == "" {
+		apierror.Write(ctx, apierror.ErrUnauthorized)
+		return
+	}
+
+	resp, err := c.service.EnableTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Code, currentToken)
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
+func (c *controller) disableTwoFactor(ctx *gin.Context) {
+	var req TwoFactorDisableRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Password == "" {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	currentToken, err := ctx.Cookie("session")
+	if err != nil || currentToken == "" {
+		apierror.Write(ctx, apierror.ErrUnauthorized)
+		return
+	}
+
+	err = c.service.DisableTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Password, currentToken)
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{})
+}
+
+func (c *controller) regenerateRecoveryCodes(ctx *gin.Context) {
+	var req TwoFactorDisableRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Password == "" {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	resp, err := c.service.RegenerateRecoveryCodes(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Password)
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, resp)
 }

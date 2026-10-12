@@ -34,7 +34,7 @@ func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Serv
 	engine := gin.New()
 	api := engine.Group("/api/v1")
 
-	module := New(db, sm)
+	module := New(db, sm, testTOTPKey)
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.LoadIdentity(accessModule.Service, sm))

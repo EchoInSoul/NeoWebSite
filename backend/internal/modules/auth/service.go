@@ -13,13 +13,16 @@ import (
 	"website/backend/internal/database/ent"
 )
 
+const recoveryCodesPerBatch = 10
+
 type Service struct {
 	repo      *repository
 	sessions  *scs.SessionManager
 	dummyHash []byte
+	totpKey   []byte
 }
 
-func newService(db *database.Database, sessions *scs.SessionManager) *Service {
+func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte) *Service {
 	dummy, err := bcrypt.GenerateFromPassword([]byte("timing-defense-placeholder"), bcrypt.DefaultCost)
 	if err != nil {
 		dummy = nil
@@ -28,6 +31,7 @@ func newService(db *database.Database, sessions *scs.SessionManager) *Service {
 		repo:      newRepository(db),
 		sessions:  sessions,
 		dummyHash: dummy,
+		totpKey:   totpKey,
 	}
 }
 
@@ -182,4 +186,140 @@ func (s *Service) CurrentUser(ctx context.Context, userID string) (User, error) 
 		return User{}, err
 	}
 	return toUser(found), nil
+}
+
+func (s *Service) SetupTOTP(ctx context.Context, userID string) (TwoFactorSetupResponse, error) {
+	found, err := s.activeUser(ctx, userID)
+	if err != nil {
+		return TwoFactorSetupResponse{}, err
+	}
+	if found.TotpEnabledAt != nil {
+		return TwoFactorSetupResponse{}, apierror.ErrTwoFactorAlreadyEnabled
+	}
+
+	setup, err := generateTOTPSetup(found.Email)
+	if err != nil {
+		return TwoFactorSetupResponse{}, err
+	}
+	sealed, err := sealSecret(s.totpKey, setup.Secret)
+	if err != nil {
+		return TwoFactorSetupResponse{}, err
+	}
+	if err := s.repo.updateTOTPSetup(ctx, found.ID, sealed); err != nil {
+		return TwoFactorSetupResponse{}, err
+	}
+	return TwoFactorSetupResponse{Secret: setup.Secret, OTPAuthURL: setup.OTPAuthURL}, nil
+}
+
+func (s *Service) EnableTOTP(ctx context.Context, userID, code, currentToken string) (RecoveryCodesResponse, error) {
+	found, err := s.activeUser(ctx, userID)
+	if err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+	if found.TotpSecret == nil {
+		return RecoveryCodesResponse{}, apierror.ErrTwoFactorNotSetup
+	}
+	if found.TotpEnabledAt != nil {
+		return RecoveryCodesResponse{}, apierror.ErrTwoFactorAlreadyEnabled
+	}
+
+	secret, err := openSecret(s.totpKey, *found.TotpSecret)
+	if err != nil {
+		return RecoveryCodesResponse{}, apierror.ErrInternal
+	}
+
+	now := totpNow()
+	counter, matched, err := matchTOTPCounter(code, secret, now)
+	if err != nil {
+		return RecoveryCodesResponse{}, apierror.ErrInternal
+	}
+	if !matched {
+		return RecoveryCodesResponse{}, apierror.ErrTwoFactorInvalidCode
+	}
+
+	if err := s.revokeOtherSessions(ctx, userID, currentToken); err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+
+	claimed, err := s.repo.claimTOTPCounter(ctx, found.ID, counter)
+	if err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+	if !claimed {
+		return RecoveryCodesResponse{}, apierror.ErrTwoFactorInvalidCode
+	}
+
+	codes, hashes, err := issueRecoveryCodes()
+	if err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+	if err := s.repo.enableTOTP(ctx, found.ID, now, hashes); err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+	return RecoveryCodesResponse{RecoveryCodes: codes}, nil
+}
+
+func (s *Service) DisableTOTP(ctx context.Context, userID, password, currentToken string) error {
+	found, err := s.activeUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if found.TotpSecret == nil {
+		return apierror.ErrTwoFactorNotSetup
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(password)); err != nil {
+		return apierror.ErrInvalidCredentials
+	}
+
+	if err := s.revokeOtherSessions(ctx, userID, currentToken); err != nil {
+		return err
+	}
+	return s.repo.disableTOTP(ctx, found.ID)
+}
+
+func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID, password string) (RecoveryCodesResponse, error) {
+	found, err := s.activeUser(ctx, userID)
+	if err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+	if found.TotpEnabledAt == nil {
+		return RecoveryCodesResponse{}, apierror.ErrTwoFactorNotEnabled
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(password)); err != nil {
+		return RecoveryCodesResponse{}, apierror.ErrInvalidCredentials
+	}
+
+	codes, hashes, err := issueRecoveryCodes()
+	if err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+	if err := s.repo.replaceRecoveryCodes(ctx, found.ID, hashes); err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+	return RecoveryCodesResponse{RecoveryCodes: codes}, nil
+}
+
+func (s *Service) activeUser(ctx context.Context, userID string) (*ent.User, error) {
+	found, err := s.repo.findUserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, errUserNotFound) {
+			s.sessions.Destroy(ctx)
+			return nil, apierror.ErrUnauthorized
+		}
+		return nil, err
+	}
+	return found, nil
+}
+
+func issueRecoveryCodes() ([]string, []string, error) {
+	codes, err := generateRecoveryCodes(recoveryCodesPerBatch)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	hashes := make([]string, 0, len(codes))
+	for _, code := range codes {
+		hashes = append(hashes, hashRecoveryCode(code))
+	}
+	return codes, hashes, nil
 }

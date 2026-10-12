@@ -13,8 +13,8 @@ type Module struct {
 	controller *controller
 }
 
-func New(db *database.Database, sessions *scs.SessionManager) *Module {
-	service := newService(db, sessions)
+func New(db *database.Database, sessions *scs.SessionManager, totpKey []byte) *Module {
+	service := newService(db, sessions, totpKey)
 	return &Module{
 		Service:    service,
 		controller: newController(service),
