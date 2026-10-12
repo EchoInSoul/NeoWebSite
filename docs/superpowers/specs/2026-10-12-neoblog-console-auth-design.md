@@ -12,7 +12,7 @@
 
 现状登记（避免下一轮误判范围）：
 
-- 前端登录/注册接线**已进分支**：`16e210a`（`/api` 转发 + `apiRequest` + Toaster）、`9e57fe2`（page 只留 metadata + 拆 `-view.tsx`）、`e4010f7`、`08b7848`、`aeecb9b`、`22d272c`。现有落点：`frontend/lib/api.ts`（浏览器侧请求底座）、`hooks/use-signin.ts` / `hooks/use-signup.ts`（逻辑）、`app/signin|signup/*-view.tsx` + `*-form.tsx`、`components/auth/field-error.tsx`。
+- 前端登录/注册接线**已进分支**：`16e210a`（`/api` 转发 + `apiRequest` + Toaster）、`9e57fe2`（page 只留 metadata + 拆 `-view.tsx`）、`e4010f7`、`08b7848`、`aeecb9b`、`22d272c`。当时的落点：`frontend/lib/api.ts`（浏览器侧请求底座）、`hooks/use-signin.ts` / `hooks/use-signup.ts`（逻辑）、`app/signin|signup/*-view.tsx` + `*-form.tsx`、`components/auth/field-error.tsx`。**后续订正**：`components/auth/field-error.tsx` 已随 `0e8a4be`（2026-10-12 表单报错改 sonner 单条弹出）删除，两个表单不再挂 `aria-invalid`、字段下方不放报错小字；本文其余条目不受影响。
 - **但纯 CSR 门控已被撤销**：`hooks/use-is-client.ts` 不存在，`signin-view.tsx` / `signup-view.tsx` 里没有 `useSyncExternalStore` 门控，两个 `-view` 是普通 Client Component（服务端照常渲染 HTML 再水合）。本设计不依赖 CSR/SSR 之争，也不擅自恢复该门控；若要恢复另开一轮。
 - 旧口径未更正：`docs/superpowers/plans/2026-10-11-neoblog-auth.md:13` 原文「按用户要求收窄为后端 only——Task 7 与 Task 9 不纳入本分支……这两节作废」，与现状不符。本文 §9 收尾步骤登记更正。
 - 后端会话 cookie：名 `session`、HttpOnly、SameSite=Lax、`Path=/`、`Secure` 仅 `APP_ENV=production`，`SESSION_LIFETIME` 默认 168h（`backend/internal/app/app.go:107-117`、`backend/internal/config/config.go:70`）。cookie 值是 scs 的随机 token，**前端解不出内容**，真假只能问后端。

@@ -17,6 +17,7 @@
 - 文案中英文：中文为主，组件名/变体名用原文（如 `default`、`InputGroupInput`）。
 - 每个任务结束跑：`npm --prefix frontend run format:check`、`node frontend/node_modules/typescript/bin/tsc -p frontend/tsconfig.json --noEmit`、`npm --prefix frontend run lint`，全绿才提交。
 - 按文件清单 `git add`，禁止 `git add -A`；提交信息风格 `feat(frontend): ...`。
+- **执行状态（2026-10-12 追加）**：Task 1–3 已随提交 `124ed88` 落地，下方勾选未同步。其中 **Task 2 的说明文案已失效**——提交 `0e8a4be` 把业务表单报错改成 sonner 单条弹出、取消字段标红，`components/auth/field-error.tsx` 已删除；Task 2 标题与 Step 1 已按新口径订正，**勿照旧文案重跑**。
 
 ## Review Focus
 
@@ -24,7 +25,7 @@
 - 中英文案里的 `{minLength}` 这类插值括号被 prettier 或 JSX 转义吃掉——预期页面渲染出原文括号。
 - `sonner` 说明块里的 toast 演示按钮与现有两个演示按钮互相覆盖——预期三个按钮并排，各弹各的。
 - `sidebar` 说明写了"控制台专用"但 `ui-check` 里 sidebar demo 本身就在控制台外——预期说明写清"此 demo 仅展示，业务只许控制台用"。
-- 改完 `ui-check` 整页 1078 行变 1200+ 行后首屏滚动定位漂移——预期纯文案追加，不动 `Section` 顺序与锚点。
+- 改完 `ui-check` 整页 1105 行后再追加会到 1200+ 行，首屏滚动定位可能漂移——预期纯文案追加，不动 `Section` 顺序与锚点。
 
 ---
 
@@ -58,7 +59,7 @@ git add frontend/app/ui-check/page.tsx
 git commit -m "feat(frontend): ui-check 补按钮变体用法说明"
 ```
 
-### Task 2: 输入组合说明块（input + input-group + label + auth/FieldError）
+### Task 2: 输入组合说明块（input + input-group + label；报错走 sonner）
 
 **Files:**
 - Modify: `frontend/app/ui-check/page.tsx`（"输入与表单" Section，约 :454-635）
@@ -70,7 +71,7 @@ git commit -m "feat(frontend): ui-check 补按钮变体用法说明"
 
 - [ ] **Step 1: 在"输入与表单" Section 顶部加一段说明块**
 
-同一文件 `<Section title="输入与表单">` 内、第一个 `Demo` 之前，加同样式 `<p>`，内容：业务表单照登录页组合——`Label` + `Input`（或 `InputGroupInput` + 密码可见切换）+ `auth/FieldError`，错误时输入框挂 `aria-invalid` 并用 `aria-describedby` 绑报错 `id`（范例 `app/signin/signin-form.tsx:59-64`）；业务不许用 `ui/field` 的 `FieldError`，`ui-check` 里 `field` 那块 demo 只做展示。
+同一文件 `<Section title="输入与表单">` 内、第一个 `Demo` 之前，加同样式 `<p>`，内容：业务表单照登录页组合——`Label` + `Input`（或 `InputGroupInput` + 密码可见切换）；报错一律走 sonner toast，一次只报第一个不合规字段，输入框不挂 `aria-invalid`、字段下方不放报错小字（范例 `app/signin/signin-form.tsx` + `hooks/use-signin.ts`）；业务不许用 `ui/field` 的 `FieldError`，`ui-check` 里 `field` 那块 demo 只做展示。（2026-10-12 订正：原文写的是 `auth/FieldError` + `aria-invalid`/`aria-describedby` 就地报错，已被 `0e8a4be` 推翻。）
 
 - [ ] **Step 2: 跑三项校验**
 
@@ -85,7 +86,7 @@ Expected: 全绿。
 
 ```bash
 git add frontend/app/ui-check/page.tsx
-git commit -m "feat(frontend): ui-check 补输入组合与 FieldError 用法说明"
+git commit -m "feat(frontend): ui-check 补输入组合用法说明（报错走 sonner）"
 ```
 
 ### Task 3: 剩余 3 处说明块（sidebar + dropdown-menu + sonner）
@@ -108,7 +109,7 @@ git commit -m "feat(frontend): ui-check 补输入组合与 FieldError 用法说�
 
 - [ ] **Step 3: 加 sonner 说明**
 
-`sonner（点击按钮）` demo（约 :1049-1058）旁加同样式 `<p>`，内容：成功/失败 toast（注册成功、登出失败）；`sonner` 走全局 `Toaster`（`app/layout.tsx:7`），业务只调 `toast.success` / `toast.error`。
+`sonner（点击按钮）` demo（约 :1049-1058，行数随追加漂移）旁加同样式 `<p>`，内容：成功 / 失败 toast（注册成功、登出失败，以及业务表单报错——一次只弹第一条）；`sonner` 走全局 `Toaster`（`app/layout.tsx:7` 引、`:42` 挂），业务只调 `toast.success` / `toast.error`。
 
 - [ ] **Step 4: 跑三项校验**
 
