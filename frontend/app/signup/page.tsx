@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
+import { getAuthenticatedUser } from "@/lib/auth-session";
 import { SignupView } from "./signup-view";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -11,6 +13,10 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function SignupPage() {
+export default async function SignupPage() {
+  if (await getAuthenticatedUser()) {
+    redirect("/console");
+  }
+
   return <SignupView />;
 }
