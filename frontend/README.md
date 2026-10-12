@@ -20,6 +20,12 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## 环境变量
+
+| 变量          | 默认值                  | 说明                                                                                                                                                                       |
+| ------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BACKEND_URL` | `http://127.0.0.1:5732` | `/api/:path*` 的转发目标（`next.config.ts` 的 `rewrites`）。只在 `next dev` / `next start` 进程启动时读取，改了要重启；浏览器与前端同源，会话 cookie 自然带上，无需 CORS。 |
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
