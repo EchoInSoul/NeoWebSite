@@ -6,21 +6,23 @@ import { useTranslations } from "next-intl";
 import { AuthFrame } from "@/components/auth/auth-frame";
 import { SigninForm } from "./signin-form";
 
-export function SigninView() {
+export function SigninView({ signupOpen }: { signupOpen: boolean }) {
   const t = useTranslations("auth.signin");
 
   return (
     <AuthFrame
       footer={
-        <p className="mt-5 flex items-center justify-center gap-1 text-center text-sm text-muted-foreground">
-          {t("prompt")}
-          <Link
-            href="/signup"
-            className="font-medium text-primary underline-offset-4 hover:underline"
-          >
-            {t("link")}
-          </Link>
-        </p>
+        signupOpen ? (
+          <p className="mt-5 flex items-center justify-center gap-1 text-center text-sm text-muted-foreground">
+            {t("prompt")}
+            <Link
+              href="/signup"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              {t("link")}
+            </Link>
+          </p>
+        ) : undefined
       }
     >
       <div>

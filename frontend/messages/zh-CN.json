@@ -58,6 +58,7 @@
       "nameTaken": "该用户名已被占用",
       "alreadyTaken": "该邮箱或用户名已被占用",
       "invalidRequest": "填写内容有误，请检查后重试",
+      "registrationClosed": "注册功能已关闭",
       "failed": "注册失败，请稍后重试",
       "success": "注册成功，请登录",
       "prompt": "已有账号？",

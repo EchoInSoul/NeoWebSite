@@ -58,6 +58,7 @@
       "nameTaken": "This username is already taken",
       "alreadyTaken": "This email or username is already taken",
       "invalidRequest": "Some details are invalid, please review and try again",
+      "registrationClosed": "Sign-ups are currently closed",
       "failed": "Sign up failed, please try again later",
       "success": "Account created, please sign in",
       "prompt": "Already have an account?",

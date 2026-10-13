@@ -66,6 +66,8 @@ export function useSignupForm() {
           return { message: t("alreadyTaken") };
         case "invalid_request":
           return { message: t("invalidRequest") };
+        case "registration_closed":
+          return { message: t("registrationClosed") };
       }
     }
 
