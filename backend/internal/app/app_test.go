@@ -13,6 +13,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -103,6 +104,28 @@ func login(t *testing.T, client *http.Client, base, identifier, password string)
 		t.Fatalf("login: %v", err)
 	}
 	return resp
+}
+
+func loginWithLogout(t *testing.T, client *http.Client, ts *httptest.Server, identifier, password string) {
+	t.Helper()
+
+	resp := login(t, client, ts.URL, identifier, password)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want 200", resp.StatusCode)
+	}
+
+	t.Cleanup(func() {
+		request, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+		if err != nil {
+			return
+		}
+		logoutResp, err := client.Do(request)
+		if err != nil {
+			return
+		}
+		logoutResp.Body.Close()
+	})
 }
 
 func sessionCookie(resp *http.Response) *http.Cookie {
@@ -607,12 +630,7 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
-
-	loginResp := login(t, client, ts.URL, u.Email, password)
-	loginResp.Body.Close()
-	if loginResp.StatusCode != http.StatusOK {
-		t.Fatalf("login status = %d, want 200", loginResp.StatusCode)
-	}
+	loginWithLogout(t, client, ts, u.Email, password)
 
 	blockerTag := fmt.Sprintf("%d", time.Now().UnixNano())
 	blocker, err := db.Client.User.Create().
@@ -638,21 +656,49 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 	}
 
 	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{})
-	if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" {
-		t.Fatalf("empty body = %d %v, want 400 invalid_request", status, body)
+	if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "" {
+		t.Fatalf("empty body = %d %v, want 400 invalid_request with no param", status, body)
+	}
+
+	for _, malformed := range []any{
+		json.RawMessage("null"),
+		[]any{"nickname"},
+		"nickname",
+		42,
+		map[string]any{"nickname": nil},
+	} {
+		status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, malformed)
+		if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" {
+			t.Fatalf("malformed %v = %d %v, want 400 invalid_request", malformed, status, body)
+		}
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": 42})
+	if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "" {
+		t.Fatalf("typed nickname = %d %v, want 400 invalid_request with no param", status, body)
 	}
 
 	for _, invalid := range []map[string]any{
-		{"nickname": "a"},
 		{"nickname": "with space"},
 		{"nickname": "with@at"},
-		{"email": "not-an-email"},
-		{"nickname": 42},
+		{"nickname": "  "},
+		{"nickname": strings.Repeat("n", 33)},
+		{"email": strings.Repeat("e", 250) + "@test.local"},
 	} {
 		status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, invalid)
 		if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" {
 			t.Fatalf("invalid %v = %d %v, want 400 invalid_request", invalid, status, body)
 		}
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": "a"})
+	if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "nickname" {
+		t.Fatalf("short nickname = %d %v, want 400 invalid_request with param nickname", status, body)
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"email": "not-an-email"})
+	if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "email" {
+		t.Fatalf("bad email = %d %v, want 400 invalid_request with param email", status, body)
 	}
 
 	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{
@@ -668,18 +714,7 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 		t.Fatalf("resubmit unchanged = %d %v, want 200", status, body)
 	}
 
-	me, err := client.Get(ts.URL + "/api/v1/auth/me")
-	if err != nil {
-		t.Fatalf("me: %v", err)
-	}
-	defer me.Body.Close()
-	var meBody map[string]any
-	if err := json.NewDecoder(me.Body).Decode(&meBody); err != nil {
-		t.Fatalf("decode me: %v", err)
-	}
-	if meBody["nickname"] != nickname || meBody["email"] != email {
-		t.Fatalf("me after update = %v, want %s / %s", meBody, nickname, email)
-	}
+	assertProfile(t, client, ts, nickname, email)
 
 	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": blocker.Nickname})
 	if status != http.StatusConflict || envelopeCode(body) != "nickname_taken" {
@@ -694,6 +729,125 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": nickname + "x"})
 	if status != http.StatusOK || body["email"] != email {
 		t.Fatalf("partial update = %d %v, want 200 keeping email", status, body)
+	}
+
+	emojiNickname := "🙂" + profileTag[len(profileTag)-6:]
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": emojiNickname})
+	if status != http.StatusOK || body["nickname"] != emojiNickname || body["email"] != email {
+		t.Fatalf("emoji nickname = %d %v, want 200 keeping email", status, body)
+	}
+	assertProfile(t, client, ts, emojiNickname, email)
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": "  " + emojiNickname + "  "})
+	if status != http.StatusOK || body["nickname"] != emojiNickname {
+		t.Fatalf("padded resubmit = %d %v, want 200 with trimmed self-match", status, body)
+	}
+}
+
+func TestUpdateProfileRejectedWriteLeavesBothFieldsUnchanged(t *testing.T) {
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
+	u, password := createTestUser(t, db)
+	client := newClient(t)
+	loginWithLogout(t, client, ts, u.Email, password)
+
+	tag := fmt.Sprintf("%d", time.Now().UnixNano())
+	blocker, err := db.Client.User.Create().
+		SetEmail("blocker+" + tag + "@test.local").
+		SetNickname("blocker" + tag).
+		SetPasswordHash("not-a-usable-hash").
+		Save(context.Background())
+	if err != nil {
+		t.Fatalf("create blocker user: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Client.User.DeleteOneID(blocker.ID).Exec(context.Background())
+	})
+
+	endpoint := ts.URL + "/api/v1/users/me"
+	freeNickname := "free" + tag
+	freeEmail := "free" + tag + "@test.local"
+
+	status, body := exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{
+		"nickname": freeNickname,
+		"email":    blocker.Email,
+	})
+	if status != http.StatusConflict || envelopeCode(body) != "email_taken" {
+		t.Fatalf("free nickname with taken email = %d %v, want 409 email_taken", status, body)
+	}
+	assertProfile(t, client, ts, u.Nickname, u.Email)
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{
+		"nickname": blocker.Nickname,
+		"email":    freeEmail,
+	})
+	if status != http.StatusConflict || envelopeCode(body) != "nickname_taken" {
+		t.Fatalf("taken nickname with free email = %d %v, want 409 nickname_taken", status, body)
+	}
+	assertProfile(t, client, ts, u.Nickname, u.Email)
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"email": freeEmail})
+	if status != http.StatusOK || body["email"] != freeEmail || body["nickname"] != u.Nickname {
+		t.Fatalf("email only update = %d %v, want 200 with nickname kept", status, body)
+	}
+	assertProfile(t, client, ts, u.Nickname, freeEmail)
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": freeNickname})
+	if status != http.StatusOK || body["nickname"] != freeNickname || body["email"] != freeEmail {
+		t.Fatalf("nickname only update = %d %v, want 200 with email kept", status, body)
+	}
+	assertProfile(t, client, ts, freeNickname, freeEmail)
+}
+
+func TestUpdateProfileConcurrentSameNickname(t *testing.T) {
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
+	first, firstPassword := createTestUser(t, db)
+	second, secondPassword := createTestUser(t, db)
+
+	firstClient := newClient(t)
+	loginWithLogout(t, firstClient, ts, first.Email, firstPassword)
+	secondClient := newClient(t)
+	loginWithLogout(t, secondClient, ts, second.Email, secondPassword)
+
+	tag := fmt.Sprintf("%d", time.Now().UnixNano())
+	endpoint := ts.URL + "/api/v1/users/me"
+
+	type outcome struct {
+		status int
+		code   string
+		err    error
+	}
+
+	results := make([]outcome, 2)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(2)
+	for index, client := range []*http.Client{firstClient, secondClient} {
+		go func(index int, client *http.Client) {
+			defer waitGroup.Done()
+			status, body, err := patchJSON(client, endpoint, map[string]any{"nickname": "race" + tag})
+			results[index] = outcome{status: status, code: envelopeCode(body), err: err}
+		}(index, client)
+	}
+	waitGroup.Wait()
+
+	succeeded, conflicted := 0, 0
+	for _, result := range results {
+		if result.err != nil {
+			t.Fatalf("concurrent patch: %v", result.err)
+		}
+		switch result.status {
+		case http.StatusOK:
+			succeeded++
+		case http.StatusConflict:
+			conflicted++
+			if result.code != "nickname_taken" && result.code != "already_taken" {
+				t.Fatalf("conflict code = %q, want nickname_taken or already_taken", result.code)
+			}
+		default:
+			t.Fatalf("unexpected status %d (all: %v)", result.status, results)
+		}
+	}
+	if succeeded != 1 || conflicted != 1 {
+		t.Fatalf("succeeded/conflicted = %d/%d, want 1/1", succeeded, conflicted)
 	}
 }
 
@@ -798,6 +952,62 @@ func envelopeCode(decoded map[string]any) string {
 	}
 	code, _ := errObj["code"].(string)
 	return code
+}
+
+func envelopeParam(decoded map[string]any) string {
+	errObj, ok := decoded["error"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	param, _ := errObj["param"].(string)
+	return param
+}
+
+func assertProfile(t *testing.T, client *http.Client, ts *httptest.Server, nickname, email string) map[string]any {
+	t.Helper()
+
+	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	defer me.Body.Close()
+	if me.StatusCode != http.StatusOK {
+		t.Fatalf("me status = %d, want 200", me.StatusCode)
+	}
+
+	var meBody map[string]any
+	if err := json.NewDecoder(me.Body).Decode(&meBody); err != nil {
+		t.Fatalf("decode me: %v", err)
+	}
+	if meBody["nickname"] != nickname || meBody["email"] != email {
+		t.Fatalf("profile = %v, want %s / %s", meBody, nickname, email)
+	}
+	return meBody
+}
+
+func patchJSON(client *http.Client, endpoint string, body any) (int, map[string]any, error) {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	request, err := http.NewRequest(http.MethodPatch, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return 0, nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(request)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+
+	var decoded map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return resp.StatusCode, nil, err
+	}
+	return resp.StatusCode, decoded, nil
 }
 
 func TestRegistrationControlEndToEnd(t *testing.T) {
