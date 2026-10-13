@@ -3,6 +3,8 @@
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 
+import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
+import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
 import {
   Alert,
   AlertAction,
@@ -73,6 +75,11 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Combobox,
   ComboboxContent,
@@ -256,12 +263,24 @@ import {
   AlignLeftIcon,
   BoldIcon,
   CheckIcon,
+  ChevronDownIcon,
   CircleAlertIcon,
+  CircleDot,
   FileTextIcon,
+  Gauge,
   InfoIcon,
   ItalicIcon,
+  Minimize2,
+  Monitor,
+  MonitorCog,
+  MonitorSmartphone,
+  Paintbrush,
   PaperclipIcon,
+  Pin,
   PlusIcon,
+  Scaling,
+  ScreenShare,
+  Search,
   TrashIcon,
 } from "lucide-react";
 
@@ -344,7 +363,7 @@ export default function UiCheckPage() {
           shadcn/ui 全组件检查页
         </h1>
         <p className="text-sm text-muted-foreground">
-          共 47 个组件（base 底座 / nova 预设）。
+          共 48 个组件（base 底座 / nova 预设）。
           <code className="font-mono">form</code> 在 Base UI 注册表里是空壳，由{" "}
           <code className="font-mono">field</code> 取代。
         </p>
@@ -527,7 +546,10 @@ export default function UiCheckPage() {
           </div>
         </Demo>
         <Demo label="select">
-          <Select defaultValue="apple">
+          <Select
+            defaultValue="apple"
+            items={{ apple: "苹果", banana: "香蕉", grape: "葡萄" }}
+          >
             <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
@@ -770,6 +792,213 @@ export default function UiCheckPage() {
               </TableRow>
             </TableFooter>
           </Table>
+        </Demo>
+      </Section>
+
+      <Separator />
+
+      <Section title="设置列表（Win11 风格）">
+        <p className="max-w-prose text-sm text-muted-foreground">
+          组合件长在 shadcn 底座上：分组是{" "}
+          <code className="font-mono">console-settings-group</code>（card 的
+          size=none 尺寸，行整行铺满、行间一根分隔线），行是{" "}
+          <code className="font-mono">console-settings-row</code>（item 的 flush
+          + lg 变体）。行里可放控件；给 href 就整行可点、尾巴出箭头；给
+          expandedContent 就变成 collapsible 可展开行。可点行的点击靠 item 里{" "}
+          <code className="font-mono">absolute inset-0</code> 的覆盖层，控件列在
+          item 源码里是 <code className="font-mono">relative z-10</code>
+          （否则控件会被覆盖层挡住点不动），最后那一组就是这条契约的回归。
+        </p>
+        <Demo label="console-settings-group + console-settings-row" wide>
+          <div className="flex w-full max-w-[1000px] flex-col gap-5">
+            <ConsoleSettingsGroup title="屏幕">
+              <ConsoleSettingsRow
+                icon={<Scaling />}
+                label="缩放"
+                description="更改文本、应用和其他项目的大小"
+                control={
+                  <Select
+                    defaultValue="100"
+                    items={{
+                      "100": "100%（推荐）",
+                      "125": "125%",
+                      "150": "150%",
+                    }}
+                  >
+                    <SelectTrigger aria-label="缩放" className="w-45" size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="100">100%（推荐）</SelectItem>
+                      <SelectItem value="125">125%</SelectItem>
+                      <SelectItem value="150">150%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                }
+              />
+              <ConsoleSettingsRow
+                icon={<Monitor />}
+                label="显示器分辨率"
+                description="调整分辨率以适合所连接的显示器"
+                control={
+                  <Select
+                    defaultValue="1920x1080"
+                    items={{
+                      "1920x1080": "1920 × 1080（推荐）",
+                      "2560x1440": "2560 × 1440",
+                    }}
+                  >
+                    <SelectTrigger
+                      aria-label="显示器分辨率"
+                      className="w-45"
+                      size="sm"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1920x1080">
+                        1920 × 1080（推荐）
+                      </SelectItem>
+                      <SelectItem value="2560x1440">2560 × 1440</SelectItem>
+                    </SelectContent>
+                  </Select>
+                }
+              />
+              <ConsoleSettingsRow
+                icon={<ScreenShare />}
+                label="显示方向"
+                control={
+                  <Select
+                    defaultValue="landscape"
+                    items={{ landscape: "横向", portrait: "纵向" }}
+                  >
+                    <SelectTrigger
+                      aria-label="显示方向"
+                      className="w-45"
+                      size="sm"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="landscape">横向</SelectItem>
+                      <SelectItem value="portrait">纵向</SelectItem>
+                    </SelectContent>
+                  </Select>
+                }
+              />
+              <ConsoleSettingsRow
+                defaultExpanded
+                icon={<MonitorSmartphone />}
+                label="多显示器"
+                description="选择显示器的呈现模式"
+                expandedContent={
+                  <>
+                    <ConsoleSettingsRow
+                      icon={<Pin />}
+                      label="基于显示器连接记住窗口位置"
+                      control={
+                        <Switch
+                          aria-label="基于显示器连接记住窗口位置"
+                          defaultChecked
+                        />
+                      }
+                    />
+                    <ConsoleSettingsRow
+                      icon={<Minimize2 />}
+                      label="在显示器断开连接时最小化窗口"
+                      control={
+                        <Switch
+                          aria-label="在显示器断开连接时最小化窗口"
+                          defaultChecked
+                        />
+                      }
+                    />
+                    <ConsoleSettingsRow
+                      icon={<Search />}
+                      label="检测其他显示器"
+                      control={
+                        <Button size="sm" variant="secondary">
+                          检测
+                        </Button>
+                      }
+                    />
+                  </>
+                }
+              />
+            </ConsoleSettingsGroup>
+            <ConsoleSettingsGroup title="相关设置">
+              <ConsoleSettingsRow
+                href="#"
+                icon={<MonitorCog />}
+                label="高级显示器设置"
+                description="显示器信息，刷新率"
+              />
+              <ConsoleSettingsRow href="#" icon={<Gauge />} label="显卡" />
+              <ConsoleSettingsRow
+                href="#"
+                icon={<Paintbrush />}
+                label="屏幕色调"
+                description="添加细微的颜色叠加，让屏幕观看更舒适"
+              />
+              <ConsoleSettingsRow
+                href="#"
+                icon={<CircleDot />}
+                label="屏幕指示器的位置"
+                description="此位置将显示音量、亮度和其他控件"
+              />
+            </ConsoleSettingsGroup>
+            <ConsoleSettingsGroup title="可点行里的控件（层级回归）">
+              <ConsoleSettingsRow
+                href="#"
+                icon={<Gauge />}
+                label="驱动更新"
+                description="整行可点，右侧按钮必须也能点"
+                control={
+                  <Button size="sm" variant="secondary">
+                    检查更新
+                  </Button>
+                }
+              />
+              <ConsoleSettingsRow
+                defaultExpanded
+                icon={<Paintbrush />}
+                label="色彩配置"
+                description="整行可展开，右侧下拉必须也能展开"
+                control={
+                  <Select
+                    defaultValue="srgb"
+                    items={{ srgb: "sRGB", p3: "Display P3" }}
+                  >
+                    <SelectTrigger
+                      aria-label="色彩配置"
+                      className="w-45"
+                      size="sm"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="srgb">sRGB</SelectItem>
+                      <SelectItem value="p3">Display P3</SelectItem>
+                    </SelectContent>
+                  </Select>
+                }
+                expandedContent={
+                  <ConsoleSettingsRow label="色彩配置文件说明" />
+                }
+              />
+            </ConsoleSettingsGroup>
+          </div>
+        </Demo>
+        <Demo label="collapsible">
+          <Collapsible className="w-80 rounded-lg border border-border">
+            <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium">
+              多显示器
+              <ChevronDownIcon className="size-4 text-muted-foreground" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
+              展开区域内容。
+            </CollapsibleContent>
+          </Collapsible>
         </Demo>
       </Section>
 
