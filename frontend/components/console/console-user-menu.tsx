@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CircleUserRound,
   ExternalLink,
   Languages,
   LogOut,
@@ -102,6 +103,11 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
           >
             <ExternalLink />
             <span>{t("visitSite")}</span>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem render={<a href="/console/uc" />}>
+            <CircleUserRound />
+            <span>{t("profile")}</span>
           </DropdownMenuItem>
 
           <DropdownMenuSub>
