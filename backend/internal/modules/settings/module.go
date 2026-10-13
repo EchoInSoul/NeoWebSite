@@ -25,6 +25,10 @@ func New(db *database.Database) (*Module, error) {
 	}, nil
 }
 
+func (m *Module) Register(r *gin.RouterGroup) {
+	m.controller.register(r)
+}
+
 func (m *Module) RegisterProtected(r *gin.RouterGroup) {
 	m.controller.registerProtected(r)
 }

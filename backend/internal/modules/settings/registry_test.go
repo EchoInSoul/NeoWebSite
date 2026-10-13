@@ -38,6 +38,28 @@ func TestBuiltinRegistryShape(t *testing.T) {
 	if def.Type != FieldTypeBool || def.Default.(bool) != true {
 		t.Fatalf("register.enabled = %+v, want bool default true", def)
 	}
+	if !def.Public {
+		t.Fatal("register.enabled must be Public, otherwise the frontend cannot read the signup gate")
+	}
+}
+
+func TestBuiltinPublicAllowlist(t *testing.T) {
+	reg, err := compileRegistry(builtinRegistry)
+	if err != nil {
+		t.Fatalf("builtin registry rejected: %v", err)
+	}
+
+	var public []string
+	for _, group := range reg.order {
+		for name, def := range reg.groups[group] {
+			if def.Public {
+				public = append(public, group+"."+name)
+			}
+		}
+	}
+	if len(public) != 1 || public[0] != "register.enabled" {
+		t.Fatalf("public items = %v, want [register.enabled] — marking a setting public exposes it anonymously", public)
+	}
 }
 
 func TestRegistryValid(t *testing.T) {

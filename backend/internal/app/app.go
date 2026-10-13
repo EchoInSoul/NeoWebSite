@@ -64,6 +64,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 
 	authModule := auth.New(db, sessions, cfg.TOTPEncryptionKey, settingsModule.Service)
 	authModule.Register(api)
+	settingsModule.Register(api)
 
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sessions), guard.LoadIdentity(accessModule.Service, sessions))

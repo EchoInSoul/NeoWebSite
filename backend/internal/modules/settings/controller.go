@@ -16,6 +16,15 @@ type controller struct {
 	service *Service
 }
 
+type groupView struct {
+	Group  string         `json:"group"`
+	Values map[string]any `json:"values"`
+}
+
+type publicSettingsView struct {
+	Items []groupView `json:"items"`
+}
+
 func newController(service *Service) *controller {
 	return &controller{service: service}
 }
@@ -25,13 +34,32 @@ func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.PATCH("/admin/settings/:group", guard.RequirePermission(rbac.PermissionSettingsEdit), c.patchGroup)
 }
 
+func (c *controller) register(r *gin.RouterGroup) {
+	r.GET("/public/settings", c.getPublic)
+}
+
+func (c *controller) getPublic(ctx *gin.Context) {
+	groups, err := c.service.PublicSettings(ctx.Request.Context())
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	items := make([]groupView, 0, len(groups))
+	for _, group := range groups {
+		items = append(items, groupView{Group: group.Group, Values: group.Values})
+	}
+	ctx.JSON(http.StatusOK, publicSettingsView{Items: items})
+}
+
 func (c *controller) getGroup(ctx *gin.Context) {
-	values, err := c.service.GetGroup(ctx.Request.Context(), ctx.Param("group"))
+	group := ctx.Param("group")
+	values, err := c.service.GetGroup(ctx.Request.Context(), group)
 	if err != nil {
 		writeSettingError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, values)
+	ctx.JSON(http.StatusOK, groupView{Group: group, Values: values})
 }
 
 func (c *controller) patchGroup(ctx *gin.Context) {
@@ -41,12 +69,13 @@ func (c *controller) patchGroup(ctx *gin.Context) {
 		return
 	}
 
-	values, err := c.service.PatchGroup(ctx.Request.Context(), ctx.Param("group"), raw)
+	group := ctx.Param("group")
+	values, err := c.service.PatchGroup(ctx.Request.Context(), group, raw)
 	if err != nil {
 		writeSettingError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, values)
+	ctx.JSON(http.StatusOK, groupView{Group: group, Values: values})
 }
 
 func writeSettingError(ctx *gin.Context, err error) {

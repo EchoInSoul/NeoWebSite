@@ -247,6 +247,56 @@ func TestServiceBadRowFallback(t *testing.T) {
 	}
 }
 
+func TestServicePublicSettings(t *testing.T) {
+	groups := []Group{
+		{
+			Name:  "site",
+			Items: []Definition{{Name: "title", Type: FieldTypeString, Default: "我的博客"}},
+		},
+		{
+			Name: "open",
+			Items: []Definition{
+				{Name: "flag", Type: FieldTypeBool, Default: true, Public: true},
+				{Name: "hidden", Type: FieldTypeString, Default: "secret"},
+			},
+		},
+		{
+			Name:  "extra",
+			Items: []Definition{{Name: "visible", Type: FieldTypeNumber, Default: int64(7), Public: true}},
+		},
+	}
+	svc, _ := newIntegrationService(t, groups)
+	ctx := context.Background()
+
+	listed, err := svc.PublicSettings(ctx)
+	if err != nil {
+		t.Fatalf("PublicSettings with no rows = %v", err)
+	}
+	if len(listed) != 2 {
+		t.Fatalf("PublicSettings = %#v, want the two groups carrying a public item", listed)
+	}
+	if listed[0].Group != "open" || listed[1].Group != "extra" {
+		t.Fatalf("group order = %v, want [open extra] following the registry order", listed)
+	}
+	if listed[0].Values["flag"] != true || len(listed[0].Values) != 1 {
+		t.Fatalf("open values = %v, want flag=true and no private item", listed[0].Values)
+	}
+
+	if err := svc.SetBool(ctx, "open", "flag", false); err != nil {
+		t.Fatalf("SetBool flag: %v", err)
+	}
+	if err := svc.SetString(ctx, "open", "hidden", "written"); err != nil {
+		t.Fatalf("SetString hidden: %v", err)
+	}
+	listed, err = svc.PublicSettings(ctx)
+	if err != nil {
+		t.Fatalf("PublicSettings after writes = %v", err)
+	}
+	if listed[0].Values["flag"] != false || len(listed[0].Values) != 1 {
+		t.Fatalf("open values after writes = %v, want flag=false and still no private item", listed[0].Values)
+	}
+}
+
 func TestServiceExtraGroupNoMigration(t *testing.T) {
 	groups := append(sampleGroups(), Group{
 		Name:  "extra",

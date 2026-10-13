@@ -12,6 +12,7 @@ type Definition struct {
 	Name    string
 	Type    FieldType
 	Default any
+	Public  bool
 }
 
 type Group struct {

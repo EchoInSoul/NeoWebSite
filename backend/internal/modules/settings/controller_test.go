@@ -41,6 +41,7 @@ func newSettingsTestApp(t *testing.T, db *database.Database) *httptest.Server {
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
 	}
+	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.LoadIdentity(accessModule.Service, sm))
 	module.RegisterProtected(protected)
@@ -128,15 +129,31 @@ func decodeErrorCode(t *testing.T, resp *http.Response) string {
 	return code
 }
 
-func decodeValues(t *testing.T, resp *http.Response) map[string]any {
+func decodeGroup(t *testing.T, resp *http.Response) (string, map[string]any) {
 	t.Helper()
 	defer resp.Body.Close()
 
-	var values map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&values); err != nil {
-		t.Fatalf("decode values: %v", err)
+	var view struct {
+		Group  string         `json:"group"`
+		Values map[string]any `json:"values"`
 	}
-	return values
+	if err := json.NewDecoder(resp.Body).Decode(&view); err != nil {
+		t.Fatalf("decode group view: %v", err)
+	}
+	return view.Group, view.Values
+}
+
+func decodePublicItems(t *testing.T, resp *http.Response) []map[string]any {
+	t.Helper()
+	defer resp.Body.Close()
+
+	var body struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode public items: %v", err)
+	}
+	return body.Items
 }
 
 func expectStatus(t *testing.T, resp *http.Response, want int) {
@@ -186,7 +203,10 @@ func TestSettingsGetAsOwner(t *testing.T) {
 
 	resp := doJSON(t, seedClient(t, ts, ownerID), http.MethodGet, ts.URL+"/api/v1/admin/settings/register", nil)
 	expectStatus(t, resp, http.StatusOK)
-	values := decodeValues(t, resp)
+	group, values := decodeGroup(t, resp)
+	if group != "register" {
+		t.Fatalf("group = %q, want register", group)
+	}
 	if values["enabled"] != true {
 		t.Fatalf("register.enabled = %v, want true merged from default", values["enabled"])
 	}
@@ -230,6 +250,27 @@ func TestSettingsGetForbiddenForPlainUser(t *testing.T) {
 	}
 }
 
+func TestSettingsPublicGetAnonymously(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	ts := newSettingsTestApp(t, db)
+
+	resp := doJSON(t, &http.Client{}, http.MethodGet, ts.URL+"/api/v1/public/settings", nil)
+	expectStatus(t, resp, http.StatusOK)
+
+	items := decodePublicItems(t, resp)
+	if len(items) != 1 {
+		t.Fatalf("public items = %v, want only the register group", items)
+	}
+	if items[0]["group"] != "register" {
+		t.Fatalf("group = %v, want register", items[0]["group"])
+	}
+	values, ok := items[0]["values"].(map[string]any)
+	if !ok || values["enabled"] != true {
+		t.Fatalf("values = %v, want enabled true merged from default", items[0]["values"])
+	}
+}
+
 func TestSettingsPatchTurnsRegistrationOff(t *testing.T) {
 	db := testDB(t)
 	resetGroups(t, db, "register")
@@ -238,14 +279,16 @@ func TestSettingsPatchTurnsRegistrationOff(t *testing.T) {
 
 	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": false})
 	expectStatus(t, resp, http.StatusOK)
-	if values := decodeValues(t, resp); values["enabled"] != false {
-		t.Fatalf("patch response = %v, want enabled false", values)
+	group, values := decodeGroup(t, resp)
+	if group != "register" || values["enabled"] != false {
+		t.Fatalf("patch response = %q %v, want register with enabled false", group, values)
 	}
 
 	after := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/settings/register", nil)
 	expectStatus(t, after, http.StatusOK)
-	if values := decodeValues(t, after); values["enabled"] != false {
-		t.Fatalf("get after patch = %v, want enabled false", values)
+	group, values = decodeGroup(t, after)
+	if group != "register" || values["enabled"] != false {
+		t.Fatalf("get after patch = %q %v, want register with enabled false", group, values)
 	}
 	if count := registerRowCount(t, db); count != 1 {
 		t.Fatalf("register rows = %d, want the single explicit write", count)

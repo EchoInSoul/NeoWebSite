@@ -92,7 +92,31 @@ func (s *Service) GetBool(ctx context.Context, group, name string) (bool, error)
 	return s.getTyped[bool](ctx, group, name, FieldTypeBool)
 }
 
+type GroupValues struct {
+	Group  string
+	Values map[string]any
+}
+
 func (s *Service) GetGroup(ctx context.Context, group string) (map[string]any, error) {
+	return s.readGroup(ctx, group, func(Definition) bool { return true })
+}
+
+func (s *Service) PublicSettings(ctx context.Context) ([]GroupValues, error) {
+	out := make([]GroupValues, 0, len(s.registry.order))
+	for _, group := range s.registry.order {
+		values, err := s.readGroup(ctx, group, func(def Definition) bool { return def.Public })
+		if err != nil {
+			return nil, err
+		}
+		if len(values) == 0 {
+			continue
+		}
+		out = append(out, GroupValues{Group: group, Values: values})
+	}
+	return out, nil
+}
+
+func (s *Service) readGroup(ctx context.Context, group string, keep func(Definition) bool) (map[string]any, error) {
 	items, ok := s.registry.groups[group]
 	if !ok {
 		return nil, ErrUnknownGroup
@@ -107,6 +131,9 @@ func (s *Service) GetGroup(ctx context.Context, group string) (map[string]any, e
 	}
 	out := make(map[string]any, len(items))
 	for name, def := range items {
+		if !keep(def) {
+			continue
+		}
 		raw, ok := overrides[name]
 		if !ok {
 			out[name] = def.Default

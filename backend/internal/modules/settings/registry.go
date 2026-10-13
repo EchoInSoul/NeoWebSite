@@ -9,7 +9,7 @@ var builtinRegistry = []Group{
 	{
 		Name: "register",
 		Items: []Definition{
-			{Name: "enabled", Type: FieldTypeBool, Default: true},
+			{Name: "enabled", Type: FieldTypeBool, Default: true, Public: true},
 		},
 	},
 }

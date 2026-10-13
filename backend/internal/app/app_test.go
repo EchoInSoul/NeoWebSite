@@ -548,6 +548,7 @@ func TestDegradedServerStillServesRoutes(t *testing.T) {
 		{"register needs the database", http.MethodPost, "/api/v1/auth/register", `{"email":"a@b.c","nickname":"ab","password":"pass-12345"}`, http.StatusServiceUnavailable, "service_unavailable"},
 		{"admin list needs the database", http.MethodPost, "/api/v1/admin/groups", `{"name":"G"}`, http.StatusUnauthorized, "unauthorized"},
 		{"settings read needs the database", http.MethodGet, "/api/v1/admin/settings/register", "", http.StatusUnauthorized, "unauthorized"},
+		{"public settings needs the database", http.MethodGet, "/api/v1/public/settings", "", http.StatusServiceUnavailable, "service_unavailable"},
 		{"validation does not need the database", http.MethodPost, "/api/v1/auth/login", `{}`, http.StatusBadRequest, "invalid_request"},
 		{"unknown route is still 404", http.MethodGet, "/api/v1/definitely/not/a/route", "", http.StatusNotFound, "not_found"},
 		{"method mismatch is still 405", http.MethodGet, "/api/v1/auth/login", "", http.StatusMethodNotAllowed, "method_not_allowed"},
@@ -691,6 +692,11 @@ func exchangeJSON(t *testing.T, client *http.Client, method, endpoint string, bo
 	return resp.StatusCode, decoded
 }
 
+func envelopeValues(decoded map[string]any) map[string]any {
+	values, _ := decoded["values"].(map[string]any)
+	return values
+}
+
 func envelopeCode(decoded map[string]any) string {
 	errObj, ok := decoded["error"].(map[string]any)
 	if !ok {
@@ -729,12 +735,12 @@ func TestRegistrationControlEndToEnd(t *testing.T) {
 	loginResp.Body.Close()
 
 	status, values := exchangeJSON(t, ownerClient, http.MethodGet, endpoint, nil)
-	if status != http.StatusOK || values["enabled"] != true {
-		t.Fatalf("default get = %d %v, want 200 with enabled true", status, values)
+	if status != http.StatusOK || values["group"] != "register" || envelopeValues(values)["enabled"] != true {
+		t.Fatalf("default get = %d %v, want 200 register with enabled true", status, values)
 	}
 
 	status, values = exchangeJSON(t, ownerClient, http.MethodPatch, endpoint, map[string]any{"enabled": false})
-	if status != http.StatusOK || values["enabled"] != false {
+	if status != http.StatusOK || envelopeValues(values)["enabled"] != false {
 		t.Fatalf("close patch = %d %v, want 200 with enabled false", status, values)
 	}
 
@@ -745,7 +751,7 @@ func TestRegistrationControlEndToEnd(t *testing.T) {
 	}
 
 	status, values = exchangeJSON(t, ownerClient, http.MethodPatch, endpoint, map[string]any{"enabled": true})
-	if status != http.StatusOK || values["enabled"] != true {
+	if status != http.StatusOK || envelopeValues(values)["enabled"] != true {
 		t.Fatalf("reopen patch = %d %v, want 200 with enabled true", status, values)
 	}
 
