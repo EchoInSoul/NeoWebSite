@@ -23,7 +23,7 @@ type MeResponse = {
   two_factor_enabled?: unknown;
 };
 
-const malformedResponse = "session lookup failed: malformed /auth/me response";
+const malformedResponse = "session lookup failed: malformed /users/me response";
 
 function parseGroup(value: unknown): SessionGroup {
   const group = value as
@@ -52,7 +52,7 @@ export const getAuthenticatedUser = cache(
 
     let response: Response;
     try {
-      response = await fetch(`${backendUrl}/api/v1/auth/me`, {
+      response = await fetch(`${backendUrl}/api/v1/users/me`, {
         headers: { cookie: `session=${session}` },
       });
     } catch {

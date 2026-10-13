@@ -13,7 +13,7 @@ export function useSignout() {
   async function signOut() {
     setIsSigningOut(true);
     try {
-      await apiRequest("/api/v1/auth/logout", { method: "POST" });
+      await apiRequest("/api/v1/sessions/current", { method: "DELETE" });
       router.replace("/signin");
       return;
     } catch {

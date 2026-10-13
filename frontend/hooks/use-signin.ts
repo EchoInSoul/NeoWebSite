@@ -52,7 +52,7 @@ export function useSigninForm() {
 
     setIsPending(true);
     try {
-      await apiRequest("/api/v1/auth/login", {
+      await apiRequest("/api/v1/sessions", {
         method: "POST",
         body: { identifier, password },
       });

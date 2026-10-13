@@ -102,7 +102,7 @@ export function useSignupForm() {
 
     setIsPending(true);
     try {
-      await apiRequest("/api/v1/auth/register", {
+      await apiRequest("/api/v1/users", {
         method: "POST",
         body: { email, nickname, password: values.password },
       });
