@@ -655,27 +655,27 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 		t.Fatalf("anonymous patch = %d %v, want 401 unauthorized", status, body)
 	}
 
-	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{})
-	if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "" {
-		t.Fatalf("empty body = %d %v, want 400 invalid_request with no param", status, body)
-	}
-
-	for _, malformed := range []any{
+	for _, absent := range []any{
+		map[string]any{},
 		json.RawMessage("null"),
-		[]any{"nickname"},
-		"nickname",
-		42,
 		map[string]any{"nickname": nil},
 	} {
-		status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, malformed)
-		if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" {
-			t.Fatalf("malformed %v = %d %v, want 400 invalid_request", malformed, status, body)
+		status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, absent)
+		if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "" {
+			t.Fatalf("no field given %v = %d %v, want 400 invalid_request with no param", absent, status, body)
 		}
 	}
 
-	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": 42})
-	if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "" {
-		t.Fatalf("typed nickname = %d %v, want 400 invalid_request with no param", status, body)
+	for _, malformed := range []any{
+		[]any{"nickname"},
+		"nickname",
+		42,
+		map[string]any{"nickname": 42},
+	} {
+		status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, malformed)
+		if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "" {
+			t.Fatalf("malformed %v = %d %v, want 400 invalid_request with no param", malformed, status, body)
+		}
 	}
 
 	for _, invalid := range []map[string]any{
@@ -731,17 +731,44 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 		t.Fatalf("partial update = %d %v, want 200 keeping email", status, body)
 	}
 
-	emojiNickname := "🙂" + profileTag[len(profileTag)-6:]
+	emojiNickname := "🙂" + profileTag
 	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": emojiNickname})
 	if status != http.StatusOK || body["nickname"] != emojiNickname || body["email"] != email {
 		t.Fatalf("emoji nickname = %d %v, want 200 keeping email", status, body)
 	}
 	assertProfile(t, client, ts, emojiNickname, email)
 
-	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": "  " + emojiNickname + "  "})
-	if status != http.StatusOK || body["nickname"] != emojiNickname {
+	wideEmojiNickname := strings.Repeat("🙂", 20)
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": wideEmojiNickname})
+	if status != http.StatusOK || body["nickname"] != wideEmojiNickname {
+		t.Fatalf("20 rune emoji nickname = %d %v, want 200 counting runes not bytes", status, body)
+	}
+	assertProfile(t, client, ts, wideEmojiNickname, email)
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": "  " + wideEmojiNickname + "  "})
+	if status != http.StatusOK || body["nickname"] != wideEmojiNickname {
 		t.Fatalf("padded resubmit = %d %v, want 200 with trimmed self-match", status, body)
 	}
+
+	shortestNickname := "测试"
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": shortestNickname})
+	if status != http.StatusOK || body["nickname"] != shortestNickname {
+		t.Fatalf("2 rune nickname = %d %v, want 200", status, body)
+	}
+
+	longestNickname := "nf" + profileTag + strings.Repeat("x", 11)
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": longestNickname})
+	if status != http.StatusOK || body["nickname"] != longestNickname {
+		t.Fatalf("32 rune nickname = %d %v, want 200", status, body)
+	}
+	assertProfile(t, client, ts, longestNickname, email)
+
+	longestEmail := strings.Repeat("e", 224) + profileTag + "@test.local"
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"email": longestEmail})
+	if status != http.StatusOK || body["email"] != longestEmail || body["nickname"] != longestNickname {
+		t.Fatalf("254 byte email = %d %v, want 200 keeping nickname", status, body)
+	}
+	assertProfile(t, client, ts, longestNickname, longestEmail)
 }
 
 func TestUpdateProfileRejectedWriteLeavesBothFieldsUnchanged(t *testing.T) {
@@ -849,6 +876,52 @@ func TestUpdateProfileConcurrentSameNickname(t *testing.T) {
 	if succeeded != 1 || conflicted != 1 {
 		t.Fatalf("succeeded/conflicted = %d/%d, want 1/1", succeeded, conflicted)
 	}
+}
+
+func TestUpdateProfileConstraintBackstopReturnsAlreadyTaken(t *testing.T) {
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
+	u, password := createTestUser(t, db)
+	client := newClient(t)
+	loginWithLogout(t, client, ts, u.Email, password)
+
+	installNicknameCollisionTrigger(t, db)
+
+	sentinel := "collide" + fmt.Sprintf("%d", time.Now().UnixNano())
+	status, body := exchangeJSON(t, client, http.MethodPatch, ts.URL+"/api/v1/users/me", map[string]any{"nickname": sentinel})
+	if status != http.StatusConflict || envelopeCode(body) != "already_taken" {
+		t.Fatalf("constraint backstop = %d %v, want 409 already_taken", status, body)
+	}
+	assertProfile(t, client, ts, u.Nickname, u.Email)
+}
+
+func installNicknameCollisionTrigger(t *testing.T, db *database.Database) {
+	t.Helper()
+
+	if _, err := db.SQL().Exec("DROP TRIGGER IF EXISTS neoblog_test_nickname_collision ON users"); err != nil {
+		t.Fatalf("drop stale collision trigger: %v", err)
+	}
+	if _, err := db.SQL().Exec(`
+CREATE OR REPLACE FUNCTION neoblog_test_nickname_collision() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+	IF NEW.nickname LIKE 'collide%' THEN
+		INSERT INTO users (id, email, nickname, password_hash, group_id, created_at, updated_at)
+		VALUES (gen_random_uuid(), NEW.nickname || '@collision.test', NEW.nickname, 'not-a-usable-hash', NEW.group_id, now(), now());
+	END IF;
+	RETURN NEW;
+END $$`); err != nil {
+		t.Fatalf("create collision function: %v", err)
+	}
+	if _, err := db.SQL().Exec(`
+CREATE TRIGGER neoblog_test_nickname_collision BEFORE UPDATE ON users
+FOR EACH ROW EXECUTE FUNCTION neoblog_test_nickname_collision()`); err != nil {
+		t.Fatalf("create collision trigger: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_, _ = db.SQL().Exec("DROP TRIGGER IF EXISTS neoblog_test_nickname_collision ON users")
+		_, _ = db.SQL().Exec("DROP FUNCTION IF EXISTS neoblog_test_nickname_collision()")
+		_, _ = db.SQL().Exec("DELETE FROM users WHERE email LIKE '%@collision.test'")
+	})
 }
 
 func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
@@ -963,7 +1036,7 @@ func envelopeParam(decoded map[string]any) string {
 	return param
 }
 
-func assertProfile(t *testing.T, client *http.Client, ts *httptest.Server, nickname, email string) map[string]any {
+func assertProfile(t *testing.T, client *http.Client, ts *httptest.Server, nickname, email string) {
 	t.Helper()
 
 	me, err := client.Get(ts.URL + "/api/v1/auth/me")
@@ -982,7 +1055,6 @@ func assertProfile(t *testing.T, client *http.Client, ts *httptest.Server, nickn
 	if meBody["nickname"] != nickname || meBody["email"] != email {
 		t.Fatalf("profile = %v, want %s / %s", meBody, nickname, email)
 	}
-	return meBody
 }
 
 func patchJSON(client *http.Client, endpoint string, body any) (int, map[string]any, error) {
