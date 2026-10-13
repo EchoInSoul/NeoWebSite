@@ -142,6 +142,15 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）→ `totp_last_counter`（`users` 加一列可空 bigint：TOTP 已认领的窗号，用于重放防护，纯 DDL 零数据）。
 
+## 测试
+
+```bash
+bash scripts/test.sh                   # 全仓：确认 DATABASE_URL_TEST 已导出后，串行跑所有包
+bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go test）
+```
+
+**全仓必须经这个脚本跑**：`go test` 默认让包之间并行，而 `register/enabled` 是存在数据库里的**全局开关**——测注册控制的用例会临时把它关掉再打开，同库并行跑的其他包正好撞进这段窗口就会吃到 403（症状是不相干的用例偶发变红）。`scripts/test.sh` 用 `-p 1` 让包串行，消除这个竞态；直接敲 `go test ./...` 仍会偶发红。不传包名时脚本会先确认 `DATABASE_URL_TEST` 已设置，避免集成用例静默 skip 后假装全绿。
+
 ## 认证
 
 只提供后端接口（前端由前端侧接线）。层 1：登录 / 登出 / 当前用户；层 2：公开注册与更改密码。

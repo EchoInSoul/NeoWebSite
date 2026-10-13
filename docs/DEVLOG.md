@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-10-13 · 补测试缺口：改资料接口的原子性、param、并发与边界值 + 测试入口脚本
+
+**版本**：后端 **0.14.0**（未进位）。**零源码语义变更、零迁移**：本轮只动测试与测试入口，`internal/` 下的非测试代码一行未改。起因是对上一轮（改资料接口）的独立审查列出 5 条测试缺口，用户点名全做。
+
+### 做了什么
+
+- **组合字段原子性**（新用例 `TestUpdateProfileRejectedWriteLeavesBothFieldsUnchanged`）：同时提交「可用的昵称 + 撞车的邮箱」→ 409 `email_taken`，随后回查确认**昵称也没被写进去**；反方向（撞车昵称 + 可用邮箱）同样回查。此前两个字段从来没有一起提交过，"要么全改、要么全不改"这条只存在于代码读出来的形状里，谁改成两条 UPDATE 分两次写测试也照样绿。
+- **`param` 断言**：`{"nickname":"a"}` → 400 + `param:"nickname"`；`{"email":"not-an-email"}` → `param:"email"`。前端 `use-profile-save` 全靠这个字段决定弹哪条文案，之前一个断言都没有。同时钉反向：请求体形状/类型错（`{"nickname":42}`）时 `param` 为空。
+- **并发用例**（新用例 `TestUpdateProfileConcurrentSameNickname`）：两个已登录用户同时把昵称改成同一个值，正好一个 200、一个 409，且 409 的 code 落在 `{nickname_taken, already_taken}` 内。照 `TestRegisterConcurrentSameEmail` 的形状写，但**没有**复用 `exchangeJSON`——它内部 `t.Fatalf`，从测试 goroutine 里调用是错的（既有那条用例就有这个毛病）；另立了不在 goroutine 里断言的 `patchJSON`。
+- **边界值**（并入 `TestUpdateProfileEndToEnd`）：裸 `null` 体、数组体、字符串体、数字体、`{"nickname":null}`、纯空格昵称、33 rune 昵称、261 字节邮箱 → 全部 400；emoji 昵称（1 emoji + 6 数字）→ 200 且能原样读回；把当前值**带前后空格**重提 → 200（trim 后自我匹配，正是前端"只提交改动字段"会走的那条）。空体与类型错的用例顺带补上 `param` 为空的断言。
+- **会话清理**：新增 `loginWithLogout` 辅助（登录 + 在 `t.Cleanup` 里打一次登出），三个改资料用例改用它，跑完不再在 `sessions` 表留行。
+- **测试入口脚本**（`scripts/test.sh`，新）：`go test ./... -count=1 -p 1`。不传包名时先确认 `DATABASE_URL_TEST` 已设置（避免集成用例静默 skip 后假装全绿），传包名原样转发。README 新增「测试」章节说明为什么必须串行。
+
+### 过程中的发现
+
+- **`already_taken` 兜底在端到端里打不到。** 把并发用例的断言临时收紧成「必须是 `already_taken`」跑了 10 遍，输家**每次**都是预检给出的 `nickname_taken`。原因：两个请求虽同时发出，但都要先走完会话加载 + `LoadIdentity` 查库才轮到预检，而预检（一次 SELECT）到 UPDATE 之间只有几十微秒的窗口，撞进去的概率极低。所以这条兜底仍是**只有代码、没有证据**的状态；要确定性覆盖，需要给 auth 模块一个可注入的仓储（当前 `repo` 是具体结构体，没有注入点）或在 ent 上挂钩子强制返回约束错误——本轮没做，留作已知缺口。断言因此写成「两者皆可」。
+- **`-p 1` 是绕开、不是根治。** 偶发红的根因是两个包共用同一个测试库，而 `register/enabled` 是**存在数据库里的全局开关**：`app` 包的 `TestRegistrationControlEndToEnd` 会把它关掉再打开，`auth` 包不相干的注册用例撞进那段窗口就吃 403。根治要给每个包独立的库或 schema，但测试库是**预先迁移好的**、代码里没有迁移入口（`database.Open` 只连库、不动 schema），代价远超收益，所以在入口脚本上收口。
+- 本轮真遇上了那次红：首跑 `go test ./...` 时 `TestRegisterRejectsDuplicateNickname` 返回 403 而不是 409；串行与随后两次并行都绿——典型时序偶发。
+
+### 验证口径
+
+- `bash scripts/test.sh` 11 包全绿无 skip（本机 5434）；`gofmt -l internal` 空、`go vet ./...` 空。
+- 并发用例 `-count=20` 稳定通过（6.1s）。
+- 原子性用例非空转：断言的是「回查后昵称仍等于**改之前**的值」，而请求里给的是另一个值——真发生半写就会红。
+- 脚本守卫实测：不设 `DATABASE_URL_TEST` 时退出码 1 并打印提示。（先用 `env -u` 试跑时它没触发，查明是 Git Bash 下 `env -u` 在子 shell 里的行为差异，不是脚本问题——直接跑确认守卫生效。）
+
+### 已知缺口
+
+- `already_taken` 兜底仍无测试覆盖（原因见上），本轮只钉住「409 且 code 属于合法集合」。
+- 并行冲突只做在入口脚本层面：绕过脚本直接敲 `go test ./...` 仍会偶发红，没有从代码层阻止这种跑法的手段。
+- 只改了本轮这三个改资料用例的登出清理，其他既有用例仍在登录后不登出，`sessions` 表仍会有别处留下的行（一小时过期）。
+
+---
+
 ## 2026-10-13 · 改自己的资料：后端接口 `PATCH /users/me` + 前端把保存接上
 
 **版本**：后端 0.13.0 → **0.14.0**（minor：新对外契约）。**零迁移、零新依赖**。起因：用户在 `/console/uc/profile` 页上改「用户名 / 邮箱」点保存没反应，问"是不是接口的问题"——查明后端**从来没有**写这两个字段的路径（读只有 `GET /auth/me`；`PATCH /admin/users/:id` 只接 `group_id` / `extra_permissions`），于是按用户当场定的四条裁定把接口补上；随后用户一句"可以，请你完成吧"把前端也接上。
