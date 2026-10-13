@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.14.0
+当前版本：0.15.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -170,6 +170,8 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 | `POST /api/v1/auth/logout` | 需登录 | 销毁会话，返回 200 `{}` |
 | `GET /api/v1/auth/me` | 需登录 | 返回 `{"email","nickname","group":{"id","system_key","name"},"permissions":["..."],"two_factor_enabled":bool}`（自建组 `system_key` 为 `null`，`permissions` 是展开后的生效权限）；未登录 401 `unauthorized` |
 | `PATCH /api/v1/users/me` | 需登录 | body `{"nickname"?,"email"?}`（**字段可选、部分更新，两个都不给 400**）→ 200 `{"email","nickname"}`（更新后的值）；昵称 / 邮箱规则同注册，不符 400 `invalid_request`（`param` 指向出问题的字段）；撞名 409 `nickname_taken` / `email_taken`（并发竞态兜底 409 `already_taken`）；**提交与当前相同的值不算撞名**（自己排除在外）；**不要求当前密码**；未登录 401 `unauthorized` |
+| `GET /api/v1/users/me/sessions` | 需登录 | 返回 `{"items":[{"id","current","user_agent","ip","created_at","last_seen_at","expires_at"}]}`——只含自己的**活跃**会话（已吊销 / 已过期 / 待二段的都不出现）；`id` 是 `base64url(sha256(token))` 指纹，**原始 token 永不出服务端**；`current` 标记发起请求的这条；时间为 RFC3339 UTC；没有元数据的老会话字段为空串；未登录 401 `unauthorized` |
+| `DELETE /api/v1/users/me/sessions/:id` | 需登录 | 按指纹吊销单条（`id` 取自上一条列表）→ 200 `{"id","deleted":true}`；未知 / 他人的 `id` 一律 404 `not_found`（不泄露他人会话存在性）、同 id 二次删也是 404；**删当前这条等于登出**（响应清 cookie）；未登录 401 `unauthorized` |
 | `POST /api/v1/auth/password` | 需登录 | body `{"current_password","new_password"}` → 200 `{}`；旧密码错 401 `invalid_credentials`；400 `weak_password` / `password_unchanged` / `invalid_request` |
 | `POST /api/v1/auth/2fa/verify` | 公开（靠「待二段」会话） | body `{"code"}` → 200 与登录成功同形（验证码或恢复码皆可）；码错 401 `two_factor_invalid_code`（`param:"code"`）；连错 5 次 401 `two_factor_locked` 并销毁会话；无待验会话 401 `unauthorized`；空 body 400 `invalid_request`；密钥解密失败 500 `internal_error` |
 | `POST /api/v1/auth/2fa/setup` | 需登录 | 无 body → 200 `{"secret","otpauth_url"}`（明文 secret 只回这一次，二维码由前端渲染）；重复调用覆盖旧 secret（旧码作废、已认领窗号归零）；已启用 409 `two_factor_already_enabled` |
@@ -183,10 +185,11 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 - 邮箱：`net/mail` 可解析、≤254 字符、入库统一小写；昵称：trim 后 2–32 字符（按 rune）、不含空白（含全角空格）与 `@`；密码：≥8 字符（按 rune）、同时含 ASCII 字母与数字、≤72 字节（bcrypt 上限）。
 - 改自己的资料（`PATCH /users/me`）挂 `RequireAuth` + `LoadIdentity`、**不需要权限点**（改的是自己）；字段可选、只改给出的字段；昵称 / 邮箱沿用注册那套归一与校验、同一批错误码；**不校验当前密码**；会话只存 `userID`，因此改完无需重新登录，`/auth/me` 与侧栏下次读取即是新值。
 - **更改密码保留当前设备、吊销该用户其他所有设备的会话**（用 scs 的 `IterableStore.All()` + `Codec` 按会话中的 `auth.user_id` 定位删除；失败即 500 且密码不落盘，可用旧密码重试）。
+- **会话管理（`GET` / `DELETE /users/me/sessions`）**：会话元数据以四个会话数据键随建立写入——`auth.user_agent` / `auth.ip` / `auth.created_at` / `auth.last_seen_at`（RFC3339 UTC 字符串），**零迁移**（仍存 scs 的 `sessions` 表，元数据在 gob 编码的 `data` 里）；三处建立点（注册、单段登录、2FA verify）统一走 `auth.establishSession`，进入「待二段」改走 `enterPendingSession`（清身份与元数据，因此待验会话不进任何人的列表）。最后活跃由 `guard.TrackSessionActivity` 维护：**距上次写入不足 5 分钟不写库**（`Put` 不移动 scs 的 deadline，因此不产生滑动续期，7 天上限仍从登录时刻起算）。IP 取 `X-Forwarded-For` 首跳 → `X-Real-IP` → `RemoteAddr`，**仅供展示、不可用作鉴权或限流依据**（UA / IP 分别截断 512 / 64 字节）。列表与吊销共用 `eachSession` 迭代器（全表扫 + 逐条解码后按 `auth.user_id` 过滤）；删当前会话走 `Destroy`（避免本请求的节流写把已删的行提交回写）。
 
-会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当解析出的环境为 `production`（发布构建默认即是，见「环境与构建」）；登录与注册成功都会换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
+会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当解析出的环境为 `production`（发布构建默认即是，见「环境与构建」）；登录与注册成功都会换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth → guard.TrackSessionActivity → guard.LoadIdentity` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
 
-**已知缺口**：登录、注册与两步验证 verify **暂无限流**（防刷号 / 防撞库 / 防在线暴破，计划下一轮一起补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效。
+**已知缺口**：登录、注册与两步验证 verify **暂无限流**（防刷号 / 防撞库 / 防在线暴破，计划下一轮一起补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效（会话列表里的 IP 同理只作展示）。另：`sessions.token` 列存**原始 token**（scs 默认），库可读即会话可伪造——scs 自带 `HashTokenInStore` 可改成只存哈希，开启时代价是存量会话全部失效（用户被登出一次）且 `revokeOtherSessions` / 列表的「跳过当前会话」比较要改为指纹比较，待点名；会话列表**不保留历史**（吊销即删行，过期由存储层 5 分钟一轮清理），要状态筛选 / 历史需另设登记表（见 `docs/superpowers/specs/2026-10-14-neoblog-session-management-design.md` §9）。
 
 **两步验证（TOTP + 自管恢复码）**：已实现（设计：`docs/superpowers/specs/2026-10-11-neoblog-2fa-design.md`；表结构见上方迁移清单的 `totp_and_recovery_codes` 与 `totp_last_counter`）。
 

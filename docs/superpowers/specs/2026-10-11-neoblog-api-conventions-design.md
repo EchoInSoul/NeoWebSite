@@ -119,6 +119,8 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 22 | `PATCH /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:34`（0.12.0 新增，`RequirePermission(system.settings.edit)`；只写请求体里出现的项，值类型以服务端清单为准；0.13.0 起返回更新后的组记录） |
 | 23 | `GET /api/v1/public/settings` | `backend/internal/modules/settings/controller.go:38`（0.13.0 新增，**无鉴权**聚合读：只出清单里标了 `Public` 的项，形如 `{"items":[{"group":"register","values":{"enabled":false}}]}`；无公开项的组整条不出现；不做按组点查，前台一次取全） |
 | 24 | `PATCH /api/v1/users/me` | `backend/internal/modules/auth/controller.go:29`（0.14.0 新增，改自己的用户名 / 邮箱：`/users/me` 是「当前用户」这条单资源的自指路径，声明在 auth 模块的 `RegisterProtected` 里，只挂 `RequireAuth + LoadIdentity`、**不挂权限点**；字段可选、部分更新；撞名复用注册的 `nickname_taken` / `email_taken`；**不校验当前密码**——用户 2026-10-13 裁定"不用"，留待将来按需加） |
+| 25 | `GET /api/v1/users/me/sessions` | `backend/internal/modules/auth/controller.go:35`（0.15.0 新增，`/users/me` 下的嵌套从属集合；只挂 `RequireAuth + LoadIdentity`、**不挂权限点**；响应 `{"items":[…]}`，`id` 为 `base64url(sha256(token))` 会话指纹、原始 token 永不出服务端；只见活跃会话，待二段 / 已过期 / 已吊销的都不出现） |
+| 26 | `DELETE /api/v1/users/me/sessions/:id` | `backend/internal/modules/auth/controller.go:36`（0.15.0 新增，按指纹吊销单条；未知 / 他人 / 二次删一律 404 `not_found`，与不存在同形；删当前会话等于登出，响应清 cookie） |
 
 正例（新端点命名，资源复数 + 子动作）：
 

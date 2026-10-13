@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-10-14 · 会话管理：登录设备列表 + 单条吊销（后端一轮）
+
+**版本**：后端 0.14.0 → **0.15.0**（minor）。**零迁移**：`sessions` 表与 `atlas.sum` 一字节未动，元数据走会话数据键。**状态：全部未提交**（用户要求本轮只做改动、不提交，工作区留待检查）。设计：`docs/superpowers/specs/2026-10-14-neoblog-session-management-design.md`；计划：`docs/superpowers/plans/2026-10-14-neoblog-session-management.md`。
+
+### 做了什么
+
+- **元数据四键**：`auth.user_agent` / `auth.ip` / `auth.created_at` / `auth.last_seen_at`（RFC3339 UTC 字符串），在注册成功、单段登录成功、2FA verify 成功三处经 `auth.establishSession` 统一写入；进入「待二段」改走 `enterPendingSession`（清身份 + 清元数据）。
+- **节流中间件**：`guard.TrackSessionActivity`（5 分钟），`app.go` 与 auth 测试装配各挂一次，链序 `RequireAuth → TrackSessionActivity → LoadIdentity`。
+- **两个接口**（都只挂 `RequireAuth + LoadIdentity`、不设权限点）：`GET /api/v1/users/me/sessions`（`{"items":[…]}`，`id = base64url(sha256(token))` 指纹，`current` 徽标，RFC3339 时间）与 `DELETE /api/v1/users/me/sessions/:id`（200 `{"id","deleted":true}`；未知 / 他人 / 二次删一律 404 `not_found`）。
+- **收敛重复实现**：改密 / 2FA 开关在用的 `revokeOtherSessions` 抽到共用的 `eachSession` 迭代器上，行为不变（三处调用点同步去掉已不需要的 ctx 参数）。
+- **测试**：新增 16 条用例（guard 4 + auth 12），全仓 11 包全绿（`scripts/test.sh`，串行）。
+- **活体冒烟 12/12**：:5733 另起新二进制 + curl 全链路（两条登录 → 列表 2 条且 IP 来自 `X-Forwarded-For`、`id` ≠ cookie 值 → 删一条 → 被删方 401 / 自己 200 → 列表回 1 → 乱造 id 404 → 匿名双接口 401 → 登出 200），跑完会话行已清、进程已停。
+
+### 过程中的关键事实（写进计划前先证过的）
+
+- **`Put` 不移动 deadline**：scs 的 `Commit` 用 `sd.deadline`，`Put` 只置 `Modified`——节流刷新 `last_seen_at` **不会**把 7 天绝对有效期变成滑动续期。
+- **`postgresstore` 自带清理**：`New()` 就带 5 分钟一轮的过期删除 goroutine，`All()` 的 SQL 已带 `WHERE current_timestamp < expiry`，列表天然只出活跃行——**不需要另做清理任务**（写计划时的初始判断是错的，读源码纠正）。
+- **gob 只吃内建类型**：会话数据是 gob 编码的 `map[string]interface{}`，`time.Time` 进 interface 需要 `gob.Register` 全局副作用，因此四个元数据键一律存 RFC3339 字符串。
+- **删当前会话有「复活」坑**：中间件若在本请求内 `Put` 过（节流到点），handler 之后再删行，scs 会因 `Modified` 在响应提交处把行**写回**。`RevokeSession` 对「当前 token」改走 `sessions.Destroy`（置 `Destroyed`、清 cookie），绕开提交分支；`TestSessionsRevokeCurrentEndsSession` 专门先把 `last_seen_at` 改到 6 分钟前来钉这条路径（新鲜会话不会触发，光跑默认路径测不出来）。
+- **顺带闭合 2FA 轮登记的缺口**：`establishSession` 清 `auth.pending_2fa_user_id` / `auth.pending_2fa_attempts`，DEVLOG 里「已登录会话可能残留另一账号待验身份」这条不再存在，用 `TestEstablishSessionClearsPendingKeys` 钉住（此前无任何用例覆盖这两个键）。
+
+### 已知取舍
+
+- **列表是全表扫**：`eachSession` = `Store.(scs.IterableStore).All()` + 逐条 `Codec.Decode` 后按 `auth.user_id` 过滤（与既有吊销同一手法）；代价随全站活跃会话数线性增长，个人博客规模可接受。要 SQL 化见设计文档 §9.2（`sessions` 扩列 + 自写 Store）。
+- **无历史 / 无分页 / 无批量**：吊销即删行，没有「已吊销」状态可筛；「退出其它所有设备」未开接口（改密 / 2FA 流程内部在用）；无会话上限（限流轮一起看）。
+- **IP 可伪造**：`X-Forwarded-For` 客户端可自填，本轮按用户裁定「先信任」，**仅供展示**；限流轮要用真实 IP 必须先配 `SetTrustedProxies`。UA / IP 截断 512 / 64 字节，防超长头撑大会话行。
+- **原始 token 落库**：`sessions.token` 存明文 token（scs 默认），DB 可读即会话可伪造；`HashTokenInStore` 加固待点名（代价：存量会话全失效 + 相关比较改指纹）。
+- 运行期验收（浏览器里点）归用户；本轮证据是集成测试 + 另起端口的 curl 冒烟，浏览器里还没点过。
+
+---
+
 ## 2026-10-13 · 补测试缺口：改资料接口的原子性、param、并发兜底与边界值 + 测试入口脚本
 
 **版本**：后端 **0.14.0**（未进位）。**零源码语义变更、零迁移**：本轮只动测试与测试入口，`internal/` 下的非测试代码一行未改。起因是对上一轮（改资料接口）的独立审查列出 5 条测试缺口，用户点名全做。
