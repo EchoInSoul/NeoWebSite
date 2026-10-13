@@ -113,11 +113,10 @@ func (s *Service) Login(ctx context.Context, identifier, password string, meta S
 		return User{}, apierror.ErrInvalidCredentials
 	}
 
-	if err := s.sessions.RenewToken(ctx); err != nil {
-		return User{}, err
-	}
-
 	if found.TotpEnabledAt != nil {
+		if err := s.sessions.RenewToken(ctx); err != nil {
+			return User{}, err
+		}
 		s.enterPendingSession(ctx, found.ID.String())
 		return User{}, apierror.ErrTwoFactorRequired
 	}
