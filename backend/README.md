@@ -189,7 +189,7 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 
 会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当解析出的环境为 `production`（发布构建默认即是，见「环境与构建」）；登录与注册成功都会换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth → guard.TrackSessionActivity → guard.LoadIdentity` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
 
-**已知缺口**：登录、注册与两步验证 verify **暂无限流**（防刷号 / 防撞库 / 防在线暴破，计划下一轮一起补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效（会话列表里的 IP 同理只作展示）。另：`sessions.token` 列存**原始 token**（scs 默认），库可读即会话可伪造——scs 自带 `HashTokenInStore` 可改成只存哈希，开启时代价是存量会话全部失效（用户被登出一次）且 `revokeOtherSessions` / 列表的「跳过当前会话」比较要改为指纹比较，待点名；会话列表**不保留历史**（吊销即删行，过期由存储层 5 分钟一轮清理），要状态筛选 / 历史需另设登记表（见 `docs/superpowers/specs/2026-10-14-neoblog-session-management-design.md` §9）。
+**已知缺口**：登录、注册与两步验证 verify **暂无限流**（防刷号 / 防撞库 / 防在线暴破，计划下一轮一起补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效（会话列表里的 IP 同理只作展示）。另：`sessions.token` 列存**原始 token**（scs 默认），库可读即会话可伪造——scs 自带 `HashTokenInStore` 可改成只存哈希，代价是开启时存量会话全部失效（用户被登出一次），且**三处比较都要改成指纹口径**：① `revokeOtherSessions` 跳过当前会话比的是裸 token（哈希 vs 裸永不相等，会把自己也踢掉）；② 会话列表的 `current` 徽标永不亮；③ 吊销接口判不出「删的是当前会话」，会掉回裸 `Store.Delete` 的复活坑。待点名；会话列表**不保留历史**（吊销即删行，过期由存储层 5 分钟一轮清理），要状态筛选 / 历史需另设登记表（见 `docs/superpowers/specs/2026-10-14-neoblog-session-management-design.md` §9）。
 
 **两步验证（TOTP + 自管恢复码）**：已实现（设计：`docs/superpowers/specs/2026-10-11-neoblog-2fa-design.md`；表结构见上方迁移清单的 `totp_and_recovery_codes` 与 `totp_last_counter`）。
 

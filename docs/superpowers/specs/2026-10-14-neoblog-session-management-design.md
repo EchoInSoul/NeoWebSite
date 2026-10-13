@@ -29,7 +29,7 @@
 | 会话 id | `base64url(sha256(token))`，与 scs `HashTokenInStore` 的键同形（将来开该开关则存储键即此 id）；**原始 token 永不出服务端** |
 | 列表排序 | `last_seen_at` 降序（同格式定宽字符串可字典序比较），并列按 `id` 升序；空值（本轮之前建立的老会话）自然落到最后 |
 | 鉴权 | 两个路由挂 `RequireAuth + LoadIdentity`，**不设权限点**（与 `PATCH /users/me` 同口径：改的是自己） |
-| 删除当前会话 | **允许**：删掉当前这条 = 登出（语义正交，不做特判） |
+| 删除当前会话 | **允许**：删掉当前这条 = 登出；**实现上必须对当前 token 特判走 `sessions.Destroy`**——裸 `Store.Delete` 会被同一请求里节流中间件的提交把行写回（复活），见 §5 |
 | 未知/他人 id | 一律 404 `not_found`（不泄露他人会话存在性） |
 | 版本 | `0.14.0` → `0.15.0`（`scripts/bump-version.sh minor`） |
 
@@ -85,7 +85,7 @@
 - **待验态**：进入时清身份与元数据，只留 pending 键；因此待验会话不出现在任何人的列表里。
 - **列表**：一次 `Store.(scs.IterableStore).All()` + 逐条 `Codec.Decode`（与 `revokeOtherSessions` 同一手法）。解码失败的行跳过（与既有吊销逻辑同口径）。全表扫描 + 逐条解码的代价随全站活跃会话数增长，个人博客规模可接受；若将来要按用户建索引，唯一干净的路径是换存储实现，不在本轮。
 - **吊销**：遍历定位 `user_id` 匹配且指纹匹配的那一条 → `Store.Delete(token)`；找到即删、不再扫。
-- **活跃追踪**：中间件只对 `auth.user_id` 非空的请求生效；`last_seen_at` 缺失或距现在 ≥5 分钟才写。写操作会顺带重发一次 `Set-Cookie`（scs 提交时重写 cookie，expiry 不变），无副作用。
+- **活跃追踪**：中间件只对 `auth.user_id` 非空的请求生效；`last_seen_at` 缺失或距现在 ≥5 分钟才写。写操作会顺带重发一次 `Set-Cookie`（scs 提交时重写 cookie，expiry 不变）。**但该写会把会话置为 `Modified`，scs 在响应提交处会重写存储里的行**——因此「删除当前会话」必须先 `Destroy`（置 `Destroyed` 并清 cookie，绕开提交分支），否则刚删的行会被回写复活（同一坑也适用于任何在请求内删当前行的新代码）。
 
 ## 6. 安全与边界
 
@@ -93,22 +93,23 @@
 - 他人会话的 id 与不存在的 id 响应完全一致（404 同体），不构成枚举面。
 - `X-Forwarded-For` 可被客户端伪造 → 展示字段，绝不可用作鉴权/限流依据；README 与本节同时留档（限流轮要用真实 IP 时必须先配 `SetTrustedProxies`）。
 - 会话数据是 gob 编码、**非加密**（scs 默认 `GobCodec`）：UA / IP 以明文形态入库 —— 与 HaoBlog 的列存储同等暴露面，可接受。
-- **已知缺口（登记，不在本轮）**：`sessions.token` 列存原始 token，库可读即会话可伪造。scs 自带 `HashTokenInStore` 可消除，代价是开启时全部存量会话失效（用户被登出一次）+ `revokeOtherSessions` 的「跳过当前会话」比较要改为指纹比较。等用户点名。
+- **已知缺口（登记，不在本轮）**：`sessions.token` 列存原始 token，库可读即会话可伪造。scs 自带 `HashTokenInStore` 可消除，代价是开启时全部存量会话失效（用户被登出一次），且**三处比较都要改成指纹口径**：① `revokeOtherSessions` 跳过当前会话比的是裸 token（哈希 vs 裸永不相等，会把自己也踢掉）；② 列表的 `current` 徽标永不亮；③ `RevokeSession` 判不出「删的是当前会话」，掉回裸 `Store.Delete` 的复活坑。等用户点名。
 - 无速率限制的现状不变：登录/注册/verify 仍可被刷（全站已知缺口）。
 
 ## 7. 测试口径
 
-集成测试（`internal/modules/auth/`，`DATABASE_URL_TEST` 缺省 skip；测试装配补挂 `TrackSessionActivity` 以与 `app.go` 一致）：
+集成测试（`internal/modules/auth/`，`DATABASE_URL_TEST` 缺省 skip；测试装配补挂 `TrackSessionActivity` 以与 `app.go` 一致）。**存储口径**：测试装配用 `scs.New()`，会话落在默认的 memstore（内存）而不是 Postgres——行为结论与 Postgres 一致（memstore 的 `All()` 同样只返回未过期行），Postgres 路径由 §8 的活体冒烟覆盖：
 
 1. 列表含当前会话、`current=true`、元数据齐全（UA 原样、IP 取 `X-Forwarded-For` 首跳、三个时间戳可解析）；`id` ≠ cookie 里的 token。
 2. 两个用户各自登录 → 各自列表只有自己的那条。
-3. 直接造一行「只带 pending 键」的会话（测试侧用 `Codec.Encode` + `Store.Commit`，照 `app_test.go` 直插先例）→ 不出现在该用户的列表里。
+3. 直接造一行「只带 pending 键」的会话（**新写的测试助手**，走 scs 公开的 `Codec.Encode` + `Store.Commit`；仓库既有的直插先例是 `app_test.go` 的原生 SQL，通道不同）→ 不出现在该用户的列表里。
 4. 同一用户两个客户端登录 → A 看到 2 条；A 删 B 的 id → B 的受保护请求变 401，A 不受影响，A 列表回到 1 条。
 5. 删他人 id / 不存在的 id / 再删同一 id → 均 404，且被瞄的会话仍在。
 6. 无 cookie 打两个接口 → 401。
-7. 删当前会话 → 200，随后同一客户端 401。
-8. 节流：登录后连续两次受保护请求之间，`sessions` 行字节不变（<5 分钟不写）；把该行的 `last_seen_at` 改写成 6 分钟前再请求 → 行被更新为近期时间。
+7. 删当前会话 → 200，随后同一客户端 401。**前置条件**：把该会话的 `last_seen_at` 改写成 6 分钟前、且改写后到 DELETE 之间**不得再发任何请求**（任何受保护请求都会把时间刷成新鲜的，让这条用例失去区分力）——覆盖「本请求节流写 + 删行」的复活路径。
+8. 节流：登录先断言 `last_seen_at` 已写入；再把该行改写成 **1 分钟前**（仍新鲜、但字符串必然与任何新写入不同）作为基准，受保护请求后该值必须逐字不变；再改写成 6 分钟前 → 请求后变为近期时间。
 9. 顺带缺口：造一行带 pending 键的会话，用同一 cookie 正常登录 → 行里 pending 两键消失、`user_id` 与新元数据到位。
+10. 进入待验态清元数据：登录 → 开 2FA → 同一会话再登录（吃 `two_factor_required`）→ 行里 `user_id` 与四个元数据键全部消失、只剩 pending 键。
 
 ## 8. 文档与提交
 

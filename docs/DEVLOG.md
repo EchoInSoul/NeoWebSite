@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-10-14 · 会话管理：审查后修补（测试有效性 3 条 + 文档口径 5 处 + 小项）
+
+**版本**：0.15.0（未进位）。针对两份独立审查（终审子代理 + 外部复核）的结论做修补。**状态：未提交**（等用户决定提交切分）。用例总数 16 → 18。
+
+### 测试有效性（三条都是「改坏了也会绿」）
+
+- **`TestSessionsRevokeCurrentEndsSession` 原本没钉住复活路径**：它把 `last_seen_at` 改到 6 分钟前之后**又调了一次列表接口**，时间被刷回新鲜 → 删行时本请求不写库，`Destroy` 与裸 `Store.Delete` 无差别。改为「先列表取 id → 再改写 → 立即 DELETE」。**变异验证**：把 `Destroy` 换成 `Store.Delete(target)`，该用例立刻红（`status = 200, want 401`）；还原后绿。
+- **节流「新鲜不写库」两处断言对「每次都写」全盲**：基准值原是「now」，与任何新写入的秒级字符串相同。基准改为 **1 分钟前**（仍新鲜，但与新写入必然不同）。**变异验证**：把节流条件改成恒真后，`TestTrackSessionActivitySkipsWhenFresh` 与 `TestSessionActivityTouchThrottled` 同时红。
+- **`enterPendingSession` 清四个元数据键零覆盖**：新增 `TestTwoFactorLoginClearsSessionMetadata`（登录 → 开 2FA → 同一会话再登录吃 `two_factor_required` → 断言 `user_id` 与四个元数据键全消失、只剩 pending 键）。**变异验证**：删掉那四行 `Remove`，该用例红。
+- 新增 `TestLoginTruncatesHeadersAtRuneBoundary`（多字节 UA 截断后必须是合法 UTF-8）。
+
+### 代码小项
+
+- `truncateHeader` 由按字节硬切改为回退到最后一个 rune 起始边界，不再截出非法 UTF-8。
+- `Login` 去掉重复的 `RenewToken`：非 2FA 分支只由 `establishSession` 换发一次；2FA 分支单独换发（防会话固定语义不变）。
+
+### 文档口径
+
+- 设计文档：§2「删当前会话」与 §5「活跃追踪」纠正为「**必须**对当前 token 特判走 `Destroy`，裸删会被本请求的节流写提交回写复活」；§6 的 `HashTokenInStore` 代价改为**三处比较**（跳过当前会话会踢掉自己 / `current` 徽标不亮 / 判不出当前会话掉回复活坑）；§7 补「进入待验态清元数据」用例、给删当前会话用例写明前置条件、并写明测试存储是 **memstore**（Postgres 由活体冒烟覆盖）；§7 第 3 条的「照 `app_test.go` 直插先例」纠正为「新写助手（原生 SQL vs scs Codec/Store 通道不同）」。
+- 计划：冒烟起进程 `PORT` → **`ADDR=:5733`**（地址只有 `ADDR` 这个口子）；节流用例基准改 1 分钟；删当前会话用例的关键前置写进用例说明；冒烟收尾补「断言残留为零」。
+- API 规范表 §3 表头补消歧义一句（本表每轮追加；§13.1「表 A」是 2026-10-11 的冻结对照表、固定 14 行）。
+- `README` 的 `HashTokenInStore` 缺口同步改写为三处比较。
+
+### 附带：`internal/app` 一条既有偶发红（非本轮引入）
+
+`TestSessionCookieMaxAgeMatchesLifetime` 偶发 `MaxAge = 3601, want 3600`。机制（读 scs 源码）：`RenewToken` 把 deadline 重设为「此刻 + lifetime」（`data.go:301`），而写 cookie 时 **Max-Age 向上取整**（`int(time.Until(expiry).Seconds() + 1)`）——两者落在同一时钟刻度就得 3601。该测试与登录公开路由都不经过本轮代码；在**当前 HEAD 与改动前提交（9144dad）各跑 25 次，两侧都是 0/25 复现**（稀有竞态，两边同概率）。断言放宽为 `want || want+1`。
+
+### 提交过程中的插曲：并行会话在同一文件里改了路由
+
+第一批提交时 `controller.go` 被另一会话改成整套路由改名（`/auth/login` → `POST /sessions`、`/auth/me` → `GET /users/me`、`/auth/2fa/*` → `/users/me/2fa/*`、`/auth/logout` → `DELETE /sessions/current`；该文件 mtime 05:42:29，提交发生在 05:42:42）——**F1/F2 两个提交把对方的在制品一起吞了进去**，而那时测试还全在老路径上（那棵树跑测试是红的）。处置：两个提交已撤回，按「只暂存我的 hunk」（先把我的改动恢复成独立版本暂存、再把对方的版本放回工作区）重提，**对方的改名原样留在工作区、不进提交**。教训：**按文件清单逐个 `git add` 挡不住「同一文件里的外部 hunk」**——提交前要对每个文件核对 `git diff` 的内容而不只是文件名，与并行会话共用工作区时提交窗口越短越好。
+
+---
+
 ## 2026-10-14 · 会话管理：登录设备列表 + 单条吊销（后端一轮）
 
 **版本**：后端 0.14.0 → **0.15.0**（minor）。**零迁移**：`sessions` 表与 `atlas.sum` 一字节未动，元数据走会话数据键。**状态：全部未提交**（用户要求本轮只做改动、不提交，工作区留待检查）。设计：`docs/superpowers/specs/2026-10-14-neoblog-session-management-design.md`；计划：`docs/superpowers/plans/2026-10-14-neoblog-session-management.md`。
@@ -22,7 +55,7 @@
 - **`Put` 不移动 deadline**：scs 的 `Commit` 用 `sd.deadline`，`Put` 只置 `Modified`——节流刷新 `last_seen_at` **不会**把 7 天绝对有效期变成滑动续期。
 - **`postgresstore` 自带清理**：`New()` 就带 5 分钟一轮的过期删除 goroutine，`All()` 的 SQL 已带 `WHERE current_timestamp < expiry`，列表天然只出活跃行——**不需要另做清理任务**（写计划时的初始判断是错的，读源码纠正）。
 - **gob 只吃内建类型**：会话数据是 gob 编码的 `map[string]interface{}`，`time.Time` 进 interface 需要 `gob.Register` 全局副作用，因此四个元数据键一律存 RFC3339 字符串。
-- **删当前会话有「复活」坑**：中间件若在本请求内 `Put` 过（节流到点），handler 之后再删行，scs 会因 `Modified` 在响应提交处把行**写回**。`RevokeSession` 对「当前 token」改走 `sessions.Destroy`（置 `Destroyed`、清 cookie），绕开提交分支；`TestSessionsRevokeCurrentEndsSession` 专门先把 `last_seen_at` 改到 6 分钟前来钉这条路径（新鲜会话不会触发，光跑默认路径测不出来）。
+- **删当前会话有「复活」坑**：中间件若在本请求内 `Put` 过（节流到点），handler 之后再删行，scs 会因 `Modified` 在响应提交处把行**写回**。`RevokeSession` 对「当前 token」改走 `sessions.Destroy`（置 `Destroyed`、清 cookie），绕开提交分支；`TestSessionsRevokeCurrentEndsSession` 先把 `last_seen_at` 改到 6 分钟前、**紧邻 DELETE 之前**来钉这条路径（新鲜会话不会触发，光跑默认路径测不出来）。**注意：该用例的首版写法失效**——改写之后又发了一次列表请求，时间被刷回新鲜，删行时本请求不再写库；已在本日顶部「审查后修补」条目修正并加变异验证。
 - **顺带闭合 2FA 轮登记的缺口**：`establishSession` 清 `auth.pending_2fa_user_id` / `auth.pending_2fa_attempts`，DEVLOG 里「已登录会话可能残留另一账号待验身份」这条不再存在，用 `TestEstablishSessionClearsPendingKeys` 钉住（此前无任何用例覆盖这两个键）。
 
 ### 已知取舍
