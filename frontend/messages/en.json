@@ -22,13 +22,15 @@
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar",
     "profile": "Profile",
+    "personalInfo": "Personal info",
     "backToConsole": "Back to console"
   },
   "console": {
     "title": "Console"
   },
   "uc": {
-    "profile": "Profile"
+    "profile": "Profile",
+    "personalInfo": "Personal info"
   },
   "common": {
     "showPassword": "Show password",

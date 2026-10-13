@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CircleUserRound } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "cn";
 
@@ -30,10 +30,14 @@ export function ConsoleSidebarNav() {
     return null;
   }
 
+  const isPersonalInfoActive =
+    pathname === "/console/uc/profile" ||
+    pathname.startsWith("/console/uc/profile/");
+
   return (
     <SidebarGroup>
       <SidebarMenu>
-        <SidebarMenuItem>
+        <SidebarMenuItem className="mb-2">
           <SidebarMenuButton
             render={<Link href="/console" />}
             tooltip={t("backToConsole")}
@@ -52,6 +56,16 @@ export function ConsoleSidebarNav() {
               aria-hidden="true"
               className={cn("size-4 shrink-0", sidebarLabelFade(isCollapsed))}
             />
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={isPersonalInfoActive}
+            render={<Link href="/console/uc/profile" />}
+            tooltip={t("personalInfo")}
+          >
+            <CircleUserRound />
+            <span>{t("personalInfo")}</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
