@@ -136,7 +136,7 @@ func TestLoginSucceedsAndSetsCookie(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	resp := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -161,7 +161,7 @@ func TestLoginRejectsWrongPasswordAndUnknownAccount(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	resp := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: "definitely-wrong"})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: "definitely-wrong"})
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("wrong password status = %d, want 401", resp.StatusCode)
 	}
@@ -169,7 +169,7 @@ func TestLoginRejectsWrongPasswordAndUnknownAccount(t *testing.T) {
 		t.Fatalf("wrong password error = %q, want invalid_credentials", got)
 	}
 
-	resp = postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: "nobody+" + tag + "@example.com", Password: "whatever"})
+	resp = postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: "nobody+" + tag + "@example.com", Password: "whatever"})
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("unknown account status = %d, want 401", resp.StatusCode)
 	}
@@ -193,7 +193,7 @@ func TestLoginRejectsMalformedRequests(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := postRaw(t, client, ts.URL+"/api/v1/auth/login", tc.body)
+			resp := postRaw(t, client, ts.URL+"/api/v1/sessions", tc.body)
 			if resp.StatusCode != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400", resp.StatusCode)
 			}
@@ -211,7 +211,7 @@ func TestLoginRejectsLongPasswordWithoutServerError(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	resp := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: strings.Repeat("a", 73)})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: strings.Repeat("a", 73)})
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", resp.StatusCode)
 	}
@@ -227,7 +227,7 @@ func TestLoginAcceptsMixedCaseEmail(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	resp := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: strings.ToUpper(u.Email), Password: password})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: strings.ToUpper(u.Email), Password: password})
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -242,11 +242,11 @@ func TestLoginRenewsSessionToken(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	first := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	first := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	first.Body.Close()
 	before := sessionCookie(t, client.Jar, ts.URL)
 
-	second := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	second := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	second.Body.Close()
 	after := sessionCookie(t, client.Jar, ts.URL)
 
@@ -265,7 +265,7 @@ func TestMeRequiresSessionAndReturnsUser(t *testing.T) {
 	ts := newTestApp(t, db)
 
 	anonymous := testClient(t)
-	resp, err := anonymous.Get(ts.URL + "/api/v1/auth/me")
+	resp, err := anonymous.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("anonymous me: %v", err)
 	}
@@ -275,10 +275,10 @@ func TestMeRequiresSessionAndReturnsUser(t *testing.T) {
 	resp.Body.Close()
 
 	client := testClient(t)
-	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 
-	resp, err = client.Get(ts.URL + "/api/v1/auth/me")
+	resp, err = client.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}
@@ -311,10 +311,10 @@ func TestLogoutDestroysSession(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	req, err := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/sessions/current", nil)
 	if err != nil {
 		t.Fatalf("build logout: %v", err)
 	}
@@ -335,7 +335,7 @@ func TestLogoutDestroysSession(t *testing.T) {
 		t.Fatalf("logout body = %v, want {}", logoutBody)
 	}
 
-	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	me, err := client.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me after logout: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestLoginFailsWhenSessionStoreDeleteFails(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	first := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	first := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	first.Body.Close()
 	if first.StatusCode != http.StatusOK {
 		t.Fatalf("first login status = %d, want 200", first.StatusCode)
@@ -368,7 +368,7 @@ func TestLoginFailsWhenSessionStoreDeleteFails(t *testing.T) {
 
 	sm.Store = deleteFailStore{sm.Store}
 
-	second := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	second := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("second login status = %d, want 500", second.StatusCode)
@@ -382,7 +382,7 @@ func TestLogoutFailsWhenSessionStoreDeleteFails(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", login.StatusCode)
@@ -390,7 +390,7 @@ func TestLogoutFailsWhenSessionStoreDeleteFails(t *testing.T) {
 
 	sm.Store = deleteFailStore{sm.Store}
 
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	req, err := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/sessions/current", nil)
 	if err != nil {
 		t.Fatalf("build logout: %v", err)
 	}
@@ -420,7 +420,7 @@ func TestRegisterSucceedsAndLogsIn(t *testing.T) {
 	email := "New+" + tag + "@Example.COM"
 	cleanupUserByEmail(t, db, strings.ToLower(email))
 
-	resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: email, Nickname: "new" + tag, Password: "pass1234"})
+	resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: "new" + tag, Password: "pass1234"})
 	cookie := sessionCookie(t, client.Jar, ts.URL)
 	if resp.StatusCode != http.StatusCreated {
 		resp.Body.Close()
@@ -441,7 +441,7 @@ func TestRegisterSucceedsAndLogsIn(t *testing.T) {
 		t.Fatal("expected a session cookie")
 	}
 
-	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	me, err := client.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestRegisterSucceedsAndLogsIn(t *testing.T) {
 
 	paddedEmail := "padded+" + tag + "@example.com"
 	cleanupUserByEmail(t, db, paddedEmail)
-	padded := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: " PADDED+" + tag + "@EXAMPLE.COM ", Nickname: "  pad" + tag + "  ", Password: "pass1234"})
+	padded := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: " PADDED+" + tag + "@EXAMPLE.COM ", Nickname: "  pad" + tag + "  ", Password: "pass1234"})
 	paddedBody := UserResponse{}
 	if padded.StatusCode != http.StatusCreated {
 		padded.Body.Close()
@@ -481,7 +481,7 @@ func TestRegisterRejectsDuplicateEmail(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: strings.ToUpper(u.Email), Nickname: "other" + tag, Password: "pass1234"})
+	resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: strings.ToUpper(u.Email), Nickname: "other" + tag, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", resp.StatusCode)
@@ -500,7 +500,7 @@ func TestRegisterRejectsDuplicateNickname(t *testing.T) {
 
 	email := "dup+" + tag + "@example.com"
 	cleanupUserByEmail(t, db, email)
-	resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: email, Nickname: u.Nickname, Password: "pass1234"})
+	resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: u.Nickname, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", resp.StatusCode)
@@ -527,7 +527,7 @@ func TestRegisterRejectsWeakPasswords(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			client := testClient(t)
 			tag := uniqueTag(t)
-			resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: "weak+" + tag + "@example.com", Nickname: "weak" + tag, Password: tc.password})
+			resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: "weak+" + tag + "@example.com", Nickname: "weak" + tag, Password: tc.password})
 			if resp.StatusCode != http.StatusBadRequest {
 				resp.Body.Close()
 				t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -557,7 +557,7 @@ func TestRegisterRejectsInvalidFields(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			client := testClient(t)
-			resp := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: tc.email, Nickname: tc.nickname, Password: "pass1234"})
+			resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: tc.email, Nickname: tc.nickname, Password: "pass1234"})
 			if resp.StatusCode != http.StatusBadRequest {
 				resp.Body.Close()
 				t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -574,7 +574,7 @@ func TestRegisterRejectsMalformedBody(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	resp := postRaw(t, client, ts.URL+"/api/v1/auth/register", "{not json")
+	resp := postRaw(t, client, ts.URL+"/api/v1/users", "{not json")
 	if resp.StatusCode != http.StatusBadRequest {
 		resp.Body.Close()
 		t.Fatalf("broken json status = %d, want 400", resp.StatusCode)
@@ -583,7 +583,7 @@ func TestRegisterRejectsMalformedBody(t *testing.T) {
 		t.Fatalf("broken json error = %q, want invalid_request", got)
 	}
 
-	resp = postRaw(t, client, ts.URL+"/api/v1/auth/register", `{"email":"someone@example.com"}`)
+	resp = postRaw(t, client, ts.URL+"/api/v1/users", `{"email":"someone@example.com"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("missing fields status = %d, want 400", resp.StatusCode)
@@ -601,7 +601,7 @@ func TestRegisterWhileLoggedInSwitchesSession(t *testing.T) {
 
 	firstEmail := "first+" + tag + "@example.com"
 	cleanupUserByEmail(t, db, firstEmail)
-	first := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: firstEmail, Nickname: "first" + tag, Password: "pass1234"})
+	first := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: firstEmail, Nickname: "first" + tag, Password: "pass1234"})
 	first.Body.Close()
 	if first.StatusCode != http.StatusCreated {
 		t.Fatalf("first status = %d, want 201", first.StatusCode)
@@ -609,13 +609,13 @@ func TestRegisterWhileLoggedInSwitchesSession(t *testing.T) {
 
 	secondEmail := "second+" + tag + "@example.com"
 	cleanupUserByEmail(t, db, secondEmail)
-	second := postJSON(t, client, ts.URL+"/api/v1/auth/register", RegisterRequest{Email: secondEmail, Nickname: "second" + tag, Password: "pass1234"})
+	second := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: secondEmail, Nickname: "second" + tag, Password: "pass1234"})
 	second.Body.Close()
 	if second.StatusCode != http.StatusCreated {
 		t.Fatalf("second status = %d, want 201", second.StatusCode)
 	}
 
-	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	me, err := client.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}
@@ -643,7 +643,7 @@ func TestRegisterConcurrentSameEmail(t *testing.T) {
 	for i := range statuses {
 		go func(index int) {
 			defer waitGroup.Done()
-			resp := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/register", RegisterRequest{Email: email, Nickname: "race" + tag, Password: "pass1234"})
+			resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: "race" + tag, Password: "pass1234"})
 			statuses[index] = resp.StatusCode
 			resp.Body.Close()
 		}(i)
@@ -673,13 +673,13 @@ func TestChangePasswordSucceedsAndSwapsCredentials(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: oldPassword})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: oldPassword})
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", login.StatusCode)
 	}
 
-	change := postJSON(t, client, ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: oldPassword, NewPassword: "new-pass-123"})
+	change := postJSON(t, client, ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{CurrentPassword: oldPassword, NewPassword: "new-pass-123"})
 	if change.StatusCode != http.StatusOK {
 		change.Body.Close()
 		t.Fatalf("change status = %d, want 200", change.StatusCode)
@@ -693,13 +693,13 @@ func TestChangePasswordSucceedsAndSwapsCredentials(t *testing.T) {
 		t.Fatalf("change body = %v, want {}", changeBody)
 	}
 
-	oldLogin := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: oldPassword})
+	oldLogin := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: oldPassword})
 	oldLogin.Body.Close()
 	if oldLogin.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("old password login status = %d, want 401", oldLogin.StatusCode)
 	}
 
-	newLogin := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: "new-pass-123"})
+	newLogin := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: "new-pass-123"})
 	newLogin.Body.Close()
 	if newLogin.StatusCode != http.StatusOK {
 		t.Fatalf("new password login status = %d, want 200", newLogin.StatusCode)
@@ -715,7 +715,7 @@ func TestChangePasswordRejectsBadInput(t *testing.T) {
 	loginClient := func(t *testing.T) *http.Client {
 		t.Helper()
 		client := testClient(t)
-		resp := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+		resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("login status = %d, want 200", resp.StatusCode)
@@ -724,7 +724,7 @@ func TestChangePasswordRejectsBadInput(t *testing.T) {
 	}
 
 	t.Run("wrong current password", func(t *testing.T) {
-		resp := postJSON(t, loginClient(t), ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: "wrong-pass-1", NewPassword: "new-pass-123"})
+		resp := postJSON(t, loginClient(t), ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{CurrentPassword: "wrong-pass-1", NewPassword: "new-pass-123"})
 		if resp.StatusCode != http.StatusUnauthorized {
 			resp.Body.Close()
 			t.Fatalf("status = %d, want 401", resp.StatusCode)
@@ -735,7 +735,7 @@ func TestChangePasswordRejectsBadInput(t *testing.T) {
 	})
 
 	t.Run("weak new password", func(t *testing.T) {
-		resp := postJSON(t, loginClient(t), ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "abcdefgh"})
+		resp := postJSON(t, loginClient(t), ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "abcdefgh"})
 		if resp.StatusCode != http.StatusBadRequest {
 			resp.Body.Close()
 			t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -746,7 +746,7 @@ func TestChangePasswordRejectsBadInput(t *testing.T) {
 	})
 
 	t.Run("unchanged password", func(t *testing.T) {
-		resp := postJSON(t, loginClient(t), ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: password})
+		resp := postJSON(t, loginClient(t), ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: password})
 		if resp.StatusCode != http.StatusBadRequest {
 			resp.Body.Close()
 			t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -757,7 +757,7 @@ func TestChangePasswordRejectsBadInput(t *testing.T) {
 	})
 
 	t.Run("anonymous", func(t *testing.T) {
-		resp := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
+		resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
 		if resp.StatusCode != http.StatusUnauthorized {
 			resp.Body.Close()
 			t.Fatalf("status = %d, want 401", resp.StatusCode)
@@ -775,14 +775,14 @@ func TestChangePasswordOnDeletedUserReturnsUnauthorized(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 
 	if err := db.Client.User.DeleteOneID(uuid.MustParse(u.ID)).Exec(context.Background()); err != nil {
 		t.Fatalf("delete user: %v", err)
 	}
 
-	resp := postJSON(t, client, ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
+	resp := postJSON(t, client, ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", resp.StatusCode)
@@ -811,20 +811,20 @@ func TestChangePasswordRevokesOtherSessions(t *testing.T) {
 	clientB := testClient(t)
 
 	for _, client := range []*http.Client{clientA, clientB} {
-		login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+		login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 		login.Body.Close()
 		if login.StatusCode != http.StatusOK {
 			t.Fatalf("login status = %d, want 200", login.StatusCode)
 		}
 	}
 
-	change := postJSON(t, clientA, ts.URL+"/api/v1/auth/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
+	change := postJSON(t, clientA, ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "new-pass-123"})
 	change.Body.Close()
 	if change.StatusCode != http.StatusOK {
 		t.Fatalf("change status = %d, want 200", change.StatusCode)
 	}
 
-	meA, err := clientA.Get(ts.URL + "/api/v1/auth/me")
+	meA, err := clientA.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me A: %v", err)
 	}
@@ -834,7 +834,7 @@ func TestChangePasswordRevokesOtherSessions(t *testing.T) {
 	}
 
 	for attempt := 1; attempt <= 2; attempt++ {
-		meB, err := clientB.Get(ts.URL + "/api/v1/auth/me")
+		meB, err := clientB.Get(ts.URL + "/api/v1/users/me")
 		if err != nil {
 			t.Fatalf("me B attempt %d: %v", attempt, err)
 		}
@@ -852,13 +852,13 @@ func TestChangePasswordRejectsMalformedBody(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 
-	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", login.StatusCode)
 	}
 
-	resp := postRaw(t, client, ts.URL+"/api/v1/auth/password", "{not json")
+	resp := postRaw(t, client, ts.URL+"/api/v1/users/me/password", "{not json")
 	if resp.StatusCode != http.StatusBadRequest {
 		resp.Body.Close()
 		t.Fatalf("broken json status = %d, want 400", resp.StatusCode)
@@ -867,7 +867,7 @@ func TestChangePasswordRejectsMalformedBody(t *testing.T) {
 		t.Fatalf("broken json error = %q, want invalid_request", got)
 	}
 
-	resp = postRaw(t, client, ts.URL+"/api/v1/auth/password", `{"current_password":"`+password+`"}`)
+	resp = postRaw(t, client, ts.URL+"/api/v1/users/me/password", `{"current_password":"`+password+`"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("missing fields status = %d, want 400", resp.StatusCode)

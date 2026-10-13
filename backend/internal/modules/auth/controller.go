@@ -24,22 +24,22 @@ func newController(service *Service) *controller {
 }
 
 func (c *controller) register(r *gin.RouterGroup) {
-	r.POST("/auth/login", c.login)
-	r.POST("/auth/register", c.signup)
-	r.POST("/auth/2fa/verify", c.verifySecondFactor)
+	r.POST("/users", c.signup)
+	r.POST("/sessions", c.login)
+	r.POST("/sessions/current/verify", c.verifySecondFactor)
 }
 
 func (c *controller) registerProtected(r *gin.RouterGroup) {
-	r.POST("/auth/logout", c.logout)
-	r.GET("/auth/me", c.me)
+	r.DELETE("/sessions/current", c.logout)
+	r.GET("/users/me", c.me)
 	r.PATCH("/users/me", c.updateProfile)
 	r.GET("/users/me/sessions", c.listSessions)
 	r.DELETE("/users/me/sessions/:id", c.revokeSession)
-	r.POST("/auth/password", c.changePassword)
-	r.POST("/auth/2fa/setup", c.setupTwoFactor)
-	r.POST("/auth/2fa/enable", c.enableTwoFactor)
-	r.POST("/auth/2fa/disable", c.disableTwoFactor)
-	r.POST("/auth/2fa/recovery-codes", c.regenerateRecoveryCodes)
+	r.POST("/users/me/password", c.changePassword)
+	r.POST("/users/me/2fa/setup", c.setupTwoFactor)
+	r.POST("/users/me/2fa/enable", c.enableTwoFactor)
+	r.POST("/users/me/2fa/disable", c.disableTwoFactor)
+	r.POST("/users/me/2fa/recovery-codes", c.regenerateRecoveryCodes)
 }
 
 func (c *controller) login(ctx *gin.Context) {

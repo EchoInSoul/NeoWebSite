@@ -43,7 +43,7 @@ func TestRegisterBlockedWhenSettingOff(t *testing.T) {
 	cleanupUserByEmail(t, db, email)
 	before := userCount(t, db)
 
-	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/register", RegisterRequest{Email: email, Nickname: "closed" + tag, Password: "pass1234"})
+	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: "closed" + tag, Password: "pass1234"})
 	status := resp.StatusCode
 	code := decodeError(t, resp)
 	if status != http.StatusForbidden {
@@ -65,7 +65,7 @@ func TestRegisterGatePrecedesFieldValidation(t *testing.T) {
 
 	body := RegisterRequest{Email: "no-at", Nickname: "nickgate", Password: "pass1234"}
 
-	closed := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/register", body)
+	closed := postJSON(t, testClient(t), ts.URL+"/api/v1/users", body)
 	if code := decodeError(t, closed); code != "registration_closed" {
 		t.Fatalf("closed: code = %q, want registration_closed", code)
 	}
@@ -73,7 +73,7 @@ func TestRegisterGatePrecedesFieldValidation(t *testing.T) {
 	if err := settingsService.SetBool(ctx, "register", "enabled", true); err != nil {
 		t.Fatalf("reopen register.enabled: %v", err)
 	}
-	opened := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/register", body)
+	opened := postJSON(t, testClient(t), ts.URL+"/api/v1/users", body)
 	if code := decodeError(t, opened); code != "invalid_request" {
 		t.Fatalf("open: code = %q, want invalid_request", code)
 	}
@@ -86,7 +86,7 @@ func TestLoginUnaffectedWhenRegistrationClosed(t *testing.T) {
 
 	email := "login+" + tag + "@example.com"
 	cleanupUserByEmail(t, db, email)
-	created := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/register", RegisterRequest{Email: email, Nickname: "login" + tag, Password: "pass1234"})
+	created := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: "login" + tag, Password: "pass1234"})
 	if created.StatusCode != http.StatusCreated {
 		created.Body.Close()
 		t.Fatalf("setup register status = %d, want 201", created.StatusCode)
@@ -95,7 +95,7 @@ func TestLoginUnaffectedWhenRegistrationClosed(t *testing.T) {
 
 	closeRegistration(t, settingsService)
 
-	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: email, Password: "pass1234"})
+	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: "pass1234"})
 	if resp.StatusCode != http.StatusOK {
 		code := decodeError(t, resp)
 		t.Fatalf("login while registration closed: status = %d, code = %q, want 200", resp.StatusCode, code)

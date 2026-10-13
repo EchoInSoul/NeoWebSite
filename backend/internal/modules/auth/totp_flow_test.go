@@ -30,7 +30,7 @@ func currentWindow() int64 {
 func loginOK(t *testing.T, client *http.Client, tsURL, identifier, password string) {
 	t.Helper()
 
-	resp := postJSON(t, client, tsURL+"/api/v1/auth/login", LoginRequest{Identifier: identifier, Password: password})
+	resp := postJSON(t, client, tsURL+"/api/v1/sessions", LoginRequest{Identifier: identifier, Password: password})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", resp.StatusCode)
@@ -40,13 +40,13 @@ func loginOK(t *testing.T, client *http.Client, tsURL, identifier, password stri
 func post2FA(t *testing.T, client *http.Client, tsURL, path string, body any) *http.Response {
 	t.Helper()
 
-	return postJSON(t, client, tsURL+"/api/v1/auth/2fa/"+path, body)
+	return postJSON(t, client, tsURL+"/api/v1/users/me/2fa/"+path, body)
 }
 
 func setup2FA(t *testing.T, client *http.Client, tsURL string) TwoFactorSetupResponse {
 	t.Helper()
 
-	resp := postRaw(t, client, tsURL+"/api/v1/auth/2fa/setup", "")
+	resp := postRaw(t, client, tsURL+"/api/v1/users/me/2fa/setup", "")
 	return decodeJSON[TwoFactorSetupResponse](t, resp, http.StatusOK)
 }
 
@@ -364,7 +364,7 @@ func TestTwoFactorSetupRejectedWhenEnabled(t *testing.T) {
 	setup := setup2FA(t, client, ts.URL)
 	enable2FA(t, client, ts.URL, setup.Secret)
 
-	resp := postRaw(t, client, ts.URL+"/api/v1/auth/2fa/setup", "")
+	resp := postRaw(t, client, ts.URL+"/api/v1/users/me/2fa/setup", "")
 	assertErrorCode(t, resp, http.StatusConflict, "two_factor_already_enabled")
 }
 
@@ -541,7 +541,7 @@ func TestTwoFactorEnableRevokesOtherSessions(t *testing.T) {
 	enable2FA(t, clientA, ts.URL, setup.Secret)
 
 	for attempt := 1; attempt <= 2; attempt++ {
-		resp, err := clientB.Get(ts.URL + "/api/v1/auth/me")
+		resp, err := clientB.Get(ts.URL + "/api/v1/users/me")
 		if err != nil {
 			t.Fatalf("me B attempt %d: %v", attempt, err)
 		}
@@ -551,7 +551,7 @@ func TestTwoFactorEnableRevokesOtherSessions(t *testing.T) {
 		}
 	}
 
-	mine, err := clientA.Get(ts.URL + "/api/v1/auth/me")
+	mine, err := clientA.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me A: %v", err)
 	}
@@ -564,13 +564,13 @@ func TestTwoFactorEnableRevokesOtherSessions(t *testing.T) {
 func loginRaw(t *testing.T, client *http.Client, tsURL, identifier, password string) *http.Response {
 	t.Helper()
 
-	return postJSON(t, client, tsURL+"/api/v1/auth/login", LoginRequest{Identifier: identifier, Password: password})
+	return postJSON(t, client, tsURL+"/api/v1/sessions", LoginRequest{Identifier: identifier, Password: password})
 }
 
 func logoutOK(t *testing.T, client *http.Client, tsURL string) {
 	t.Helper()
 
-	resp := postRaw(t, client, tsURL+"/api/v1/auth/logout", "")
+	resp := doDELETE(t, client, tsURL+"/api/v1/sessions/current")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("logout status = %d, want 200", resp.StatusCode)
@@ -580,7 +580,7 @@ func logoutOK(t *testing.T, client *http.Client, tsURL string) {
 func verify2FA(t *testing.T, client *http.Client, tsURL, code string) *http.Response {
 	t.Helper()
 
-	return postJSON(t, client, tsURL+"/api/v1/auth/2fa/verify", TwoFactorCodeRequest{Code: code})
+	return postJSON(t, client, tsURL+"/api/v1/sessions/current/verify", TwoFactorCodeRequest{Code: code})
 }
 
 func nextWindowCode(t *testing.T, secret string) string {
@@ -592,7 +592,7 @@ func nextWindowCode(t *testing.T, secret string) string {
 func meStatus(t *testing.T, client *http.Client, tsURL string) int {
 	t.Helper()
 
-	resp, err := client.Get(tsURL + "/api/v1/auth/me")
+	resp, err := client.Get(tsURL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}
@@ -603,7 +603,7 @@ func meStatus(t *testing.T, client *http.Client, tsURL string) int {
 func meBody(t *testing.T, client *http.Client, tsURL string) MeResponse {
 	t.Helper()
 
-	resp, err := client.Get(tsURL + "/api/v1/auth/me")
+	resp, err := client.Get(tsURL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}

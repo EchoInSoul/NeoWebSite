@@ -99,7 +99,7 @@ func login(t *testing.T, client *http.Client, base, identifier, password string)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	resp, err := client.Post(base+"/api/v1/auth/login", "application/json", bytes.NewReader(payload))
+	resp, err := client.Post(base+"/api/v1/sessions", "application/json", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("login: %v", err)
 	}
@@ -116,7 +116,7 @@ func loginWithLogout(t *testing.T, client *http.Client, ts *httptest.Server, ide
 	}
 
 	t.Cleanup(func() {
-		request, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+		request, err := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/sessions/current", nil)
 		if err != nil {
 			return
 		}
@@ -164,7 +164,7 @@ func TestAuthFlowEndToEnd(t *testing.T) {
 		t.Error("development cookie must not be Secure")
 	}
 
-	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	me, err := client.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestAuthFlowEndToEnd(t *testing.T) {
 		t.Fatalf("me email = %q, want %q", meBody.Email, u.Email)
 	}
 
-	logoutReq, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	logoutReq, err := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/sessions/current", nil)
 	if err != nil {
 		t.Fatalf("build logout: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestAuthFlowEndToEnd(t *testing.T) {
 		t.Fatalf("logout status = %d, want 200", logout.StatusCode)
 	}
 
-	after, err := client.Get(ts.URL + "/api/v1/auth/me")
+	after, err := client.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me after logout: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestMeRevokesSessionWhenUserDeleted(t *testing.T) {
 		t.Fatalf("delete user: %v", err)
 	}
 
-	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	me, err := client.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestAnonymousLogoutRejected(t *testing.T) {
 	ts, _ := newTestServer(t, config.EnvironmentDevelopment)
 	client := newClient(t)
 
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	req, err := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/sessions/current", nil)
 	if err != nil {
 		t.Fatalf("build logout: %v", err)
 	}
@@ -379,10 +379,11 @@ func TestMethodMismatchReturns405Envelope(t *testing.T) {
 		path      string
 		wantAllow string
 	}{
-		{"POST-only route hit with GET", http.MethodGet, "/api/v1/auth/login", "POST"},
-		{"GET-only route hit with DELETE", http.MethodDelete, "/api/v1/auth/me", "GET"},
+		{"POST-only route hit with GET", http.MethodGet, "/api/v1/sessions", "POST"},
+		{"GET-only route hit with DELETE", http.MethodDelete, "/api/v1/users/me/sessions", "GET"},
+		{"GET+PATCH route hit with PUT", http.MethodPut, "/api/v1/users/me", sortedMethods("GET", "PATCH")},
 		{"multi-method route hit with PUT", http.MethodPut, "/api/v1/admin/groups/" + uuid.NewString(), sortedMethods("PATCH", "DELETE")},
-		{"OPTIONS is not registered anywhere", http.MethodOptions, "/api/v1/auth/login", "POST"},
+		{"OPTIONS is not registered anywhere", http.MethodOptions, "/api/v1/sessions", "POST"},
 	}
 
 	for _, tc := range cases {
@@ -567,14 +568,14 @@ func TestDegradedServerStillServesRoutes(t *testing.T) {
 		want     int
 		wantCode string
 	}{
-		{"login needs the database", http.MethodPost, "/api/v1/auth/login", `{"identifier":"a@b.c","password":"pass-12345"}`, http.StatusServiceUnavailable, "service_unavailable"},
-		{"register needs the database", http.MethodPost, "/api/v1/auth/register", `{"email":"a@b.c","nickname":"ab","password":"pass-12345"}`, http.StatusServiceUnavailable, "service_unavailable"},
+		{"login needs the database", http.MethodPost, "/api/v1/sessions", `{"identifier":"a@b.c","password":"pass-12345"}`, http.StatusServiceUnavailable, "service_unavailable"},
+		{"register needs the database", http.MethodPost, "/api/v1/users", `{"email":"a@b.c","nickname":"ab","password":"pass-12345"}`, http.StatusServiceUnavailable, "service_unavailable"},
 		{"admin list needs the database", http.MethodPost, "/api/v1/admin/groups", `{"name":"G"}`, http.StatusUnauthorized, "unauthorized"},
 		{"settings read needs the database", http.MethodGet, "/api/v1/admin/settings/register", "", http.StatusUnauthorized, "unauthorized"},
 		{"public settings needs the database", http.MethodGet, "/api/v1/public/settings", "", http.StatusServiceUnavailable, "service_unavailable"},
-		{"validation does not need the database", http.MethodPost, "/api/v1/auth/login", `{}`, http.StatusBadRequest, "invalid_request"},
+		{"validation does not need the database", http.MethodPost, "/api/v1/sessions", `{}`, http.StatusBadRequest, "invalid_request"},
 		{"unknown route is still 404", http.MethodGet, "/api/v1/definitely/not/a/route", "", http.StatusNotFound, "not_found"},
-		{"method mismatch is still 405", http.MethodGet, "/api/v1/auth/login", "", http.StatusMethodNotAllowed, "method_not_allowed"},
+		{"method mismatch is still 405", http.MethodGet, "/api/v1/sessions", "", http.StatusMethodNotAllowed, "method_not_allowed"},
 	}
 
 	for _, tc := range cases {
@@ -950,7 +951,7 @@ func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	resp, err := client.Post(ts.URL+"/api/v1/auth/password", "application/json", bytes.NewReader(payload))
+	resp, err := client.Post(ts.URL+"/api/v1/users/me/password", "application/json", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("change password: %v", err)
 	}
@@ -1039,7 +1040,7 @@ func envelopeParam(decoded map[string]any) string {
 func assertProfile(t *testing.T, client *http.Client, ts *httptest.Server, nickname, email string) {
 	t.Helper()
 
-	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	me, err := client.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}
@@ -1121,7 +1122,7 @@ func TestRegistrationControlEndToEnd(t *testing.T) {
 	}
 
 	anonymous := newClient(t)
-	status, values = exchangeJSON(t, anonymous, http.MethodPost, ts.URL+"/api/v1/auth/register", regBody)
+	status, values = exchangeJSON(t, anonymous, http.MethodPost, ts.URL+"/api/v1/users", regBody)
 	if status != http.StatusForbidden || envelopeCode(values) != "registration_closed" {
 		t.Fatalf("closed register = %d %v, want 403 registration_closed", status, values)
 	}
@@ -1131,7 +1132,7 @@ func TestRegistrationControlEndToEnd(t *testing.T) {
 		t.Fatalf("reopen patch = %d %v, want 200 with enabled true", status, values)
 	}
 
-	status, values = exchangeJSON(t, anonymous, http.MethodPost, ts.URL+"/api/v1/auth/register", regBody)
+	status, values = exchangeJSON(t, anonymous, http.MethodPost, ts.URL+"/api/v1/users", regBody)
 	if status != http.StatusCreated {
 		t.Fatalf("reopened register = %d %v, want 201", status, values)
 	}
@@ -1184,7 +1185,7 @@ func TestAccessEndToEnd(t *testing.T) {
 		t.Fatalf("plain admin status = %d, want 403", plainAdmin.StatusCode)
 	}
 
-	me, err := plainClient.Get(ts.URL + "/api/v1/auth/me")
+	me, err := plainClient.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("plain me: %v", err)
 	}
@@ -1257,7 +1258,7 @@ func TestAccessEndToEnd(t *testing.T) {
 		t.Fatalf("patch status = %d, want 200", patchResp.StatusCode)
 	}
 
-	afterMe, err := plainClient.Get(ts.URL + "/api/v1/auth/me")
+	afterMe, err := plainClient.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me after group change: %v", err)
 	}

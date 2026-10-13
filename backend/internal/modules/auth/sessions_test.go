@@ -97,7 +97,7 @@ func TestLoginStoresSessionMetadata(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"User-Agent":      "probe/1.0",
 		"X-Forwarded-For": "203.0.113.7, 10.0.0.1",
 	})
@@ -135,7 +135,7 @@ func TestLoginTruncatesOversizedHeaders(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"User-Agent":      strings.Repeat("a", 2000),
 		"X-Forwarded-For": strings.Repeat("b", 200),
 	})
@@ -176,7 +176,7 @@ func TestEstablishSessionClearsPendingKeys(t *testing.T) {
 	}
 	setSessionCookie(t, client, ts.URL, token)
 
-	resp := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -204,7 +204,7 @@ func TestSessionActivityTouchThrottled(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", login.StatusCode)
@@ -220,7 +220,7 @@ func TestSessionActivityTouchThrottled(t *testing.T) {
 	values[guard.SessionLastSeenAtKey] = seeded
 	rewriteSessionRow(t, sm, token, deadline, values)
 
-	me := doGET(t, client, ts.URL+"/api/v1/auth/me")
+	me := doGET(t, client, ts.URL+"/api/v1/users/me")
 	me.Body.Close()
 	if me.StatusCode != http.StatusOK {
 		t.Fatalf("me status = %d, want 200", me.StatusCode)
@@ -233,7 +233,7 @@ func TestSessionActivityTouchThrottled(t *testing.T) {
 	values[guard.SessionLastSeenAtKey] = time.Now().UTC().Add(-6 * time.Minute).Format(time.RFC3339)
 	rewriteSessionRow(t, sm, token, deadline, values)
 
-	meStale := doGET(t, client, ts.URL+"/api/v1/auth/me")
+	meStale := doGET(t, client, ts.URL+"/api/v1/users/me")
 	meStale.Body.Close()
 	_, _, afterStale := sessionRow(t, sm, ts.URL, client)
 	got, _ := afterStale[guard.SessionLastSeenAtKey].(string)
@@ -268,7 +268,7 @@ func TestSessionsListIncludesCurrentWithMetadata(t *testing.T) {
 	ts, _ := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	login := postJSONWithHeaders(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+	login := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"User-Agent":      "probe/1.0",
 		"X-Forwarded-For": "203.0.113.7",
 	})
@@ -312,13 +312,13 @@ func TestSessionsListIsolatedPerUser(t *testing.T) {
 	ts, _ := newTestAppWithSessions(t, db)
 
 	firstClient := testClient(t)
-	firstLogin := postJSON(t, firstClient, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: first.Email, Password: firstPassword})
+	firstLogin := postJSON(t, firstClient, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: first.Email, Password: firstPassword})
 	firstLogin.Body.Close()
 	if firstLogin.StatusCode != http.StatusOK {
 		t.Fatalf("first login status = %d, want 200", firstLogin.StatusCode)
 	}
 	secondClient := testClient(t)
-	secondLogin := postJSON(t, secondClient, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: second.Email, Password: secondPassword})
+	secondLogin := postJSON(t, secondClient, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: second.Email, Password: secondPassword})
 	secondLogin.Body.Close()
 	if secondLogin.StatusCode != http.StatusOK {
 		t.Fatalf("second login status = %d, want 200", secondLogin.StatusCode)
@@ -341,7 +341,7 @@ func TestSessionsListExcludesPendingSessions(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	login := postJSON(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", login.StatusCode)
@@ -397,7 +397,7 @@ func loginAs(t *testing.T, tsURL, email, password string) *http.Client {
 	t.Helper()
 
 	client := testClient(t)
-	resp := postJSON(t, client, tsURL+"/api/v1/auth/login", LoginRequest{Identifier: email, Password: password})
+	resp := postJSON(t, client, tsURL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: password})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", resp.StatusCode)
@@ -444,13 +444,13 @@ func TestSessionsRevokeAnotherDevice(t *testing.T) {
 		t.Fatalf("body = %+v, want id %q with deleted true", body, doomedID)
 	}
 
-	revoked := doGET(t, doomed, ts.URL+"/api/v1/auth/me")
+	revoked := doGET(t, doomed, ts.URL+"/api/v1/users/me")
 	revoked.Body.Close()
 	if revoked.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("revoked session status = %d, want 401", revoked.StatusCode)
 	}
 
-	stillAlive := doGET(t, keeper, ts.URL+"/api/v1/auth/me")
+	stillAlive := doGET(t, keeper, ts.URL+"/api/v1/users/me")
 	stillAlive.Body.Close()
 	if stillAlive.StatusCode != http.StatusOK {
 		t.Fatalf("keeper status = %d, want 200", stillAlive.StatusCode)
@@ -492,7 +492,7 @@ func TestSessionsRevokeUnknownOrForeignReturnsNotFound(t *testing.T) {
 		t.Fatalf("unknown status = %d, want 404", unknown.StatusCode)
 	}
 
-	otherAlive := doGET(t, otherClient, ts.URL+"/api/v1/auth/me")
+	otherAlive := doGET(t, otherClient, ts.URL+"/api/v1/users/me")
 	otherAlive.Body.Close()
 	if otherAlive.StatusCode != http.StatusOK {
 		t.Fatalf("targeted session status = %d, want 200", otherAlive.StatusCode)
@@ -545,7 +545,7 @@ func TestSessionsRevokeCurrentEndsSession(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 
-	after := doGET(t, client, ts.URL+"/api/v1/auth/me")
+	after := doGET(t, client, ts.URL+"/api/v1/users/me")
 	defer after.Body.Close()
 	if after.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401 after revoking the current session", after.StatusCode)
@@ -602,7 +602,7 @@ func TestLoginTruncatesHeadersAtRuneBoundary(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"User-Agent": strings.Repeat("日", 200),
 	})
 	resp.Body.Close()
