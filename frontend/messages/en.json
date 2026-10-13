@@ -20,10 +20,15 @@
   "sidebar": {
     "open": "Open sidebar",
     "collapse": "Collapse sidebar",
-    "expand": "Expand sidebar"
+    "expand": "Expand sidebar",
+    "profile": "Profile",
+    "backToConsole": "Back to console"
   },
   "console": {
     "title": "Console"
+  },
+  "uc": {
+    "profile": "Profile"
   },
   "common": {
     "showPassword": "Show password",
