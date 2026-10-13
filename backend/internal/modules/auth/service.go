@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/alexedwards/scs/v2"
 	"golang.org/x/crypto/bcrypt"
@@ -44,7 +45,7 @@ func newService(db *database.Database, sessions *scs.SessionManager, totpKey []b
 	}
 }
 
-func (s *Service) Register(ctx context.Context, email, nickname, password string) (User, error) {
+func (s *Service) Register(ctx context.Context, email, nickname, password string, meta SessionMeta) (User, error) {
 	enabled, err := s.settings.GetBool(ctx, "register", "enabled")
 	if err != nil {
 		return User{}, err
@@ -87,15 +88,14 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 		return User{}, err
 	}
 
-	if err := s.sessions.RenewToken(ctx); err != nil {
+	if err := s.establishSession(ctx, created.ID.String(), meta); err != nil {
 		return User{}, err
 	}
-	s.sessions.Put(ctx, guard.SessionUserIDKey, created.ID.String())
 
 	return toUser(created), nil
 }
 
-func (s *Service) Login(ctx context.Context, identifier, password string) (User, error) {
+func (s *Service) Login(ctx context.Context, identifier, password string, meta SessionMeta) (User, error) {
 	if len(password) > maxPasswordBytes {
 		return User{}, apierror.ErrInvalidCredentials
 	}
@@ -118,12 +118,13 @@ func (s *Service) Login(ctx context.Context, identifier, password string) (User,
 	}
 
 	if found.TotpEnabledAt != nil {
-		s.sessions.Remove(ctx, guard.SessionUserIDKey)
-		s.sessions.Put(ctx, pendingUserIDKey, found.ID.String())
+		s.enterPendingSession(ctx, found.ID.String())
 		return User{}, apierror.ErrTwoFactorRequired
 	}
 
-	s.sessions.Put(ctx, guard.SessionUserIDKey, found.ID.String())
+	if err := s.establishSession(ctx, found.ID.String(), meta); err != nil {
+		return User{}, err
+	}
 
 	return toUser(found), nil
 }
@@ -154,7 +155,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 		return apierror.ErrPasswordUnchanged
 	}
 
-	if err := s.revokeOtherSessions(ctx, userID, currentToken); err != nil {
+	if err := s.revokeOtherSessions(userID, currentToken); err != nil {
 		return err
 	}
 
@@ -166,38 +167,16 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 	return s.repo.updatePasswordHash(ctx, userID, string(hash))
 }
 
-func (s *Service) revokeOtherSessions(ctx context.Context, userID, currentToken string) error {
-	iterable, ok := s.sessions.Store.(scs.IterableStore)
-	if !ok {
-		return errors.New("session store does not support iteration")
-	}
-
-	sessions, err := iterable.All()
-	if err != nil {
-		return err
-	}
-
-	for token, data := range sessions {
+func (s *Service) revokeOtherSessions(userID, currentToken string) error {
+	return s.eachSession(func(token string, values map[string]any, _ time.Time) error {
 		if token == currentToken {
-			continue
+			return nil
 		}
-
-		_, values, err := s.sessions.Codec.Decode(data)
-		if err != nil {
-			continue
+		if sessionString(values, guard.SessionUserIDKey) != userID {
+			return nil
 		}
-
-		storedUserID, ok := values[guard.SessionUserIDKey].(string)
-		if !ok || storedUserID != userID {
-			continue
-		}
-
-		if err := s.sessions.Store.Delete(token); err != nil {
-			return err
-		}
-	}
-
-	return nil
+		return s.sessions.Store.Delete(token)
+	})
 }
 
 func (s *Service) CurrentUser(ctx context.Context, userID string) (User, error) {
@@ -324,7 +303,7 @@ func (s *Service) EnableTOTP(ctx context.Context, userID, code, currentToken str
 		return RecoveryCodesResponse{}, apierror.ErrTwoFactorInvalidCode
 	}
 
-	if err := s.revokeOtherSessions(ctx, userID, currentToken); err != nil {
+	if err := s.revokeOtherSessions(userID, currentToken); err != nil {
 		return RecoveryCodesResponse{}, err
 	}
 
@@ -358,7 +337,7 @@ func (s *Service) DisableTOTP(ctx context.Context, userID, password, currentToke
 		return apierror.ErrInvalidCredentials
 	}
 
-	if err := s.revokeOtherSessions(ctx, userID, currentToken); err != nil {
+	if err := s.revokeOtherSessions(userID, currentToken); err != nil {
 		return err
 	}
 	return s.repo.disableTOTP(ctx, found.ID)
@@ -411,7 +390,7 @@ func issueRecoveryCodes() ([]string, []string, error) {
 	return codes, hashes, nil
 }
 
-func (s *Service) VerifySecondFactor(ctx context.Context, code string) (User, error) {
+func (s *Service) VerifySecondFactor(ctx context.Context, code string, meta SessionMeta) (User, error) {
 	pendingUserID := s.sessions.GetString(ctx, pendingUserIDKey)
 	if pendingUserID == "" {
 		return User{}, apierror.ErrUnauthorized
@@ -445,12 +424,9 @@ func (s *Service) VerifySecondFactor(ctx context.Context, code string) (User, er
 		return User{}, s.failSecondFactor(ctx)
 	}
 
-	if err := s.sessions.RenewToken(ctx); err != nil {
+	if err := s.establishSession(ctx, found.ID.String(), meta); err != nil {
 		return User{}, err
 	}
-	s.sessions.Put(ctx, guard.SessionUserIDKey, found.ID.String())
-	s.sessions.Remove(ctx, pendingUserIDKey)
-	s.sessions.Remove(ctx, pendingAttemptsKey)
 
 	return toUser(found), nil
 }

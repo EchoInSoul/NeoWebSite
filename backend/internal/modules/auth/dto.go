@@ -63,3 +63,13 @@ type MeResponse struct {
 	Permissions      []string      `json:"permissions"`
 	TwoFactorEnabled bool          `json:"two_factor_enabled"`
 }
+
+type SessionResponse struct {
+	ID         string `json:"id"`
+	Current    bool   `json:"current"`
+	UserAgent  string `json:"user_agent"`
+	IP         string `json:"ip"`
+	CreatedAt  string `json:"created_at"`
+	LastSeenAt string `json:"last_seen_at"`
+	ExpiresAt  string `json:"expires_at"`
+}

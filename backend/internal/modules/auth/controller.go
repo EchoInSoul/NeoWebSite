@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -11,6 +12,10 @@ import (
 
 type controller struct {
 	service *Service
+}
+
+type itemList[T any] struct {
+	Items []T `json:"items"`
 }
 
 func newController(service *Service) *controller {
@@ -27,6 +32,8 @@ func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.POST("/auth/logout", c.logout)
 	r.GET("/auth/me", c.me)
 	r.PATCH("/users/me", c.updateProfile)
+	r.GET("/users/me/sessions", c.listSessions)
+	r.DELETE("/users/me/sessions/:id", c.revokeSession)
 	r.POST("/auth/password", c.changePassword)
 	r.POST("/auth/2fa/setup", c.setupTwoFactor)
 	r.POST("/auth/2fa/enable", c.enableTwoFactor)
@@ -41,7 +48,7 @@ func (c *controller) login(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.Login(ctx.Request.Context(), req.Identifier, req.Password)
+	user, err := c.service.Login(ctx.Request.Context(), req.Identifier, req.Password, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -57,7 +64,7 @@ func (c *controller) signup(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password)
+	user, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -224,11 +231,73 @@ func (c *controller) verifySecondFactor(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.VerifySecondFactor(ctx.Request.Context(), req.Code)
+	user, err := c.service.VerifySecondFactor(ctx.Request.Context(), req.Code, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
 	}
 
 	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname})
+}
+
+func (c *controller) listSessions(ctx *gin.Context) {
+	sessions, err := c.service.ListSessions(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey))
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	items := make([]SessionResponse, 0, len(sessions))
+	for _, session := range sessions {
+		items = append(items, SessionResponse{
+			ID:         session.ID,
+			Current:    session.Current,
+			UserAgent:  session.UserAgent,
+			IP:         session.IP,
+			CreatedAt:  session.CreatedAt,
+			LastSeenAt: session.LastSeenAt,
+			ExpiresAt:  session.ExpiresAt,
+		})
+	}
+
+	ctx.JSON(http.StatusOK, itemList[SessionResponse]{Items: items})
+}
+
+func (c *controller) revokeSession(ctx *gin.Context) {
+	if err := c.service.RevokeSession(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), ctx.Param("id")); err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"id": ctx.Param("id"), "deleted": true})
+}
+
+const (
+	maxUserAgentLength = 512
+	maxIPLength        = 64
+)
+
+func requestSessionMeta(ctx *gin.Context) SessionMeta {
+	ip := ctx.GetHeader("X-Forwarded-For")
+	if idx := strings.IndexByte(ip, ','); idx >= 0 {
+		ip = ip[:idx]
+	}
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		ip = strings.TrimSpace(ctx.GetHeader("X-Real-IP"))
+	}
+	if ip == "" {
+		ip = ctx.ClientIP()
+	}
+	return SessionMeta{
+		UserAgent: truncateHeader(ctx.GetHeader("User-Agent"), maxUserAgentLength),
+		IP:        truncateHeader(ip, maxIPLength),
+	}
+}
+
+func truncateHeader(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit]
 }
