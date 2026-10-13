@@ -9,6 +9,7 @@ import { cn } from "cn";
 import { useSidebar } from "@/components/ui/sidebar";
 import {
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -58,6 +59,11 @@ export function ConsoleSidebarNav() {
             />
           </SidebarMenuButton>
         </SidebarMenuItem>
+      </SidebarMenu>
+      <SidebarGroupLabel className="pointer-events-none">
+        {t("account")}
+      </SidebarGroupLabel>
+      <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
             isActive={isPersonalInfoActive}
