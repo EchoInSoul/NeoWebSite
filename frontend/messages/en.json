@@ -2,7 +2,7 @@
   "userMenu": {
     "openMenu": "Open user menu",
     "visitSite": "Visit site",
-    "profile": "Profile",
+    "profile": "Personal settings",
     "theme": "Theme",
     "themeSystem": "System",
     "themeLight": "Light",
@@ -21,7 +21,8 @@
     "open": "Open sidebar",
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar",
-    "profile": "Profile",
+    "profile": "Personal settings",
+    "account": "Account",
     "personalInfo": "Personal info",
     "backToConsole": "Back to console"
   },
@@ -30,7 +31,26 @@
   },
   "uc": {
     "profile": "Profile",
-    "personalInfo": "Personal info"
+    "personalInfo": "Personal info",
+    "account": "Account",
+    "username": "Username",
+    "usernameHelp": "2–32 characters, no spaces or @",
+    "email": "Email",
+    "emailHelp": "Up to 254 characters, and you can sign in with it",
+    "group": "Group",
+    "presetGroup": "Preset group · {key}",
+    "customGroup": "Custom group",
+    "twoFactor": "Two-factor authentication",
+    "twoFactorEnabled": "Enabled",
+    "twoFactorDisabled": "Disabled",
+    "save": "Save",
+    "saved": "Saved",
+    "saveFailed": "Save failed, please try again later",
+    "nameTaken": "That username is already taken",
+    "emailTaken": "That email is already registered",
+    "alreadyTaken": "That email or username is already taken",
+    "invalidNickname": "Usernames must be 2–32 characters, with no spaces or @",
+    "invalidEmail": "Enter a valid email address"
   },
   "common": {
     "showPassword": "Show password",

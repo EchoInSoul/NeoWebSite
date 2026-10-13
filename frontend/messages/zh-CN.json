@@ -2,7 +2,7 @@
   "userMenu": {
     "openMenu": "打开用户菜单",
     "visitSite": "访问前台",
-    "profile": "个人资料",
+    "profile": "个人设置",
     "theme": "主题色",
     "themeSystem": "跟随系统",
     "themeLight": "亮色",
@@ -21,7 +21,8 @@
     "open": "打开侧边栏",
     "collapse": "收起侧边栏",
     "expand": "展开侧边栏",
-    "profile": "个人资料",
+    "profile": "个人设置",
+    "account": "账号",
     "personalInfo": "个人信息",
     "backToConsole": "返回控制台"
   },
@@ -30,7 +31,26 @@
   },
   "uc": {
     "profile": "个人资料",
-    "personalInfo": "个人信息"
+    "personalInfo": "个人信息",
+    "account": "账号",
+    "username": "用户名",
+    "usernameHelp": "2–32 个字符，不能含空格和 @",
+    "email": "邮箱",
+    "emailHelp": "最长 254 个字符，登录时可以用它",
+    "group": "所属组",
+    "presetGroup": "预设组 · {key}",
+    "customGroup": "自建组",
+    "twoFactor": "两步验证",
+    "twoFactorEnabled": "已开启",
+    "twoFactorDisabled": "未开启",
+    "save": "保存",
+    "saved": "已保存",
+    "saveFailed": "保存失败，请稍后重试",
+    "nameTaken": "该用户名已被占用",
+    "emailTaken": "该邮箱已被注册",
+    "alreadyTaken": "该邮箱或用户名已被占用",
+    "invalidNickname": "用户名需 2–32 个字符，不能含空格和 @",
+    "invalidEmail": "邮箱格式不正确"
   },
   "common": {
     "showPassword": "显示密码",

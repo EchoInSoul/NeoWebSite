@@ -17,6 +17,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      position="top-center"
+      swipeDirections={["top", "left", "right"]}
       icons={{
         success: <CircleCheckIcon className="mt-[3.5px] size-4" />,
         warning: <TriangleAlertIcon className="mt-[3.5px] size-4" />,
@@ -38,6 +40,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
         style: {
           width: "max-content",
           maxWidth: "360px",
+          left: 0,
+          right: 0,
+          marginInline: "auto",
           padding: "12px 14px",
           fontSize: "13px",
           gap: "6px",
