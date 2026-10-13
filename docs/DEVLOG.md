@@ -33,6 +33,96 @@
 
 ---
 
+## 2026-10-13 · 公开设置读取收口：信封统一 + 聚合端点 + 前端通用层
+
+**版本**：后端 0.12.0 → **0.13.0**（minor：新对外契约）。**零迁移**。起因是用户对上一轮结果的追加要求：「规范这个公共 API，让我方便复用」——当时公开读只有一个刚加的按组端点，前端为注册开关单独写了 `lib/signup-status.ts`，每加一项就得再抄一遍。
+
+### 做了什么
+
+- **信封统一**：一个设置组的记录固定为 `{group, values}`；集合外外套 `{items: […]}`（与 access 的 `itemList` 同形）。管理侧 `GET` / `PATCH /admin/settings/:group` 从裸对象改为组记录，两侧同形，前端一套解析通吃。已写进 api-conventions §6 规则 4，并记明 D4/§9 列表收敛落地时 `items` 与 access 一起迁 `data`，不留第二套形状。
+- **公开侧只留一个聚合端点**：`GET /api/v1/public/settings`（无鉴权）只出清单里标了 `Public` 的项，没有任何公开项的组整条不出现；按组点查 `GET /public/settings/:group` 删除（未推送，收口零成本）。前台要读公开设置就一次取全。
+- **白名单语义**：`Definition` 新增 `Public` 字段，`Service.PublicSettings` 按注册表顺序出组；新守卫 `TestBuiltinPublicAllowlist` 钉住「公开项集合 == `[register.enabled]`」，谁把敏感项标成公开就红——这是匿名端点唯一的安全闸。
+- **前端收进通用层**：`lib/public-settings.ts` 一处负责 fetch（`cache: "no-store"`，漏了会被 Next 静态化）、形状校验、**fail-open**（读不到返回 `{}`，选择器 `settings.register?.enabled !== false` 即视为开放）；`/signup` 关闭时 `notFound()`，登录页 `signupOpen=false` 时整个 footer 不传；专用 `lib/signup-status.ts` 删除，页面里的 try/catch 一并收掉。加下一个公开设置：后端 `Public: true` → 前端加一行选择器 → 页面消费。
+- 文案补 `registrationClosed`（zh「注册功能已关闭」/ en "Sign-ups are currently closed"），`use-signup.ts` 加 `registration_closed` 分支，不再掉进兜底的「注册失败，请稍后重试」。
+
+### 实测
+
+后端 11 包 `-count=1` 全绿无 skip；前端 `prettier` / `tsc` / `eslint` 干净。真实链路双向对照：关闭态 `{"items":[{"group":"register","values":{"enabled":false}}]}` + `/signup` **404** + 登录页 `href="/signup"` **0** 次；开启态 `/signup` **200** + 链接 **1** 次；再关回 404。降级新增一行：库不可达时匿名聚合端点 503（前端 fail-open 的依据就在这）。
+
+### 过程中的坑
+
+- **形状一改就击穿了 app 层旧断言**（`default get = 200 map[group:register values:…]` 对不上 `values["enabled"]`）——这条红是好消息，说明断言真的在验形状而不是随手写的绿灯；改判用新的 `envelopeValues()` 解嵌套。
+- **判「链接有没有隐掉」不能 grep 中文串**：`去注册` 出现在 next-intl 随页面流下来的文案表 payload 里，HTML 里恒有，我据此一度误判成「没隐掉」。要 grep `href="/signup"`，并且必须做开启态正向对照，否则「0 次」既可能是隐掉了也可能是页面根本没渲染。
+- **Next 16 不允同一目录起第二个 dev server**（`Another next dev server is already running`），所以前端只能借在跑的 :3000 验；期间 :5732 的后端进程被并行会话重启过两次，每次都要先确认它的 uptime 与 `/api/v1/public/settings` 的负载形状，才知道跑的是不是当前二进制。
+- **前端无测试运行器**（package.json 里没有 vitest/jest），选择器与形状校验只能靠 `tsc` + 后端守卫兜；要真验需要单独立一轮前端测试底座。
+
+### 已知缺口
+
+- 界面仍没有：改注册开关还是得 `PATCH /admin/settings/register`；本轮只把「关」这件事在路由层做实了。
+- 聚合端点无缓存，且每组一次查询（当前组数=1，无感）；设置项多了再评估单查询。
+- `items` → `data` 的列表信封收敛仍欠着（api-conventions §0 未实施项），本轮已把公开端点登记进待迁移清单。
+
+---
+
+## 2026-10-13 · 注册控制：设置系统接上第一个消费方
+
+**版本**：后端 0.11.0 → **0.12.0**（minor：新能力域）。提交 `f3d762a`…`de1e871`（7 个提交，全部在 `backend/`，**零迁移**）。spec 与实施计划在 `docs/superpowers/{specs,plans}/2026-10-13-neoblog-registration-control*`。
+
+### 做了什么
+
+- 清单落第一项 `register/enabled`（开关，默认 `true` = 现网行为零变化）；`auth.Service.Register` 首句读它，关闭时 403 `registration_closed`（新错误码，`permission_error`），**判定先于字段校验**；`auth.CreateAdminUser` 不经 `Register`，保持关闭态仍能建首个管理员。
+- 设置模块从「无路由能力模块」变成有路由模块：新增 `module.go` / `controller.go`，`New(db)` 改回返回 `(*Module, error)`（照 `mail` 形状，仍是唯一返回 error 的构造器），`GET` / `PATCH /api/v1/admin/settings/:group` 按组通用读写；`App` 里那个无出口的 settings 私有字段删除（`mailer` 留字段是因为 `shutdown` 要 `Close` 它）。
+- `Service.PatchGroup` + `ItemError`：请求体值类型以服务端清单为准（复用 `decodeTyped`，`3.5` / `1e3` 这类越界天然被拒），任一项不合法即整组零落库；controller 用 `errors.As` 取项名填进 `apierror.WithParam`。
+- 鉴权走**新权限点** `system.settings.view` / `.edit`（`edit` 经 `rbac.Expand` 隐含 `view`），不是 `RequirePresetGroup`——取向是将来控制台能按角色勾选。核过：owner/admin 的生效权限运行时取自代码目录（`PresetPermissions → All()`），`permission` 列是纯字符串无枚举无外键，**加权限点不需要迁任何数据**；新键追加在 catalog 末尾以免漂掉既有断言。
+
+### 过程中的坑
+
+- **计划漏了一个守卫**：`rbac_test.go` 的 `TestCatalogMatchesFixedValues` 把权限目录**逐条**钉死，加键必红。审查计划时只核了 `access` 侧那个用 `len(rbac.Catalog())` 动态比对的用例，以为全仓没有第二处。
+- **开关是落到库里的状态，换一个新 app 实例并不能重置它**：对照用例（关闭 403 → 打开后同一个体 400）必须在同一个服务实例上显式 `SetBool(..., true)`；另配 `t.Cleanup` 里 `ResetItem` 删行，否则测试库里残留 `false`，同库后续不相干的 auth 用例会莫名吃 403。
+- **关闭态的字段校验对照不能用空体**：`signup` 在 controller 层就因三个字段为空判 400（`auth/controller.go:52-57`），请求根本进不到 service——要用「非空但 `validEmail` 会拒」的体（邮箱无 `@`）才证得了门在服务第一句。
+- **降级态造不出带身份的客户端**：`newDegradedServer` 起的是库不可达的 app，登录本身就 503，所以设置端点的降级用例只能断未登录 401；注册侧的 503 由既有 `app_test.go:548` 那条合法体用例继续覆盖，不必新建函数。
+- 测试脚手架没装 NoRoute 信封，PATCH 打到只注册了 GET 的路径时返回的是 gin 默认 404 纯文本，解 `code` 字段直接红——原本担心的一条会假绿，实际不存在。
+
+### 验证口径
+
+- 集成用例是**真跑**不是 skip（本机 5434 Postgres，`SKIP` 计数为 0）：设置包 4 条 GET + 7 条 PATCH + 4 条注册把关 + `TestRegistrationControlEndToEnd`（真 `app.New` 装配链，owner 关开关 → 匿名注册 403 → 打开 → 同一个体 201）。
+- 真实进程冒烟：`ADDR=:5741 go run .` 的 gin 路由表里有这两条；匿名 `GET` / `PATCH` 均 401（不是 404 也不是 405，说明路由与守卫都在），非法邮箱注册 400（说明把关那次读库成功、默认判为开放）。
+
+### 已知缺口
+
+- 前端零感知：注册页照常显示，提交才吃 403；并行会话那份前端设置页骨架（五个分区）里**也没有注册落点**，且已被其自行回滚。要做到「按钮直接标为已关闭」需要设置 spec §10 的「公开读取」插槽。
+- **改开关目前只能打接口**（本轮只后端，没有界面）：`PATCH /api/v1/admin/settings/register` 带 owner 会话，或 `ResetItem` 语义上恢复默认。
+- 权限点可授出：`system.settings.edit` 能授给自建组，即非 owner/admin 的角色也可能被授「改注册开关」——这是选权限点而非预设组守卫的既定取向，不是疏漏。
+- 每次注册多一次单行点查，无缓存；两个管理员同时 PATCH 为最后写赢（行级 upsert，无版本号）。
+- 孤儿行沿用：若将来删掉 `register/enabled` 这一项，库里残留行不会被任何读取路径碰到，只占复合键，清理仍走人工 SQL。
+
+---
+
+## 2026-10-13 · 环境轮的复核与入库：几条取舍留档
+
+**版本**：后端 **0.11.0**（未进位）；本轮**零源码语义变更**，只做审查复核并把环境轮改动入库。入库提交 `6ff236d`（10 个文件、+309/−30，未推送，`development` 领先 `origin/development` 3）。
+
+### 复核怎么做的（为什么不照读文档结论）
+
+- 文档写「全绿」不算结论，全部重跑：`gofmt -l internal` 空、`go vet ./...` 空、`go test ./...` 全绿（本机 5434 的 Postgres 在跑，集成用例是真执行的，不是 skip 出来的绿）。
+- 环境这类判据必须拿产物自证：`bash scripts/build.sh .scratch/envprobe/prod.exe` 打一份发布产物，在库不可达（`DATABASE_URL` 指到死端口）的情况下启动，`GET /api/v1/healthy` 的 `environment` 为 **production**，启动日志 `[GIN-debug]` 行数为 **0**，只有 `listening on :5739` 一行——与上一节实测表里「build.sh 产物，不设 `APP_ENV`」那行对上。探针产物用完即删，`.scratch/` 已在 `.gitignore` 内，不在仓库路径里留 34 MB 二进制。
+- 改动范围按消费者收口核一遍：非测试代码里读 `cfg.Environment` 的只有三处——`app.go:49` 的 gin 模式、`app.go:126` 的 cookie `Secure`、`modules/health/service.go:38` 的健康检查响应；`"production"` 字面量已全部收敛到常量，没有漏网的字符串比较。
+
+### 关键取舍
+
+- **`ginMode()` 的 `default → release` 兜底保留**（`app.go:113-114`，对应断言 `app_test.go:240` 的 `"bogus"` 用例）。审查一度把它列为「生产路径走不到」的多余分支，结论是不删：它钉住的是「未知值走安全侧」这个方向，删掉之后谁把 default 改成 `gin.DebugMode` 测试照样全绿，等于这个选择没人守；成本一行，零维护。同时记明它的价值上限——守的只是手造 `Config` 漂移这类测试内场景，真正的把关在 `TestLoadRejectsUnknownEnvironment`，兜底只是第二道。
+- **两类兜底要分开判**：展示层的等效构造（后端挂了时前端造空状态那类）按既定口径整条删；配置层与纯函数的 fail-closed 默认值连同测试保留。判据是「删掉之后方向会不会被静默反过来」，不是「可达不可达」。
+- **已定形的改动不重做**：`Load()` 里那层只转发 `EffectiveEnvironment()` 的 `loadEnvironment()`，在复核与拍板之间已被并行会话删掉（`config.go:67` 现为直调）。处理方式是先重核工作区（grep 无残留、文档无过时引用、文件 mtime 落在两轮之间）确认形状已对，再决定不动手，而不是按原计划改第二遍。同类项还有 README「运行」章节末段与 `app_test.go` 的一行，均为并行会话在制品，按「一起提交」的口径随同一提交入库，提交消息据实际内容反推。
+
+### 本轮没做 / 仍未验证
+
+- panic 日志随模式漂移、request id（10-12 定的「对内可诊断」）仍未做。
+- `APP_ENV` 在加载层硬拦（过滤 `.env` 里这个键）仍是可选后续项，现状只有文档约定，代码照读。
+- **发布产物默认 `Cookie.Secure=true` 这条分支依旧没有端到端验证**：非 localhost 的明文 http 部署下浏览器会直接丢弃 session cookie，症状是登录接口 200、下一步 `/auth/me` 全 401，看着像「登录没生效」。要证它需要真浏览器 + 非 localhost 明文地址。
+- 仍无容器镜像与部署定义：`deploy/` 只有 postgres 的 `init.sql`，口径里的「镜像」目前等价于 `build.sh` 产出的单个可执行文件。
+
+---
+
 ## 2026-10-13 · 后端环境口径收口：构建产物即生产，开发态只属于 `go run`
 
 **版本**：后端 **0.11.0**（本轮未进位）；接口字段名与类型不变，但 `/api/v1/healthy` 的 `environment` **取值**现在随**构建方式**而变（`development` → `production`），依赖该字段判断环境的按变更处理。
