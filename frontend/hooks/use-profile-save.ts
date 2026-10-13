@@ -17,11 +17,15 @@ export function useProfileSave(profile: SessionUser | null) {
   const router = useRouter();
   const [nickname, setNickname] = useState(profile?.nickname ?? "");
   const [email, setEmail] = useState(profile?.email ?? "");
+  const [bio, setBio] = useState("");
+  const [savedBio, setSavedBio] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   const isDirty =
     profile !== null &&
-    (nickname !== profile.nickname || email !== profile.email);
+    (nickname !== profile.nickname ||
+      email !== profile.email ||
+      bio !== savedBio);
 
   function toFailureMessage(error: unknown): string {
     if (!(error instanceof ApiError)) {
@@ -49,18 +53,7 @@ export function useProfileSave(profile: SessionUser | null) {
   }
 
   async function save() {
-    if (profile === null || isSaving) {
-      return;
-    }
-
-    const body: { nickname?: string; email?: string } = {};
-    if (nickname !== profile.nickname) {
-      body.nickname = nickname;
-    }
-    if (email !== profile.email) {
-      body.email = email;
-    }
-    if (body.nickname === undefined && body.email === undefined) {
+    if (profile === null || isSaving || !isDirty) {
       return;
     }
 
@@ -68,10 +61,11 @@ export function useProfileSave(profile: SessionUser | null) {
     try {
       const updated = await apiRequest<ProfileUpdateResponse>(
         "/api/v1/users/me",
-        { method: "PATCH", body },
+        { method: "PATCH", body: { nickname, email, bio } },
       );
       setNickname(updated.nickname);
       setEmail(updated.email);
+      setSavedBio(bio);
       toast.success(t("saved"));
       router.refresh();
     } catch (error) {
@@ -92,10 +86,12 @@ export function useProfileSave(profile: SessionUser | null) {
   return {
     nickname,
     email,
+    bio,
     isDirty,
     isSaving,
     changeNickname: setNickname,
     changeEmail: setEmail,
+    changeBio: setBio,
     save,
   };
 }
