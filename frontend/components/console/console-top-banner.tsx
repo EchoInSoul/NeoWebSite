@@ -4,6 +4,7 @@ import { Menu } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { useSidebar } from "@/components/ui/sidebar";
+import { SIDEBAR_PANEL_TRANSITION } from "@/lib/sidebar-transition";
 
 export function ConsoleTopBanner() {
   const { state, openMobile, toggleSidebar } = useSidebar();
@@ -26,7 +27,9 @@ export function ConsoleTopBanner() {
       <div
         aria-hidden="true"
         className={
-          "hidden shrink-0 border-r border-border transition-[width] duration-200 ease-linear min-[1200px]:block " +
+          "hidden shrink-0 border-r border-border min-[1200px]:block " +
+          SIDEBAR_PANEL_TRANSITION +
+          " " +
           (isCollapsed ? "w-(--sidebar-width-icon)" : "w-(--sidebar-width)")
         }
       />

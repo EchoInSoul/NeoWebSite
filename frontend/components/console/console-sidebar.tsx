@@ -5,6 +5,7 @@ import {
 } from "@/components/ui/sidebar";
 
 import { ConsoleSidebarFooter } from "./console-sidebar-footer";
+import { ConsoleSidebarNav } from "./console-sidebar-nav";
 
 export function ConsoleSidebar({ displayName }: { displayName?: string }) {
   return (
@@ -13,7 +14,9 @@ export function ConsoleSidebar({ displayName }: { displayName?: string }) {
       collapsible="icon"
       className="top-(--console-banner-h) h-[calc(100svh-var(--console-banner-h))] border-r border-border"
     >
-      <SidebarContent />
+      <SidebarContent>
+        <ConsoleSidebarNav />
+      </SidebarContent>
       <SidebarFooter className="border-t border-border">
         <ConsoleSidebarFooter displayName={displayName} />
       </SidebarFooter>
