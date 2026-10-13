@@ -26,6 +26,7 @@ func (c *controller) register(r *gin.RouterGroup) {
 func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.POST("/auth/logout", c.logout)
 	r.GET("/auth/me", c.me)
+	r.PATCH("/users/me", c.updateProfile)
 	r.POST("/auth/password", c.changePassword)
 	r.POST("/auth/2fa/setup", c.setupTwoFactor)
 	r.POST("/auth/2fa/enable", c.enableTwoFactor)
@@ -105,6 +106,22 @@ func (c *controller) me(ctx *gin.Context) {
 		Permissions:      permissions,
 		TwoFactorEnabled: user.TwoFactorEnabled,
 	})
+}
+
+func (c *controller) updateProfile(ctx *gin.Context) {
+	var req ProfileUpdateRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	user, err := c.service.UpdateProfile(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Nickname, req.Email)
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname})
 }
 
 func (c *controller) changePassword(ctx *gin.Context) {

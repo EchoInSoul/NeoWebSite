@@ -74,6 +74,30 @@ func (r *repository) updatePasswordHash(ctx context.Context, id string, password
 	return nil
 }
 
+func (r *repository) updateProfile(ctx context.Context, id string, nickname, email *string) (*ent.User, error) {
+	parsed, err := uuid.Parse(id)
+	if err != nil {
+		return nil, errUserNotFound
+	}
+
+	update := r.client.User.UpdateOneID(parsed)
+	if nickname != nil {
+		update = update.SetNickname(*nickname)
+	}
+	if email != nil {
+		update = update.SetEmail(*email)
+	}
+
+	updated, err := update.Save(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, errUserNotFound
+		}
+		return nil, err
+	}
+	return updated, nil
+}
+
 func toUser(u *ent.User) User {
 	return User{
 		ID:               u.ID.String(),

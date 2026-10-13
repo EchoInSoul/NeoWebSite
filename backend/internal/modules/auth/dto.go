@@ -18,6 +18,11 @@ type RegisterRequest struct {
 	Password string `json:"password"`
 }
 
+type ProfileUpdateRequest struct {
+	Nickname *string `json:"nickname"`
+	Email    *string `json:"email"`
+}
+
 type PasswordChangeRequest struct {
 	CurrentPassword string `json:"current_password"`
 	NewPassword     string `json:"new_password"`

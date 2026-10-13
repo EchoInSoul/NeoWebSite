@@ -212,6 +212,69 @@ func (s *Service) CurrentUser(ctx context.Context, userID string) (User, error) 
 	return toUser(found), nil
 }
 
+func (s *Service) UpdateProfile(ctx context.Context, userID string, nickname, email *string) (User, error) {
+	if nickname == nil && email == nil {
+		return User{}, apierror.ErrInvalidRequest
+	}
+
+	var nextNickname, nextEmail *string
+
+	if nickname != nil {
+		normalized := normalizeNickname(*nickname)
+		if !validNickname(normalized) {
+			return User{}, apierror.WithParam(apierror.ErrInvalidRequest, "nickname")
+		}
+		nextNickname = &normalized
+	}
+
+	if email != nil {
+		normalized := normalizeEmail(*email)
+		if !validEmail(normalized) {
+			return User{}, apierror.WithParam(apierror.ErrInvalidRequest, "email")
+		}
+		nextEmail = &normalized
+	}
+
+	if nextNickname != nil {
+		if err := s.ensureIdentifierFree(ctx, userID, *nextNickname, apierror.ErrNicknameTaken); err != nil {
+			return User{}, err
+		}
+	}
+	if nextEmail != nil {
+		if err := s.ensureIdentifierFree(ctx, userID, *nextEmail, apierror.ErrEmailTaken); err != nil {
+			return User{}, err
+		}
+	}
+
+	updated, err := s.repo.updateProfile(ctx, userID, nextNickname, nextEmail)
+	if err != nil {
+		if errors.Is(err, errUserNotFound) {
+			s.sessions.Destroy(ctx)
+			return User{}, apierror.ErrUnauthorized
+		}
+		if ent.IsConstraintError(err) {
+			return User{}, apierror.ErrAlreadyTaken
+		}
+		return User{}, err
+	}
+
+	return toUser(updated), nil
+}
+
+func (s *Service) ensureIdentifierFree(ctx context.Context, userID, identifier string, taken error) error {
+	found, err := s.repo.findUserByIdentifier(ctx, identifier)
+	if err != nil {
+		if errors.Is(err, errUserNotFound) {
+			return nil
+		}
+		return err
+	}
+	if found.ID.String() == userID {
+		return nil
+	}
+	return taken
+}
+
 func (s *Service) SetupTOTP(ctx context.Context, userID string) (TwoFactorSetupResponse, error) {
 	found, err := s.activeUser(ctx, userID)
 	if err != nil {

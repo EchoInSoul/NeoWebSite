@@ -603,6 +603,100 @@ func TestDegradedHealthReportsDatabaseError(t *testing.T) {
 	}
 }
 
+func TestUpdateProfileEndToEnd(t *testing.T) {
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
+	u, password := createTestUser(t, db)
+	client := newClient(t)
+
+	loginResp := login(t, client, ts.URL, u.Email, password)
+	loginResp.Body.Close()
+	if loginResp.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want 200", loginResp.StatusCode)
+	}
+
+	blockerTag := fmt.Sprintf("%d", time.Now().UnixNano())
+	blocker, err := db.Client.User.Create().
+		SetEmail("blocker+" + blockerTag + "@test.local").
+		SetNickname("blocker" + blockerTag).
+		SetPasswordHash("not-a-usable-hash").
+		Save(context.Background())
+	if err != nil {
+		t.Fatalf("create blocker user: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Client.User.DeleteOneID(blocker.ID).Exec(context.Background())
+	})
+
+	endpoint := ts.URL + "/api/v1/users/me"
+	profileTag := fmt.Sprintf("%d", time.Now().UnixNano())
+	nickname := "prof" + profileTag
+	email := "prof" + profileTag + "@test.local"
+
+	status, body := exchangeJSON(t, newClient(t), http.MethodPatch, endpoint, map[string]any{"nickname": nickname})
+	if status != http.StatusUnauthorized || envelopeCode(body) != "unauthorized" {
+		t.Fatalf("anonymous patch = %d %v, want 401 unauthorized", status, body)
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{})
+	if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" {
+		t.Fatalf("empty body = %d %v, want 400 invalid_request", status, body)
+	}
+
+	for _, invalid := range []map[string]any{
+		{"nickname": "a"},
+		{"nickname": "with space"},
+		{"nickname": "with@at"},
+		{"email": "not-an-email"},
+		{"nickname": 42},
+	} {
+		status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, invalid)
+		if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" {
+			t.Fatalf("invalid %v = %d %v, want 400 invalid_request", invalid, status, body)
+		}
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{
+		"nickname": "  " + nickname + "  ",
+		"email":    strings.ToUpper(email),
+	})
+	if status != http.StatusOK || body["nickname"] != nickname || body["email"] != email {
+		t.Fatalf("update = %d %v, want 200 trimmed nickname with lowercased email", status, body)
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": nickname, "email": email})
+	if status != http.StatusOK {
+		t.Fatalf("resubmit unchanged = %d %v, want 200", status, body)
+	}
+
+	me, err := client.Get(ts.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	defer me.Body.Close()
+	var meBody map[string]any
+	if err := json.NewDecoder(me.Body).Decode(&meBody); err != nil {
+		t.Fatalf("decode me: %v", err)
+	}
+	if meBody["nickname"] != nickname || meBody["email"] != email {
+		t.Fatalf("me after update = %v, want %s / %s", meBody, nickname, email)
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": blocker.Nickname})
+	if status != http.StatusConflict || envelopeCode(body) != "nickname_taken" {
+		t.Fatalf("taken nickname = %d %v, want 409 nickname_taken", status, body)
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"email": blocker.Email})
+	if status != http.StatusConflict || envelopeCode(body) != "email_taken" {
+		t.Fatalf("taken email = %d %v, want 409 email_taken", status, body)
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": nickname + "x"})
+	if status != http.StatusOK || body["email"] != email {
+		t.Fatalf("partial update = %d %v, want 200 keeping email", status, body)
+	}
+}
+
 func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
 	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
