@@ -4,37 +4,42 @@
 
 ---
 
-## 2026-10-13 · 补测试缺口：改资料接口的原子性、param、并发与边界值 + 测试入口脚本
+## 2026-10-13 · 补测试缺口：改资料接口的原子性、param、并发兜底与边界值 + 测试入口脚本
 
 **版本**：后端 **0.14.0**（未进位）。**零源码语义变更、零迁移**：本轮只动测试与测试入口，`internal/` 下的非测试代码一行未改。起因是对上一轮（改资料接口）的独立审查列出 5 条测试缺口，用户点名全做。
 
 ### 做了什么
 
-- **组合字段原子性**（新用例 `TestUpdateProfileRejectedWriteLeavesBothFieldsUnchanged`）：同时提交「可用的昵称 + 撞车的邮箱」→ 409 `email_taken`，随后回查确认**昵称也没被写进去**；反方向（撞车昵称 + 可用邮箱）同样回查。此前两个字段从来没有一起提交过，"要么全改、要么全不改"这条只存在于代码读出来的形状里，谁改成两条 UPDATE 分两次写测试也照样绿。
+- **组合字段原子性**（新用例 `TestUpdateProfileRejectedWriteLeavesBothFieldsUnchanged`）：同时提交「可用的昵称 + 撞车的邮箱」→ 409 `email_taken`，随后回查确认**昵称也没被写进去**；反方向（撞车昵称 + 可用邮箱）同样回查。此前**失败路径**上从未把两个字段一起提交过（成功路径有过两次），"要么全改、要么全不改"这条只存在于代码读出来的形状里，谁改成两条 UPDATE 分两次写测试也照样绿。
 - **`param` 断言**：`{"nickname":"a"}` → 400 + `param:"nickname"`；`{"email":"not-an-email"}` → `param:"email"`。前端 `use-profile-save` 全靠这个字段决定弹哪条文案，之前一个断言都没有。同时钉反向：请求体形状/类型错（`{"nickname":42}`）时 `param` 为空。
 - **并发用例**（新用例 `TestUpdateProfileConcurrentSameNickname`）：两个已登录用户同时把昵称改成同一个值，正好一个 200、一个 409，且 409 的 code 落在 `{nickname_taken, already_taken}` 内。照 `TestRegisterConcurrentSameEmail` 的形状写，但**没有**复用 `exchangeJSON`——它内部 `t.Fatalf`，从测试 goroutine 里调用是错的（既有那条用例就有这个毛病）；另立了不在 goroutine 里断言的 `patchJSON`。
-- **边界值**（并入 `TestUpdateProfileEndToEnd`）：裸 `null` 体、数组体、字符串体、数字体、`{"nickname":null}`、纯空格昵称、33 rune 昵称、261 字节邮箱 → 全部 400；emoji 昵称（1 emoji + 6 数字）→ 200 且能原样读回；把当前值**带前后空格**重提 → 200（trim 后自我匹配，正是前端"只提交改动字段"会走的那条）。空体与类型错的用例顺带补上 `param` 为空的断言。
+- **约束兜底确定性用例**（新用例 `TestUpdateProfileConstraintBackstopReturnsAlreadyTaken`）：并发那条打不到 `already_taken`（原因见下），改用测试夹具直取——在测试库上装一个 `BEFORE UPDATE` 触发器，昵称以 `collide` 开头时先插一行同名数据，使撞名预检仍然查不到、而紧接着真正的 UPDATE 撞上唯一索引，于是**确定性**拿到 409 `already_taken`。触发器与函数在 `t.Cleanup` 里连同行一起拆掉。
+- **边界值**（并入 `TestUpdateProfileEndToEnd`）：拒绝侧——数组体、字符串体、数字体、`{"nickname":42}`、纯空格昵称、33 rune 昵称、261 字节邮箱 → 全部 400；接受侧——2 rune、32 rune、20 个 emoji（20 rune / 80 字节，专钉"按字符数而非字节数算长度"）、254 字节邮箱 → 200 且原样读回；把当前值**带前后空格**重提 → 200（trim 后自我匹配，正是前端"只提交改动字段"会走的那条）。用例按语义分成两组：**「两个字段都没给」**（空体、裸 `null`、`{"nickname":null}`）与**「请求体形状/类型错」**（数组/字符串/数字/字段类型错），两组都断言 `param` 为空——前者走的是 service 的"两个都缺"判定、后者才是解码失败，之前混在一张表里写，标签是错的。
 - **会话清理**：新增 `loginWithLogout` 辅助（登录 + 在 `t.Cleanup` 里打一次登出），三个改资料用例改用它，跑完不再在 `sessions` 表留行。
-- **测试入口脚本**（`scripts/test.sh`，新）：`go test ./... -count=1 -p 1`。不传包名时先确认 `DATABASE_URL_TEST` 已设置（避免集成用例静默 skip 后假装全绿），传包名原样转发。README 新增「测试」章节说明为什么必须串行。
+- **测试入口脚本**（`scripts/test.sh`，新）：`go test ./... -count=1 -p 1`。**始终**确认 `DATABASE_URL_TEST` 已设置——不传包名时没设直接退出码 1，传了包名只打一行警告再照跑（此时该包的集成用例会静默 skip，`ok` 不代表跑过）。README 新增「测试」章节说明为什么必须串行。
 
 ### 过程中的发现
 
-- **`already_taken` 兜底在端到端里打不到。** 把并发用例的断言临时收紧成「必须是 `already_taken`」跑了 10 遍，输家**每次**都是预检给出的 `nickname_taken`。原因：两个请求虽同时发出，但都要先走完会话加载 + `LoadIdentity` 查库才轮到预检，而预检（一次 SELECT）到 UPDATE 之间只有几十微秒的窗口，撞进去的概率极低。所以这条兜底仍是**只有代码、没有证据**的状态；要确定性覆盖，需要给 auth 模块一个可注入的仓储（当前 `repo` 是具体结构体，没有注入点）或在 ent 上挂钩子强制返回约束错误——本轮没做，留作已知缺口。断言因此写成「两者皆可」。
-- **`-p 1` 是绕开、不是根治。** 偶发红的根因是两个包共用同一个测试库，而 `register/enabled` 是**存在数据库里的全局开关**：`app` 包的 `TestRegistrationControlEndToEnd` 会把它关掉再打开，`auth` 包不相干的注册用例撞进那段窗口就吃 403。根治要给每个包独立的库或 schema，但测试库是**预先迁移好的**、代码里没有迁移入口（`database.Open` 只连库、不动 schema），代价远超收益，所以在入口脚本上收口。
+- **`already_taken` 兜底靠并发打不到，得用夹具。** 把并发用例的断言临时收紧成「必须是 `already_taken`」跑了 10 遍（审查复核又跑 20 遍），输家**每次**都是预检给出的 `nickname_taken`。原因：两个请求虽同时发出，但都要先走完会话加载 + `LoadIdentity` 查库才轮到预检，而预检（一次 SELECT）到 UPDATE 之间只有几十微秒的窗口，撞进去的概率极低。**结论不是"测不了"**——加一条测试库触发器夹具即可确定性触发（见上），并发用例的断言因此保持「两者皆可」不收紧。
+- **`-p 1` 是绕开、不是根治。** 偶发红的根因是两个包共用同一个测试库，而 `register/enabled` 是**存在数据库里的全局开关**：会去关它的不止一处——`app` 包的 `TestRegistrationControlEndToEnd`，加上 `auth` 包 `register_gate_test.go` 里的 `closeRegistration`（四个用例共用）与 `settings/controller_test.go` 里那条；任何一处关着的时候，另一个包不相干的注册用例撞进去就吃 403。根治要给每个包独立的库或 schema，但测试库是**预先迁移好的**、代码里没有迁移入口（`database.Open` 只连库、不动 schema），代价远超收益，所以在入口脚本上收口。
 - 本轮真遇上了那次红：首跑 `go test ./...` 时 `TestRegisterRejectsDuplicateNickname` 返回 403 而不是 409；串行与随后两次并行都绿——典型时序偶发。
+- **装夹具时先吃了一个 500。** 触发器第一次跑给的是 500 `internal_error` 而不是 409：`INSERT` 漏了 `group_id`，而该列在 `groups_and_permissions` 迁移里被 `SET NOT NULL`（且没有默认值），于是报的是**非空约束**——ent 的 `IsConstraintError` 只认 `violates unique constraint` / 外键 / check 三种文案（`dialect/sql/sqlgraph/errors.go` 是纯字符串匹配），非空约束一条都不沾，径直落到 500。改成从被更新的行借 `NEW.group_id` 之后才拿到唯一约束。顺带说明：这条兜底对**错误种类**是敏感的，真实场景里能让它生效的只有唯一索引冲突本身。
+- **试守卫时踩到本机 `env` 是坏的。** 起初用 `env -u DATABASE_URL_TEST bash scripts/test.sh` 试守卫，什么都没输出、退出码 0，一度以为守卫写错。真因：这台机器上 `env` 解析到 `C:\Users\Multu\.local\bin\env`——一个只往 PATH 里塞目录、**完全忽略参数**的 shim 脚本，`env -u X cmd` 里的命令根本没被执行。本仓脚本不靠 `env` 传参所以不受影响，但这个坑在本机是通用的：任何 `env VAR=x cmd` / `env -u VAR cmd` 写法都会静默空转（不报错、不执行、退出码 0）。
 
 ### 验证口径
 
-- `bash scripts/test.sh` 11 包全绿无 skip（本机 5434）；`gofmt -l internal` 空、`go vet ./...` 空。
-- 并发用例 `-count=20` 稳定通过（6.1s）。
-- 原子性用例非空转：断言的是「回查后昵称仍等于**改之前**的值」，而请求里给的是另一个值——真发生半写就会红。
-- 脚本守卫实测：不设 `DATABASE_URL_TEST` 时退出码 1 并打印提示。（先用 `env -u` 试跑时它没触发，查明是 Git Bash 下 `env -u` 在子 shell 里的行为差异，不是脚本问题——直接跑确认守卫生效。）
+- `bash scripts/test.sh` 11 包全绿，无 `DATABASE_URL_TEST` 相关 skip（本机 5434；`mail` 那条真实投递用例在未配 `SMTP_*` 时仍按设计 skip）；`gofmt -l internal` 空、`go vet ./...` 空。
+- 并发用例 `-count=20`、约束兜底用例 `-count=5` 稳定通过。
+- 夹具不留垃圾：跑完用探针查 `pg_trigger` / `pg_proc` 与 `users` 里的 `@collision.test` 行，三项残留均为 0。
+- 原子性用例非空转：断言的是「回查后昵称仍等于**改之前**的值」，而请求里给的是另一个值——真发生半写就会红。（独立审查另用变异测试复核过：把实现改成分两步写，两个方向各命中一次。）
+- 脚本守卫实测：不设 `DATABASE_URL_TEST` 时全仓跑退出码 1；单包跑打一行警告后照跑（`ok` 但集成用例其实已 skip）。
 
 ### 已知缺口
 
-- `already_taken` 兜底仍无测试覆盖（原因见上），本轮只钉住「409 且 code 属于合法集合」。
 - 并行冲突只做在入口脚本层面：绕过脚本直接敲 `go test ./...` 仍会偶发红，没有从代码层阻止这种跑法的手段。
+- 约束兜底夹具依赖 Postgres 触发器，并按昵称前缀 `collide` 触发——将来若有别的用例用这个前缀会互相干扰；`gen_random_uuid()` 需 PG 13+（本机 17）。
 - 只改了本轮这三个改资料用例的登出清理，其他既有用例仍在登录后不登出，`sessions` 表仍会有别处留下的行（一小时过期）。
+- 既有 `TestRegisterConcurrentSameEmail` 在测试 goroutine 里调 `t.Fatalf` 的毛病本轮没顺手修（属既有代码，另一轮的事）。
 
 ---
 
