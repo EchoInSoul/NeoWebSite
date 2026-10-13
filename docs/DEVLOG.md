@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-10-13 · 改自己的资料：后端接口 `PATCH /users/me` + 前端把保存接上
+
+**版本**：后端 0.13.0 → **0.14.0**（minor：新对外契约）。**零迁移、零新依赖**。起因：用户在 `/console/uc/profile` 页上改「用户名 / 邮箱」点保存没反应，问"是不是接口的问题"——查明后端**从来没有**写这两个字段的路径（读只有 `GET /auth/me`；`PATCH /admin/users/:id` 只接 `group_id` / `extra_permissions`），于是按用户当场定的四条裁定把接口补上；随后用户一句"可以，请你完成吧"把前端也接上。
+
+### 做了什么
+
+- 新端点 `PATCH /api/v1/users/me`（命名走用户的 A 案）：归 `auth` 模块的「当前用户」能力，声明在 `RegisterProtected`（`auth/controller.go:29`），只挂 `RequireAuth + LoadIdentity`、**不挂权限点**——改的是自己。实现落在 `service.go` 的 `UpdateProfile` + `repository.go` 的 `updateProfile`。
+- 请求体 `{"nickname"?,"email"?}`：两个字段都可选、只改给出的那个；**两个都不给 400**。归一与校验复用注册那套（`normalizeNickname` / `validNickname` / `normalizeEmail` / `validEmail`），不符 400 `invalid_request` 且 `param` 指向出问题的字段。
+- 撞名：先按 identifier 查一次，**查到的是自己就放行**（所以"原样重提"是 200 而不是 409），并发竞态由 ent 约束错误兜底 409 `already_taken`——与注册同构。错误码按用户裁定直接复用注册的 `nickname_taken` / `email_taken`。
+- **不校验当前密码**（裁定 2"不用"）；**改邮箱不验证新邮箱**、**前端不重拉 `/auth/me`**（裁定 4"暂时不做"）。会话只存 `userID`，所以改完不需要重新登录，`/auth/me` 与侧栏下次读取即是新值。
+- **前端接上（同一轮的后半段）**：新增 `hooks/use-profile-save.ts`（照 `use-signup` 的套路：`apiRequest` + `ApiError` 错误码逐条映射 + sonner 单条 toast；用的是 `lib/api.ts` 现成封装，没有自己写 fetch），`profile-form.tsx` 改受控并把 `isPending` 传给悬浮保存按钮。**只提交改动过的字段**（后端本来就是部分更新）；成功后 `toast.success` + `router.refresh()`；401 → `replace("/signin")`；5xx/网络错 → `common.serviceUnavailable`，**刻意不走 `useServiceHealth`**（它在挂载时会自己弹一条，而控制台布局里的 `ConsoleServiceToast` 已经管这事，会重复）。
+- 前端不做本地预校验（昵称/邮箱规则只留在后端一处，避免两处规则漂移），把 `invalid_request` 的 `param` 映射成字段级文案。
+
+### 验证口径
+
+- 新增 `TestUpdateProfileEndToEnd`（`app_test.go`，真 `app.New` 装配链 + 真库）：匿名 401；空体 400；五组非法值（过短昵称 / 含空格 / 含 `@` / 非法邮箱 / 类型不对的 `42`）各 400；正常改（顺带验 trim 与小写）200；**原值重提 200**（"自己不算撞名"那条的回归）；改完 `GET /auth/me` 读到新值；撞别人昵称 409 `nickname_taken`、撞别人邮箱 409 `email_taken`；只给昵称时邮箱保持不动。
+- 全仓 `go test ./... -count=1` 11 包全绿无 skip（本机 5434 Postgres）；`gofmt -l internal` 空、`go vet` 干净。
+- README 模块表描述订正 + 接口表补一行 + 规则补一条；api-conventions §3「现状端点全集」补第 24 行。
+- 前端 `prettier --check` / `tsc --noEmit` / `eslint` 干净；两条**只读**探测（不带会话、不写库）：`PATCH /api/v1/users/me` 直连 5732 与经 `:3000` 的 `/api` 转发**都返回 401**——说明路由、守卫、Next rewrite 三处都在，且 5732 上跑的进程已经带这条新路由（若是 404 就是旧二进制没重启）。带真会话的保存动作留给用户在浏览器里点。
+
+### 已知缺口
+
+- 带真会话的"点保存"我没跑（用户明确要求运行期验收归他自己）；因此撞名 / 校验失败这些失败态只做到了错误码到文案的映射，没端到端点过一遍。
+- 保存成功后靠 `router.refresh()` 让表单与侧栏昵称一起跟上（裁定 4 里"要不要重拉 `/auth/me`"那半条实际就这么落了）；若刷新那一下也失败，页面会停在旧值上，没有额外提示。
+- 改邮箱不验证新邮箱、不改密码就不要求当前密码——都是本轮显式裁定，不是遗漏。
+- 撞名是"查一次 + 约束兜底"：两人同时改成同名时第二个吃 409 `already_taken` 而不是精确的 `nickname_taken`，与注册一致。
+
+---
+
 ## 2026-10-13 · 后端环境口径收口：构建产物即生产，开发态只属于 `go run`
 
 **版本**：后端 **0.11.0**（本轮未进位）；接口字段名与类型不变，但 `/api/v1/healthy` 的 `environment` **取值**现在随**构建方式**而变（`development` → `production`），依赖该字段判断环境的按变更处理。

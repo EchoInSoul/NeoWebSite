@@ -118,6 +118,7 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 21 | `GET /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:33`（0.12.0 新增，守卫链 `RequireAuth → LoadIdentity → RequirePermission(system.settings.view)`；0.13.0 起返回组记录 `{group, values}`，`values` 为整组「默认值 ⊕ 覆盖」合并，含未标公开的项） |
 | 22 | `PATCH /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:34`（0.12.0 新增，`RequirePermission(system.settings.edit)`；只写请求体里出现的项，值类型以服务端清单为准；0.13.0 起返回更新后的组记录） |
 | 23 | `GET /api/v1/public/settings` | `backend/internal/modules/settings/controller.go:38`（0.13.0 新增，**无鉴权**聚合读：只出清单里标了 `Public` 的项，形如 `{"items":[{"group":"register","values":{"enabled":false}}]}`；无公开项的组整条不出现；不做按组点查，前台一次取全） |
+| 24 | `PATCH /api/v1/users/me` | `backend/internal/modules/auth/controller.go:29`（0.14.0 新增，改自己的用户名 / 邮箱：`/users/me` 是「当前用户」这条单资源的自指路径，声明在 auth 模块的 `RegisterProtected` 里，只挂 `RequireAuth + LoadIdentity`、**不挂权限点**；字段可选、部分更新；撞名复用注册的 `nickname_taken` / `email_taken`；**不校验当前密码**——用户 2026-10-13 裁定"不用"，留待将来按需加） |
 
 正例（新端点命名，资源复数 + 子动作）：
 
