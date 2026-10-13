@@ -284,8 +284,8 @@ func TestSessionCookieMaxAgeMatchesLifetime(t *testing.T) {
 	}
 
 	want := int(time.Hour.Seconds())
-	if cookie.MaxAge != want {
-		t.Fatalf("cookie MaxAge = %d, want %d (SessionLifetime set in testConfig)", cookie.MaxAge, want)
+	if cookie.MaxAge != want && cookie.MaxAge != want+1 {
+		t.Fatalf("cookie MaxAge = %d, want %d or %d (SessionLifetime set in testConfig; scs rounds Max-Age up, so a commit within the same clock tick yields %d)", cookie.MaxAge, want, want+1, want+1)
 	}
 }
 
