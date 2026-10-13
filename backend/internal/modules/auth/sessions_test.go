@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/alexedwards/scs/v2"
 
@@ -210,10 +211,14 @@ func TestSessionActivityTouchThrottled(t *testing.T) {
 	}
 
 	token, deadline, values := sessionRow(t, sm, ts.URL, client)
-	seeded, ok := values[guard.SessionLastSeenAtKey].(string)
-	if !ok || seeded == "" {
+	written, ok := values[guard.SessionLastSeenAtKey].(string)
+	if !ok || written == "" {
 		t.Fatalf("login did not write last_seen_at: %v", values)
 	}
+
+	seeded := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
+	values[guard.SessionLastSeenAtKey] = seeded
+	rewriteSessionRow(t, sm, token, deadline, values)
 
 	me := doGET(t, client, ts.URL+"/api/v1/auth/me")
 	me.Body.Close()
@@ -525,14 +530,14 @@ func TestSessionsRevokeCurrentEndsSession(t *testing.T) {
 
 	client := loginAs(t, ts.URL, u.Email, password)
 
-	token, deadline, values := sessionRow(t, sm, ts.URL, client)
-	values[guard.SessionLastSeenAtKey] = time.Now().UTC().Add(-6 * time.Minute).Format(time.RFC3339)
-	rewriteSessionRow(t, sm, token, deadline, values)
-
 	_, items := fetchSessions(t, client, ts.URL)
 	if len(items) != 1 || !items[0].Current {
 		t.Fatalf("items = %+v, want exactly the current session", items)
 	}
+
+	token, deadline, values := sessionRow(t, sm, ts.URL, client)
+	values[guard.SessionLastSeenAtKey] = time.Now().UTC().Add(-6 * time.Minute).Format(time.RFC3339)
+	rewriteSessionRow(t, sm, token, deadline, values)
 
 	resp := doDELETE(t, client, ts.URL+"/api/v1/users/me/sessions/"+items[0].ID)
 	resp.Body.Close()
@@ -558,5 +563,59 @@ func TestSessionsRevokeRequiresAuth(t *testing.T) {
 	}
 	if code := decodeError(t, resp); code != "unauthorized" {
 		t.Fatalf("error = %q, want unauthorized", code)
+	}
+}
+
+func TestTwoFactorLoginClearsSessionMetadata(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts, sm := newTestAppWithSessions(t, db)
+	client := testClient(t)
+
+	loginOK(t, client, ts.URL, u.Email, password)
+	setup := setup2FA(t, client, ts.URL)
+	enable2FA(t, client, ts.URL, setup.Secret)
+
+	resp := loginRaw(t, client, ts.URL, u.Email, password)
+	defer resp.Body.Close()
+	assertErrorCode(t, resp, http.StatusUnauthorized, "two_factor_required")
+
+	_, _, values := sessionRow(t, sm, ts.URL, client)
+	if _, ok := values[guard.SessionUserIDKey]; ok {
+		t.Fatalf("user_id still present on a pending session: %v", values)
+	}
+	for _, key := range []string{guard.SessionUserAgentKey, guard.SessionIPKey, guard.SessionCreatedAtKey, guard.SessionLastSeenAtKey} {
+		if _, ok := values[key]; ok {
+			t.Fatalf("%s still present on a pending session: %v", key, values)
+		}
+	}
+	if got, _ := values[pendingUserIDKey].(string); got != u.ID {
+		t.Fatalf("pending user = %v, want %s", values[pendingUserIDKey], u.ID)
+	}
+}
+
+func TestLoginTruncatesHeadersAtRuneBoundary(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts, sm := newTestAppWithSessions(t, db)
+	client := testClient(t)
+
+	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/auth/login", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+		"User-Agent": strings.Repeat("日", 200),
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	_, _, values := sessionRow(t, sm, ts.URL, client)
+	gotUA, _ := values[guard.SessionUserAgentKey].(string)
+	if len(gotUA) > 512 {
+		t.Fatalf("user_agent length = %d, want at most 512", len(gotUA))
+	}
+	if !utf8.ValidString(gotUA) {
+		t.Fatalf("user_agent is not valid UTF-8 after truncation: %q", gotUA)
 	}
 }

@@ -98,7 +98,7 @@ func TestTrackSessionActivityWritesWhenStale(t *testing.T) {
 func TestTrackSessionActivitySkipsWhenFresh(t *testing.T) {
 	ts := newActivityTestServer(t)
 	client := activityClient(t)
-	fresh := time.Now().UTC().Format(time.RFC3339)
+	fresh := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
 	seedActivitySession(t, client, ts.URL, url.Values{"last_seen": {fresh}})
 
 	if got := probeActivity(t, client, ts.URL); got != fresh {
