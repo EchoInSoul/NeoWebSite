@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans（本机可用；本轮执行方式按项目先例「我全程自己实现 + 末尾一次全新审查」）。
 
+> **路径口径（0.16.0 起）：** `/auth/*` 已随 0.16.0 路由改名取消；本文原写的 `GET /auth/me` 已同步为 `GET /users/me`（见 DEVLOG 2026-10-14「路由改名」条目与 `backend/README.md` 接口表），其余路径未变，冒烟配方照跑即可。
+
 **Goal:** 让登录用户能列出自己的活跃会话（设备 / IP / 建立与活跃时间）并按指纹吊销任意一条。
 
 **Architecture:** 不建登记表——scs 的 `sessions` 表即会话本体。元数据以四个会话数据键随登录写入（零 DDL）；节流 5 分钟的 `TrackSessionActivity` 中间件维护 `last_seen_at`；两个接口走 `All() + Codec.Decode` 既有枚举手法。
@@ -94,7 +96,7 @@ func TestEstablishSessionClearsPendingKeys(t *testing.T) // 造行 {pending_2fa_
 
 - [ ] **Step 4: 接线 service 与 controller** —— `Register` 成功的 `RenewToken + Put(user_id)` 两行换成 `establishSession(ctx, created.ID.String(), meta)`；`Login` 的无 2FA 分支同上、2FA 分支的 `Remove(user_id) + Put(pending)` 两行换成 `enterPendingSession(ctx, found.ID.String())`（`RenewToken` 保持在该分支之前调用）；verify 成功分支的 `RenewToken + Put(user_id) + Remove(pending) + Remove(attempts)` 四行换成 `establishSession(ctx, found.ID.String(), meta)`（pending 两键的清理已并入助手）。controller 加 `requestSessionMeta(c *gin.Context) SessionMeta`（XFF 首跳到逗号 → trim → `X-Real-IP` → `c.ClientIP()`；UA/IP 各按 512/64 截断）并在三个调用点传入。
 
-- [ ] **Step 5: 补节流 e2e 用例并跑全绿** —— 追加 `TestSessionActivityTouchThrottled`（Review Focus 4）：登录先断言 `last_seen_at` 已写入；用 `rewriteSessionRow` 把 `last_seen_at` 改成 **1 分钟前**并以此为基准 → 立即 `GET /auth/me` → 该值逐字不变；再把 `last_seen_at` 改成 6 分钟前 → 再 `GET /auth/me` → 行内 `last_seen_at` 变成近期。命令：`go test ./internal/modules/auth/ -count=1`。
+- [ ] **Step 5: 补节流 e2e 用例并跑全绿** —— 追加 `TestSessionActivityTouchThrottled`（Review Focus 4）：登录先断言 `last_seen_at` 已写入；用 `rewriteSessionRow` 把 `last_seen_at` 改成 **1 分钟前**并以此为基准 → 立即 `GET /users/me` → 该值逐字不变；再把 `last_seen_at` 改成 6 分钟前 → 再 `GET /users/me` → 行内 `last_seen_at` 变成近期。命令：`go test ./internal/modules/auth/ -count=1`。
 
 - [ ] **Step 6: 门禁 + 提交**
 
@@ -153,7 +155,7 @@ git commit -m "feat(backend): GET /users/me/sessions——列出自己的活跃�
 - [ ] **Step 1: 写失败测试**
 
 ```go
-func TestSessionsRevokeAnotherDevice(t *testing.T)                  // A/B 两客户端：A 列表 2 条 → A 删 B 的 id → 200 deleted；B 打 /auth/me 变 401；A 仍 200 且列表回到 1 条
+func TestSessionsRevokeAnotherDevice(t *testing.T)                  // A/B 两客户端：A 列表 2 条 → A 删 B 的 id → 200 deleted；B 打 /users/me 变 401；A 仍 200 且列表回到 1 条
 func TestSessionsRevokeUnknownOrForeignReturnsNotFound(t *testing.T) // 三人称 id / 乱造 id / 同 id 二次删 → 均 404 not_found；被瞄会话仍 200（Review Focus 3）
 func TestSessionsRevokeCurrentEndsSession(t *testing.T)              // 删自己当前那条 → 200；随后同客户端 401。**关键**：`last_seen_at` 的改写必须紧邻 DELETE 之前（先列表取 id，再改写，中间不得再发请求），否则覆盖不到「本请求节流写 + 删行」的复活路径
 func TestSessionsRevokeRequiresAuth(t *testing.T)                    // 无 cookie → 401
@@ -178,7 +180,7 @@ git commit -m "feat(backend): DELETE /users/me/sessions/:id——按指纹吊销
 **Files:** 无代码改动；证据写入 Task 6 的 DEVLOG。
 
 - [ ] **Step 1: 构建并另起实例** —— `cd backend && go build -o bin/neoblog-smoke .`；`set -a; source .env; set +a` 后用 `ADDR=:5733 APP_ENV=development ./bin/neoblog-smoke` 另起进程（地址只有一个口子 `ADDR`，默认 `:5732`；**没有 `PORT` 这个变量**），确认启动日志与 `/api/v1/healthy` 200。**不动 5732 上可能在跑的并行会话进程。**
-- [ ] **Step 2: curl 全链路** —— 用开发库既有冒烟账号（`gate-check@example.com`）。① 带 `X-Forwarded-For: 198.51.100.9` 与自定义 UA 登录，存 jar1 → ② `GET /users/me/sessions`：1 条、`current=true`、`ip=198.51.100.9`、`id` 与 cookie 值不同 → ③ jar2 再登录一次 → jar1 列表 2 条 → ④ jar1 `DELETE` jar2 那条 id → 200；jar2 `/auth/me` 401；jar1 `/auth/me` 200、列表 1 条 → ⑤ 乱造 id 删除 → 404 → ⑥ 无 cookie 两个接口 → 401。
+- [ ] **Step 2: curl 全链路** —— 用开发库既有冒烟账号（`gate-check@example.com`）。① 带 `X-Forwarded-For: 198.51.100.9` 与自定义 UA 登录，存 jar1 → ② `GET /users/me/sessions`：1 条、`current=true`、`ip=198.51.100.9`、`id` 与 cookie 值不同 → ③ jar2 再登录一次 → jar1 列表 2 条 → ④ jar1 `DELETE` jar2 那条 id → 200；jar2 `/users/me` 401；jar1 `/users/me` 200、列表 1 条 → ⑤ 乱造 id 删除 → 404 → ⑥ 无 cookie 两个接口 → 401。
 - [ ] **Step 3: 收尾** —— 停掉本轮起的进程；两条会话都要清干净（jar2 那条由 §Step 2 的 DELETE 删除、jar1 那条由登出 `Destroy` 删除），**并断言残留为零**（对 jar1 再打一次受保护接口应为 401，或直接查库确认 `sessions` 表无本轮 token）。开发库没有 psql 入口，查库要么走 `.scratch` + pgx，要么就用上面这条接口断言。
 
 ### Task 6: 文档收口 + 版本

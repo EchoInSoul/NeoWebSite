@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-10-14 · 路由改名：`/auth/*` 前缀取消（会话式方案，0.16.0）
+
+**版本**：后端 0.15.0 → **0.16.0**（minor：破坏性路径变更）。**零迁移、零新依赖**。**状态：未提交**（工作区留待检查）。起因：用户发现「读自己 `GET /auth/me`」与「改自己 `PATCH /users/me`」挂在两个前缀下，要求把认证域收进 `users`；先做了一轮**只读调研**（大厂公开 API / 框架官方生成器 / 「登录=建会话」流派，逐条核对官方文档），用户在三个候选里选定**会话式**。
+
+### 新路径（旧 → 新逐条）
+
+| 旧 | 新 | 说明 |
+| --- | --- | --- |
+| `POST /auth/register` | `POST /users` | 注册 = 建用户 |
+| `POST /auth/login` | `POST /sessions` | 登录 = 建会话 |
+| `POST /auth/logout` | `DELETE /sessions/current` | 登出 = 删当前会话（方法 POST → DELETE） |
+| `POST /auth/2fa/verify` | `POST /sessions/current/verify` | 二步验证 = 对当前（待二段）会话的验证 |
+| `GET /auth/me` | `GET /users/me` | 与 `PATCH /users/me` 合成同一条资源（`/auth/me` 删除） |
+| `POST /auth/password` | `POST /users/me/password` | 改密 |
+| `POST /auth/2fa/{setup,enable,disable,recovery-codes}` | `POST /users/me/2fa/*` | 2FA 管理，只搬家、名字不变 |
+| `PATCH /users/me`、`GET/DELETE /users/me/sessions` | 不动 | |
+
+`/auth` 前缀从此不存在；守卫链、错误码、响应形状、会话数据键（`auth.user_id` 等，内部键不是 URL）全部不变。
+
+### 方案依据（调研出处，均有官方文档原文）
+
+- 「当前用户」= `/users/me`：Twitter/X（`/2/users/me`）、Okta（`/api/v1/users/me`）、Discord（`/users/@me`）、Strapi（`/api/users/me`）一致；GitHub 是唯一的单数 `/user` 派。
+- 登录/登出从不放 `/users` 下：大厂一律放认证命名空间或会话资源；登出要么是动作端点，要么是**删会话**（Okta `DELETE /api/v1/sessions/{id}`）。
+- 「登录 = 建会话」有真实采用者：Rails 8 官方生成器（`POST/DELETE /session`）、Ghost（`POST /admin/session/`，2FA 是对本次会话的 `PUT /admin/session/verify/`）、Zitadel（`POST /v2/sessions`、`PATCH /v2/sessions/{id}` 提交 TOTP）。
+- 2FA「登录挑战」与「设置管理」分居两处是主流常态（Okta `/authn/factors/…` vs `/users/{id}/factors`；Fortify `/two-factor-challenge` vs `/user/two-factor-*`；ASP.NET `/Account/LoginWith2fa` vs `/Manage/*`）。
+- 被否的两个候选：`/users/login` 全动词式（大厂零先例；Zalando REST 规范 Rule 141「URL 必须无动词」是 MUST 级；唯一先例是 Phoenix 生成器）；保留 `/auth` 只收匿名（主流但违背用户「不要单独 auth」的初衷）。
+
+### 改动面
+
+- 后端：`internal/modules/auth/controller.go` 两个注册函数（10 行路径 + logout 方法改 DELETE）；`GET /users/me` 复用原 `me` handler。
+- 测试：5 个文件路径同步（`app_test.go`、`auth_test.go`、`register_gate_test.go`、`sessions_test.go`、`totp_flow_test.go`）；405 用例的「GET-only」样本从 `/auth/me` 换到 `/users/me/sessions`（`/users/me` 现在 GET+PATCH 双方法）；2FA 测试助手 `post2FA` 改走 `/users/me/2fa/`、`logoutOK` 改走 `doDELETE /sessions/current`。
+- 前端：4 个真实调用点换名——`use-signin`（→ `/api/v1/sessions`）、`use-signup`（→ `/api/v1/users`）、`use-signout`（→ `DELETE /api/v1/sessions/current`）、`lib/auth-session.ts`（→ `/api/v1/users/me`，含错误文案）。
+- 文档：API 规范 v1.5 修订条目 + §3 规则 3 示例 / D11 / 端点表 + §4 无负载体示例；`backend/README.md` 接口表与改名对照；版本 0.15.0 → 0.16.0。
+
+### 验证
+
+- 全仓 `scripts/test.sh`（串行、真库）：**全绿**（`internal/app` 4.7s、`internal/modules/auth` 13.6s，共 11 包）。
+- 前端 `npx tsc --noEmit`：零错误。
+- 全仓源码扫描：`auth/login|logout|register|me|password|2fa` 在 `backend/`、`frontend/` 的代码里**零残留**；`docs/` 下仅存档保留旧路径原文（更早轮次的 spec/plan 与日志旧条目），本轮同步的活文档（README / 规范 / 本日志 / 同日会话管理 plan）已全部换新。
+
+### 备注
+
+- 上一轮提交过程里出现过「并行会话把同款改名写进 `controller.go` 又撤出」的插曲（见本文件下一条「提交过程中的插曲」）；本轮是从干净树重做的完整版（含测试、前端接线与文档），不是半成品。
+- 运行期验收（浏览器登录链路）留用户自查；需要的话可另跑 curl 冒烟。
+
+### 评审回补（同日）
+
+- `app_test.go` 405 表新增一行 `PUT /users/me → Allow: GET, PATCH`——`/users/me` 变 GET+PATCH 双方法后的新形状此前没有用例钉住；已做变异验证（临时把 PATCH 路由改名，该行立刻红：`Allow = "GET", want "GET,PATCH"`；还原后全绿）。
+- 同日 `docs/superpowers/plans/2026-10-14-neoblog-session-management.md` 的 3 处 `GET /auth/me`（含冒烟 curl 全链路）同步为 `GET /users/me`，文件顶加「路径口径（0.16.0 起）」说明——它是可复跑配方，不是历史存档。
+- 口径修正：规范 v1.5 条目原写「实现随 0.16.0 入库」（本轮未提交，措辞不实）改为「实现见 0.16.0」并注明 §11 及以后为历史存档；§3 端点表列名「声明位置（2026-10-11 时点）」改为「随轮次更新」（该列本就逐轮更新，本轮写入了 0.16.0 时点的新行号）；本条目「零残留」句的存档清单补全。
+
+---
+
 ## 2026-10-14 · 会话管理：审查后修补（测试有效性 3 条 + 文档口径 5 处 + 小项）
 
 **版本**：0.15.0（未进位）。针对两份独立审查（终审子代理 + 外部复核）的结论做修补。**状态：未提交**（等用户决定提交切分）。用例总数 16 → 18。

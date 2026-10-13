@@ -10,6 +10,7 @@
 - v1.2（2026-10-11）：按用户指示修订 D1——去除 v2 升级机制，全部接口与后续演进固定在 `/api/v1` 内，本规范的规范化改造直接在 v1 执行；§2 重写版本化规则，§9、§14 同步措辞。同批复查修正：§7.3 收编口径表述、附录排序备注与交叉引用、状态行决策计数。
 - v1.3（2026-10-11）：用户重新裁定实施范围并否决报错文案——新增 §0 范围裁定（效力高于正文冲突处）：本轮只实施错误结构（无 message 字段）与三处小修；分页、时间戳、补 id、`/healthy` 改造、`not_found`/`current_password_mismatch` 拆分、param 端点覆盖暂不实施。
 - v1.4（2026-10-12）：用户改判 §4 规则 2——启用 Gin 的 `HandleMethodNotAllowed`，方法不匹配由「并入 404」改为 405 / `method_not_allowed` / `invalid_request_error`（响应带 `Allow` 头），路径不存在仍 404。§4 状态码清单、§7.2、§7.3 同步；实现随 0.11.0 入库。
+- v1.5（2026-10-14）：用户裁定认证域路径整体改名——`/auth/*` 前缀取消，登录/登出/二步验证改挂会话资源，注册与自服务统一挂 `/users`：注册→`POST /users`、登录→`POST /sessions`、登出→`DELETE /sessions/current`、二步验证→`POST /sessions/current/verify`、`GET /auth/me`→`GET /users/me`、改密→`POST /users/me/password`、2FA 管理→`POST /users/me/2fa/*`。§3 规则 3 示例、D11 与端点表、§4 无负载体示例同步；实现见 0.16.0（后端 + 前端 4 个调用点）。§11 及以后与附录为历史批次存档，保留旧路径原文不改写。
 
 ## 0. 实施范围裁定（v1.3，2026-10-11，用户裁定）
 
@@ -79,28 +80,28 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 
 ## 3. URL 与路由命名规则
 
-**D11（冻结）**：现有路由路径原则上保留（`/auth/login`、`/admin/groups` 等符合「资源名词 + 动作 POST」风格），本轮只规范化负载与错误格式；个别违规路径由附录对照表指出。
+**D11（冻结，v1.5 修订）**：现有路由路径原则上保留（`/admin/groups` 等符合「资源名词 + 动作 POST」风格），本轮只规范化负载与错误格式；个别违规路径由附录对照表指出。v1.5 按用户裁定对认证域整体改名：`/auth/*` 前缀取消，登录/登出/二步验证改挂会话资源、注册与自服务改挂 `/users`——逐条见下表。
 
 规则（约束新端点；存量端点的逐条裁决在附录）：
 
 1. 路径一律小写；多词段用连字符 `-` 分隔（现状无多词路径，规则为将来预留）。
 2. 集合用**名词复数**（对标 OpenAI 的 `/files`、`/batches`）；资源标识段是 UUID 字符串（`:id`，§10）。资源路径段禁止动词。
 3. 动作类端点允许动词，两种合法形态：
-   - 域内动作：`POST /<域>/<动作>`（现状 `/auth/login`、`/auth/logout`、`/auth/password`）；
-   - 资源子动作：`POST /<集合>/:id/<动作>`（对标 OpenAI 的 `POST /batches/{batch_id}/cancel`；本项目暂无此形态，为将来预留）。
+   - 域内动作：`POST /<域>/<动作>`（v1.5 起本项目无此形态，规则为将来预留）；
+   - 资源子动作：`POST /<集合>/:id/<动作>`（对标 OpenAI 的 `POST /batches/{batch_id}/cancel`；现状：`POST /sessions/current/verify` 二步验证、`POST /users/me/2fa/setup|enable|disable|recovery-codes`）。
 4. 嵌套从属资源用 `/<父集合>/:id/<子集合>` 表达从属关系，不另造顶层路径。
 5. 路由由各模块 controller 自己声明（README 硬性规则 4），本规范不改变模块化归属。
 
 现状端点全集（供对照，本文不做逐条裁决；附录对照表负责「保留 / 调整」结论；**本表随每轮实现追加新端点并标注版本**——§13.1 的「表 A」是 2026-10-11 时点的规范化对照表、固定 14 行不追加）：
 
-| # | 方法 路径 | 声明位置（2026-10-11 时点） |
+| # | 方法 路径 | 声明位置（随轮次更新） |
 | --- | --- | --- |
 | 1 | `GET /api/v1/healthy` | `backend/internal/modules/health/controller.go:18` |
-| 2 | `POST /api/v1/auth/login` | `backend/internal/modules/auth/controller.go:21` |
-| 3 | `POST /api/v1/auth/register` | `backend/internal/modules/auth/controller.go:22` |
-| 4 | `POST /api/v1/auth/logout` | `backend/internal/modules/auth/controller.go:26` |
-| 5 | `GET /api/v1/auth/me` | `backend/internal/modules/auth/controller.go:27` |
-| 6 | `POST /api/v1/auth/password` | `backend/internal/modules/auth/controller.go:28` |
+| 2 | `POST /api/v1/sessions` | `backend/internal/modules/auth/controller.go:28`（v1.5 改名：登录 = 建会话，原 `POST /auth/login`） |
+| 3 | `POST /api/v1/users` | `backend/internal/modules/auth/controller.go:27`（v1.5 改名：注册 = 建用户，原 `POST /auth/register`） |
+| 4 | `DELETE /api/v1/sessions/current` | `backend/internal/modules/auth/controller.go:33`（v1.5 改名：登出 = 删当前会话，原 `POST /auth/logout`） |
+| 5 | `GET /api/v1/users/me` | `backend/internal/modules/auth/controller.go:34`（v1.5 改名：原 `GET /auth/me`，与 `PATCH /users/me` 同一条资源） |
+| 6 | `POST /api/v1/users/me/password` | `backend/internal/modules/auth/controller.go:38`（v1.5 改名：原 `POST /auth/password`） |
 | 7 | `GET /api/v1/admin/permissions` | `backend/internal/modules/access/controller.go:46` |
 | 8 | `GET /api/v1/admin/groups` | `backend/internal/modules/access/controller.go:47` |
 | 9 | `POST /api/v1/admin/groups` | `backend/internal/modules/access/controller.go:48` |
@@ -110,17 +111,17 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 13 | `GET /api/v1/admin/users/:id` | `backend/internal/modules/access/controller.go:52` |
 | 14 | `PATCH /api/v1/admin/users/:id` | `backend/internal/modules/access/controller.go:53` |
 | 15 | `POST /api/v1/admin/mail/messages` | `backend/internal/modules/mail/controller.go:36`（0.9.0 新增，域 `admin` 下资源 `mail/messages`，创建即发送） |
-| 16 | `POST /api/v1/auth/2fa/verify` | `backend/internal/modules/auth/controller.go:23`（0.10.0 新增，公开路由，靠「待二段」会话；`/auth/<子域>/<动作>` 形态） |
-| 17 | `POST /api/v1/auth/2fa/setup` | `backend/internal/modules/auth/controller.go:30`（0.10.0 新增，守卫内） |
-| 18 | `POST /api/v1/auth/2fa/enable` | `backend/internal/modules/auth/controller.go:31`（0.10.0 新增，守卫内） |
-| 19 | `POST /api/v1/auth/2fa/disable` | `backend/internal/modules/auth/controller.go:32`（0.10.0 新增，守卫内） |
-| 20 | `POST /api/v1/auth/2fa/recovery-codes` | `backend/internal/modules/auth/controller.go:33`（0.10.0 新增，守卫内；资源名 `recovery-codes` 保持连字符小写） |
+| 16 | `POST /api/v1/sessions/current/verify` | `backend/internal/modules/auth/controller.go:29`（0.10.0 新增，公开路由，靠「待二段」会话；v1.5 改名：原 `POST /auth/2fa/verify`——二步验证 = 对当前（待二段）会话的验证） |
+| 17 | `POST /api/v1/users/me/2fa/setup` | `backend/internal/modules/auth/controller.go:39`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/setup`） |
+| 18 | `POST /api/v1/users/me/2fa/enable` | `backend/internal/modules/auth/controller.go:40`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/enable`） |
+| 19 | `POST /api/v1/users/me/2fa/disable` | `backend/internal/modules/auth/controller.go:41`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/disable`） |
+| 20 | `POST /api/v1/users/me/2fa/recovery-codes` | `backend/internal/modules/auth/controller.go:42`（0.10.0 新增，守卫内；资源名 `recovery-codes` 保持连字符小写；v1.5 改名：原 `POST /auth/2fa/recovery-codes`） |
 | 21 | `GET /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:33`（0.12.0 新增，守卫链 `RequireAuth → LoadIdentity → RequirePermission(system.settings.view)`；0.13.0 起返回组记录 `{group, values}`，`values` 为整组「默认值 ⊕ 覆盖」合并，含未标公开的项） |
 | 22 | `PATCH /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:34`（0.12.0 新增，`RequirePermission(system.settings.edit)`；只写请求体里出现的项，值类型以服务端清单为准；0.13.0 起返回更新后的组记录） |
 | 23 | `GET /api/v1/public/settings` | `backend/internal/modules/settings/controller.go:38`（0.13.0 新增，**无鉴权**聚合读：只出清单里标了 `Public` 的项，形如 `{"items":[{"group":"register","values":{"enabled":false}}]}`；无公开项的组整条不出现；不做按组点查，前台一次取全） |
-| 24 | `PATCH /api/v1/users/me` | `backend/internal/modules/auth/controller.go:29`（0.14.0 新增，改自己的用户名 / 邮箱：`/users/me` 是「当前用户」这条单资源的自指路径，声明在 auth 模块的 `RegisterProtected` 里，只挂 `RequireAuth + LoadIdentity`、**不挂权限点**；字段可选、部分更新；撞名复用注册的 `nickname_taken` / `email_taken`；**不校验当前密码**——用户 2026-10-13 裁定"不用"，留待将来按需加） |
-| 25 | `GET /api/v1/users/me/sessions` | `backend/internal/modules/auth/controller.go:35`（0.15.0 新增，`/users/me` 下的嵌套从属集合；只挂 `RequireAuth + LoadIdentity`、**不挂权限点**；响应 `{"items":[…]}`，`id` 为 `base64url(sha256(token))` 会话指纹、原始 token 永不出服务端；只见活跃会话，待二段 / 已过期 / 已吊销的都不出现） |
-| 26 | `DELETE /api/v1/users/me/sessions/:id` | `backend/internal/modules/auth/controller.go:36`（0.15.0 新增，按指纹吊销单条；未知 / 他人 / 二次删一律 404 `not_found`，与不存在同形；删当前会话等于登出，响应清 cookie） |
+| 24 | `PATCH /api/v1/users/me` | `backend/internal/modules/auth/controller.go:35`（0.14.0 新增，改自己的用户名 / 邮箱：`/users/me` 是「当前用户」这条单资源的自指路径，声明在 auth 模块的 `RegisterProtected` 里，只挂 `RequireAuth + LoadIdentity`、**不挂权限点**；字段可选、部分更新；撞名复用注册的 `nickname_taken` / `email_taken`；**不校验当前密码**——用户 2026-10-13 裁定"不用"，留待将来按需加） |
+| 25 | `GET /api/v1/users/me/sessions` | `backend/internal/modules/auth/controller.go:36`（0.15.0 新增，`/users/me` 下的嵌套从属集合；只挂 `RequireAuth + LoadIdentity`、**不挂权限点**；响应 `{"items":[…]}`，`id` 为 `base64url(sha256(token))` 会话指纹、原始 token 永不出服务端；只见活跃会话，待二段 / 已过期 / 已吊销的都不出现） |
+| 26 | `DELETE /api/v1/users/me/sessions/:id` | `backend/internal/modules/auth/controller.go:37`（0.15.0 新增，按指纹吊销单条；未知 / 他人 / 二次删一律 404 `not_found`，与不存在同形；删当前会话等于登出，响应清 cookie） |
 
 正例（新端点命名，资源复数 + 子动作）：
 
@@ -177,7 +178,7 @@ POST /api/v1/v1/posts          禁止：重复版本段
 4. 401 响应不要求 `WWW-Authenticate` 头（session cookie 认证，无 challenge 语义；对标裁剪见 §11）。
 5. **探针豁免**：`/healthy` 是机器探针端点，200 / 503 的 body 保持 `Status` 对象（`status` / `database` 等字段），不受 §7 错误信封约束；时间字段仍按 §10 规范化（§14 决策 1）。
 
-正例（动作 POST，无有效负载——`POST /api/v1/auth/logout`）：
+正例（无有效负载的成功响应——`DELETE /api/v1/sessions/current`（登出））：
 
 ```
 HTTP/1.1 200 OK
@@ -218,7 +219,7 @@ HTTP/1.1 201 Created
 2. 后缀约定：时间戳 `_at`（`created_at` / `updated_at` / `deleted_at`）；计数 `_count`（`member_count`）；引用 `_id`（`group_id`、`user_id`）。
 3. 前缀约定：布尔用 `is_` / `has_` / `can_`（现状 `is_preset` 合规）。
 4. 时长秒数以 `_seconds` 结尾（如 `/healthy` 的 `uptime_seconds`，§10 规则 4）。
-5. 集合字段（数组）为空时输出 `[]`，禁止输出 `null`；标量可空字段输出 `null`（现状：自建组 `system_key` 为 `null`，`backend/internal/modules/auth/controller.go:109-112`）。现状合规先例：`/auth/me` 的 `permissions` 已做 nil→`[]` 处理（`backend/internal/modules/auth/controller.go:105-108`）。
+5. 集合字段（数组）为空时输出 `[]`，禁止输出 `null`；标量可空字段输出 `null`（现状：自建组 `system_key` 为 `null`，`backend/internal/modules/auth/controller.go:102-105`）。现状合规先例：`/users/me` 的 `permissions` 已做 nil→`[]` 处理（`backend/internal/modules/auth/controller.go:98-101`）。
 
 唯一现存 camelCase 违例（全仓 grep 核实，2026-10-11 时点）：`backend/internal/modules/auth/dto.go:21-22`：
 
@@ -266,7 +267,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 
 规则：
 
-1. 单资源：直接返回资源对象本身，**不套一层** `{"user": {...}}`、`{"result": ...}` 之类的包装。现状合规先例：`POST /admin/groups` 直接返回组对象（`backend/internal/modules/access/controller.go:93`）、`/auth/me` 直接返回用户对象。
+1. 单资源：直接返回资源对象本身，**不套一层** `{"user": {...}}`、`{"result": ...}` 之类的包装。现状合规先例：`POST /admin/groups` 直接返回组对象（`backend/internal/modules/access/controller.go:93`）、`/users/me` 直接返回用户对象。
 2. 列表：一律用四字段信封 `data` / `total` / `limit` / `offset`；`data` 为资源对象数组（可为空数组），`total` 为过滤后的总数，`limit` / `offset` 回显生效值。现状违例：`itemList[T]{Items: ...}` 的 `items` 字段（`backend/internal/modules/access/controller.go:18-20`、`:62`、`:71`、`:135`），改名为 `data` 并补齐信封。
 3. 裸对象与信封内都不加 `object` 自描述字段（§11）。
 4. **设置组记录**（0.13.0）：一个设置组是资源，其表示固定为 `{ "group": "<组名>", "values": { 项名: 值 } }`——`group` 是资源自身的字段，不算 §11 的自描述包装，也不违反规则 1。它的集合（`GET /public/settings`）沿用现状 `items` 数组信封（与 `access` 的 `itemList` 同形），**待 D4 / §9 的列表收敛落地时与 `access` 一起改名为 `data` 并补齐 `total` / `limit` / `offset`**，届时本轮端点一并迁移，不留第二套形状。
@@ -343,7 +344,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 - `message`：中文、仅供人读（如直接展示给用户）；同一种 code 的 message 允许在不发版的情况下润色，客户端禁止解析它。
 - `param`：出错位置的定位符。请求体字段用字段名，嵌套用点路径（如 `group.id`）；查询参数与路径参数用参数名（如 `limit`、`id`）；无法定位（如登录凭证错误、权限不足）为 `null`。
 
-正例（字段级错误——`POST /api/v1/auth/register` 邮箱已注册）：
+正例（字段级错误——`POST /api/v1/users` 邮箱已注册）：
 
 ```json
 {
