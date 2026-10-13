@@ -67,7 +67,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	settingsModule.Register(api)
 
 	accessModule := access.New(db)
-	protected := api.Group("", guard.RequireAuth(sessions), guard.LoadIdentity(accessModule.Service, sessions))
+	protected := api.Group("", guard.RequireAuth(sessions), guard.TrackSessionActivity(sessions), guard.LoadIdentity(accessModule.Service, sessions))
 	authModule.RegisterProtected(protected)
 	accessModule.RegisterProtected(protected)
 	mailModule.RegisterProtected(protected)

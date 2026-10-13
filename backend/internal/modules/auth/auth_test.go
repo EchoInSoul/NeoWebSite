@@ -49,7 +49,7 @@ func newTestAppWithSessionsAndSettings(t *testing.T, db *database.Database) (*ht
 	module := New(db, sm, testTOTPKey, settingsModule.Service)
 	module.Register(api)
 	accessModule := access.New(db)
-	protected := api.Group("", guard.RequireAuth(sm), guard.LoadIdentity(accessModule.Service, sm))
+	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))
 	module.RegisterProtected(protected)
 
 	ts := httptest.NewServer(sm.LoadAndSave(engine))
