@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ExternalLink,
@@ -13,6 +13,17 @@ import {
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +62,7 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
   const [isSwitchingLocale, startLocaleSwitch] = useTransition();
   const { themeMode, setThemeMode } = useThemeMode();
   const { isSigningOut, signOut } = useSignout();
+  const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
 
   const themeModeLabels: Record<ThemeMode, string> = {
     system: t("themeSystem"),
@@ -69,76 +81,114 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
     });
   }
 
+  async function handleConfirmSignOut() {
+    await signOut();
+    setIsSignOutConfirmOpen(false);
+  }
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={<SidebarMenuButton className="pr-2" />}
-        aria-label={t("openMenu")}
-      >
-        <UserRound />
-        {displayName ? <span className="truncate">{displayName}</span> : null}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-52">
-        <DropdownMenuItem
-          render={<a href="/" target="_blank" rel="noreferrer" />}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<SidebarMenuButton className="pr-2" />}
+          aria-label={t("openMenu")}
         >
-          <ExternalLink />
-          <span>{t("visitSite")}</span>
-        </DropdownMenuItem>
+          <UserRound />
+          {displayName ? <span className="truncate">{displayName}</span> : null}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="start" className="w-52">
+          <DropdownMenuItem
+            render={<a href="/" target="_blank" rel="noreferrer" />}
+          >
+            <ExternalLink />
+            <span>{t("visitSite")}</span>
+          </DropdownMenuItem>
 
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Sun />
-            <span>{t("theme")}</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup
-              value={themeMode}
-              onValueChange={handleThemeModeChange}
-            >
-              {themeModeOrder.map((mode) => {
-                const ThemeModeIcon = themeModeIcons[mode];
-                return (
-                  <DropdownMenuRadioItem key={mode} value={mode}>
-                    <ThemeModeIcon />
-                    <span>{themeModeLabels[mode]}</span>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Sun />
+              <span>{t("theme")}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup
+                value={themeMode}
+                onValueChange={handleThemeModeChange}
+              >
+                {themeModeOrder.map((mode) => {
+                  const ThemeModeIcon = themeModeIcons[mode];
+                  return (
+                    <DropdownMenuRadioItem key={mode} value={mode}>
+                      <ThemeModeIcon />
+                      <span>{themeModeLabels[mode]}</span>
+                    </DropdownMenuRadioItem>
+                  );
+                })}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Languages />
+              <span>{t("language")}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuRadioGroup
+                value={locale}
+                onValueChange={handleLocaleChange}
+              >
+                {SUPPORTED_LOCALES.map((availableLocale: Locale) => (
+                  <DropdownMenuRadioItem
+                    key={availableLocale}
+                    value={availableLocale}
+                    disabled={isSwitchingLocale}
+                  >
+                    <span>{t(localeLabels[availableLocale])}</span>
                   </DropdownMenuRadioItem>
-                );
-              })}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
 
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Languages />
-            <span>{t("language")}</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup
-              value={locale}
-              onValueChange={handleLocaleChange}
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            disabled={isSigningOut}
+            onClick={() => setIsSignOutConfirmOpen(true)}
+          >
+            <LogOut />
+            <span>{t("signOut")}</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog
+        open={isSignOutConfirmOpen}
+        onOpenChange={setIsSignOutConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <LogOut />
+            </AlertDialogMedia>
+            <AlertDialogTitle>{t("signOutConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("signOutConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSigningOut}>
+              {t("signOutConfirmCancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isSigningOut}
+              onClick={handleConfirmSignOut}
             >
-              {SUPPORTED_LOCALES.map((availableLocale: Locale) => (
-                <DropdownMenuRadioItem
-                  key={availableLocale}
-                  value={availableLocale}
-                  disabled={isSwitchingLocale}
-                >
-                  <span>{t(localeLabels[availableLocale])}</span>
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem disabled={isSigningOut} onClick={signOut}>
-          <LogOut />
-          <span>{t("signOut")}</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+              {t("signOutConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

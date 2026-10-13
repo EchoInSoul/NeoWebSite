@@ -10,7 +10,11 @@
     "localeZhCn": "简体中文",
     "localeEn": "English",
     "signOut": "退出登录",
-    "signOutFailed": "退出失败，请稍后重试"
+    "signOutFailed": "退出失败，请稍后重试",
+    "signOutConfirmTitle": "确定退出登录？",
+    "signOutConfirmDescription": "退出后需要重新登录才能进入控制台。",
+    "signOutConfirmCancel": "取消",
+    "signOutConfirm": "确认"
   },
   "sidebar": {
     "open": "打开侧边栏",

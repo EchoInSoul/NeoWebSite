@@ -10,7 +10,11 @@
     "localeZhCn": "简体中文",
     "localeEn": "English",
     "signOut": "Sign out",
-    "signOutFailed": "Sign out failed, please try again later"
+    "signOutFailed": "Sign out failed, please try again later",
+    "signOutConfirmTitle": "Sign out?",
+    "signOutConfirmDescription": "You'll need to sign in again to access the console.",
+    "signOutConfirmCancel": "Cancel",
+    "signOutConfirm": "Confirm"
   },
   "sidebar": {
     "open": "Open sidebar",
