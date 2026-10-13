@@ -6,6 +6,11 @@ import { toast } from "sonner";
 import { ApiError, apiRequest, looksLikeServiceFailure } from "@/lib/api";
 import type { SessionUser } from "@/lib/auth-session";
 
+type ProfileUpdateResponse = {
+  email: string;
+  nickname: string;
+};
+
 export function useProfileSave(profile: SessionUser | null) {
   const t = useTranslations("uc");
   const tCommon = useTranslations("common");
@@ -61,7 +66,12 @@ export function useProfileSave(profile: SessionUser | null) {
 
     setIsSaving(true);
     try {
-      await apiRequest("/api/v1/users/me", { method: "PATCH", body });
+      const updated = await apiRequest<ProfileUpdateResponse>(
+        "/api/v1/users/me",
+        { method: "PATCH", body },
+      );
+      setNickname(updated.nickname);
+      setEmail(updated.email);
       toast.success(t("saved"));
       router.refresh();
     } catch (error) {

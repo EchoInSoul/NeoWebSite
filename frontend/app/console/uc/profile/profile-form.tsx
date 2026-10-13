@@ -46,7 +46,7 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} noValidate>
       <ConsoleSettingsGroup title={t("account")}>
         <ConsoleSettingsRow
           control={
