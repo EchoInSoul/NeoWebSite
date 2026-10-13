@@ -115,8 +115,9 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 18 | `POST /api/v1/auth/2fa/enable` | `backend/internal/modules/auth/controller.go:31`（0.10.0 新增，守卫内） |
 | 19 | `POST /api/v1/auth/2fa/disable` | `backend/internal/modules/auth/controller.go:32`（0.10.0 新增，守卫内） |
 | 20 | `POST /api/v1/auth/2fa/recovery-codes` | `backend/internal/modules/auth/controller.go:33`（0.10.0 新增，守卫内；资源名 `recovery-codes` 保持连字符小写） |
-| 21 | `GET /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:24`（0.12.0 新增，守卫链 `RequireAuth → LoadIdentity → RequirePermission(system.settings.view)`；整组裸对象，含未写过的默认值） |
-| 22 | `PATCH /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:25`（0.12.0 新增，`RequirePermission(system.settings.edit)`；只写请求体里出现的项，值类型以服务端清单为准，200 返回更新后的整组） |
+| 21 | `GET /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:33`（0.12.0 新增，守卫链 `RequireAuth → LoadIdentity → RequirePermission(system.settings.view)`；0.13.0 起返回组记录 `{group, values}`，`values` 为整组「默认值 ⊕ 覆盖」合并，含未标公开的项） |
+| 22 | `PATCH /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:34`（0.12.0 新增，`RequirePermission(system.settings.edit)`；只写请求体里出现的项，值类型以服务端清单为准；0.13.0 起返回更新后的组记录） |
+| 23 | `GET /api/v1/public/settings` | `backend/internal/modules/settings/controller.go:38`（0.13.0 新增，**无鉴权**聚合读：只出清单里标了 `Public` 的项，形如 `{"items":[{"group":"register","values":{"enabled":false}}]}`；无公开项的组整条不出现；不做按组点查，前台一次取全） |
 
 正例（新端点命名，资源复数 + 子动作）：
 
@@ -265,6 +266,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 1. 单资源：直接返回资源对象本身，**不套一层** `{"user": {...}}`、`{"result": ...}` 之类的包装。现状合规先例：`POST /admin/groups` 直接返回组对象（`backend/internal/modules/access/controller.go:93`）、`/auth/me` 直接返回用户对象。
 2. 列表：一律用四字段信封 `data` / `total` / `limit` / `offset`；`data` 为资源对象数组（可为空数组），`total` 为过滤后的总数，`limit` / `offset` 回显生效值。现状违例：`itemList[T]{Items: ...}` 的 `items` 字段（`backend/internal/modules/access/controller.go:18-20`、`:62`、`:71`、`:135`），改名为 `data` 并补齐信封。
 3. 裸对象与信封内都不加 `object` 自描述字段（§11）。
+4. **设置组记录**（0.13.0）：一个设置组是资源，其表示固定为 `{ "group": "<组名>", "values": { 项名: 值 } }`——`group` 是资源自身的字段，不算 §11 的自描述包装，也不违反规则 1。它的集合（`GET /public/settings`）沿用现状 `items` 数组信封（与 `access` 的 `itemList` 同形），**待 D4 / §9 的列表收敛落地时与 `access` 一起改名为 `data` 并补齐 `total` / `limit` / `offset`**，届时本轮端点一并迁移，不留第二套形状。
 
 正例（单资源——`GET /api/v1/admin/groups/:id` 形态）：
 

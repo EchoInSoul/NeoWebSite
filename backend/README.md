@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.12.0
+当前版本：0.13.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -25,7 +25,7 @@
 | `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录（含 2FA 分叉）/ 登出 / 当前用户 / 改密 / 两步验证五接口；`Register`（公开）与 `RegisterProtected`（受保护）；`totp.go` + `secretbox.go` 承载 TOTP 窗匹配与 secret 加密 |
 | `internal/modules/access/*` | `access.module.ts` 等 | 用户组与权限：组 CRUD、用户管理接口、生效权限解析；全部挂在权限守卫下 |
 | `internal/modules/mail/*` | `@nestjs-modules/mailer`（对照位） | 邮件能力 + 管理端发信接口：`Mailer` 接口（Send / SendSync / Close）+ SMTP / 日志双实现 + `templates/` 模板；异步 `Send` 走后台队列重试，同步 `SendSync` 单次尝试（管理端即时反馈用）；`POST /admin/mail/messages` 挂守卫链 + 预设组守卫；`SMTP_HOST` 为空时降级为日志 |
-| `internal/modules/settings/*` | `@nestjs/config` + `config.controller.ts`（对照位） | 有路由模块：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；对外入口 `New(db) (*Module, error)`，能力挂 `m.Service`；`GET / PATCH /admin/settings/:group` 按组读写，挂 `RequirePermission(system.settings.view / .edit)`；当前清单含 `register/enabled`（注册开关），加设置见「设置」章节配方 |
+| `internal/modules/settings/*` | `@nestjs/config` + `config.controller.ts`（对照位） | 有路由模块：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；对外入口 `New(db) (*Module, error)`，能力挂 `m.Service`；管理侧 `GET / PATCH /admin/settings/:group`（挂 `RequirePermission(system.settings.view / .edit)`），公开侧 `GET /public/settings`（无鉴权，只出清单里标了 `Public` 的项）；响应统一为 `{group, values}` 记录、集合套 `items`；当前清单项 `register/enabled`，加设置见「设置」章节配方 |
 | `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）+ `RequirePresetGroup`（预设组白名单，owner / admin 这类不入权限目录的服务器级操作用）；常量 `auth.user_id` / `auth.identity` |
 | `internal/common/rbac` | `src/common`（权限目录） | 权限点目录与预设组常量（固定 UUID）；纯 Go，不依赖 gin / DB |
 | `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
@@ -248,13 +248,23 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 
 模块 `internal/modules/settings/`：一张 `setting_values` 表只存"被显式写入过的值"，"有哪些设置"全部定义在代码内清单（`registry.go` 的 `builtinRegistry`）。构造入口 `settings.New(db) (*Module, error)`——清单自检不过启动即失败，能力挂 `m.Service`；错误哨兵 `ErrUnknownGroup` / `ErrUnknownItem` / `ErrTypeMismatch` / `ErrMethodMismatch`。三种类型（文字 / 数字 int64 / 开关）读写各按类型分方法，用错方法即报错；`GetGroup` 整组读取（默认值 ⊕ 覆盖逐项合并）；`PatchGroup` 整组部分更新（值类型以清单为准，任一项不合法即整组零落库）；`ResetItem` 删行恢复默认。库里没有某项的行 = 取代码里的默认值。
 
-**对外接口**（挂在 `RequireAuth → LoadIdentity` 之后）：`GET /api/v1/admin/settings/:group` 需 `system.settings.view`，`PATCH /api/v1/admin/settings/:group` 需 `system.settings.edit`（`edit` 隐含 `view`）；响应是整组裸对象。未知组 404、体非法或项名不在清单或值类型不符 400（带 `param` = 项名）。owner / admin 由权限目录运行时全量授予自动可用这两个权限点，无需数据迁移；自建组需显式授。
+**响应信封（两侧统一）**：一个组的记录固定是 `{ "group": "<组名>", "values": { …整组合并结果… } }`；集合外面套 `{ "items": [ 组记录… ] }`，与 `access` 模块的 `items` 列表同形。`values` 里是「默认值 ⊕ 覆盖」的合并结果，键是项名。
 
-**当前清单项**：`register/enabled`（开关，默认 `true`）——`auth.Service.Register` 的第一句读它，为 `false` 时注册返回 403 `registration_closed`；登录与 `auth.CreateAdminUser` 不受它影响。关掉注册的实际操作（暂无界面）：
+**对外接口**：
+
+| 端点 | 鉴权 | 返回 |
+| --- | --- | --- |
+| `GET /api/v1/admin/settings/:group` | `system.settings.view` | 一条组记录（**全部项**，含未标公开的） |
+| `PATCH /api/v1/admin/settings/:group` | `system.settings.edit`（隐含 `view`） | 更新后的组记录 |
+| `GET /api/v1/public/settings` | **无鉴权** | `{items: […]}`，只含**至少有一项标了 `Public` 的组**，且每组只出公开项 |
+
+管理侧未知组 404；请求体非法、项名不在清单、值类型不符 → 400（带 `param` = 项名）。owner / admin 由权限目录运行时全量授予两个权限点，无需数据迁移；自建组需显式授。公开侧按组点查**刻意不提供**——前台要读公开设置就一次取全，避免每加一项就多一个 fetcher。
+
+**当前清单项**：`register/enabled`（开关，默认 `true`，已标 `Public`）——`auth.Service.Register` 的第一句读它，为 `false` 时注册返回 403 `registration_closed`；登录与 `auth.CreateAdminUser` 不受它影响。前端 `lib/public-settings.ts` 读聚合端点，`/signup` 在关闭时直接 404、登录页隐掉注册入口；**读不到该端点时按 fail-open 处理**（照常出页面），与「后端连不上照常出页 + toast」的既有口径一致。关掉注册的实际操作（暂无界面）：
 
 ```
-PATCH /api/v1/admin/settings/register      →  {"enabled": false}
-PATCH /api/v1/admin/settings/register      →  {"enabled": true}
+GET   /api/v1/public/settings                →  {"items":[{"group":"register","values":{"enabled":false}}]}
+PATCH /api/v1/admin/settings/register        →  {"group":"register","values":{"enabled":false}}
 ```
 
 **怎么加一个设置**：在 `internal/modules/settings/registry.go` 的 `builtinRegistry` 里添加（组不存在就新增一个 `Group` 字面量）：
@@ -273,6 +283,14 @@ var builtinRegistry = []Group{
 ```
 
 保存后重启即生效：新设置立刻可读（默认值），**不需要任何数据库操作**。名字规则 `^[a-z][a-z0-9_]*$`；数字默认值必须写 `int64(...)`。防漂移测试 `TestRegistryRecipeShape` 按本配方字面形状把关，配方改了它就红。
+
+**怎么加一个公开设置**（前台匿名要读的）：在上面的写法里多带一个 `Public: true`——
+
+```go
+{Name: "title", Type: FieldTypeString, Default: "我的博客", Public: true},
+```
+
+它会自动出现在 `GET /api/v1/public/settings` 里，**后端不需要加端点、不需要加 service 方法**。前端只动两处：`lib/public-settings.ts` 里加一个纯选择器（照 `isSignupOpen` 的写法，读 `settings.<组>[.<项>] ?? 默认`），页面消费它。守卫测试 `TestBuiltinPublicAllowlist` 钉住「公开项集合 == 期望清单」，把敏感项误标成 `Public` 会让它先红。
 
 ## 运行
 
