@@ -35,7 +35,7 @@ export function ConsoleSidebarFooter({
         title={toggleLabel}
         aria-expanded={!isCollapsed}
         aria-controls="console-sidebar"
-        className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground hover:bg-border hover:text-foreground dark:bg-card dark:hover:bg-accent"
+        className="flex size-9 shrink-0 items-center justify-center rounded-md text-neutral-900 hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
       >
         {isCollapsed ? (
           <PanelLeftOpen size={16} />
