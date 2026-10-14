@@ -13,7 +13,8 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { PASSWORD_MIN_LENGTH, useSignupForm } from "@/hooks/use-signup";
+import { useSignupForm } from "@/hooks/use-signup";
+import { PASSWORD_MIN_LENGTH } from "@/lib/password";
 
 export function SignupForm() {
   const t = useTranslations("auth.signup");

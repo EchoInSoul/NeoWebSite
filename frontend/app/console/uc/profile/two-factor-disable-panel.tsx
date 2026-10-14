@@ -33,7 +33,7 @@ export function TwoFactorDisablePanel({ onDone }: { onDone: () => void }) {
     state === "submitting"
       ? t("twoFactorDisabling")
       : state === "invalidPassword"
-        ? t("twoFactorInvalidPassword")
+        ? t("invalidPassword")
         : "";
 
   return (

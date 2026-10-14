@@ -5,8 +5,8 @@ import { toast } from "sonner";
 
 import { useServiceHealth } from "@/hooks/use-service-health";
 import { ApiError, apiRequest } from "@/lib/api";
+import { isStrongPassword } from "@/lib/password";
 
-export const PASSWORD_MIN_LENGTH = 8;
 const NAME_MIN_LENGTH = 2;
 const NAME_MAX_LENGTH = 32;
 const EMAIL_MAX_LENGTH = 254;
@@ -31,14 +31,6 @@ function isValidName(value: string) {
     length >= NAME_MIN_LENGTH &&
     length <= NAME_MAX_LENGTH &&
     !/[\s@]/.test(value)
-  );
-}
-
-function isValidPassword(value: string) {
-  return (
-    [...value].length >= PASSWORD_MIN_LENGTH &&
-    /[a-zA-Z]/.test(value) &&
-    /[0-9]/.test(value)
   );
 }
 
@@ -91,7 +83,7 @@ export function useSignupForm() {
       );
       return "name";
     }
-    if (!isValidPassword(values.password)) {
+    if (!isStrongPassword(values.password)) {
       toast.error(t("weakPassword"));
       return "password";
     }

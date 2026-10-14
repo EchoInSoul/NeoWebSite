@@ -6,16 +6,19 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  LoaderCircle,
   Mail,
   ShieldCheck,
   UserRound,
   UsersRound,
 } from "lucide-react";
+import { cn } from "cn";
 import { useTranslations } from "next-intl";
 
 import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   InputGroup,
@@ -25,8 +28,10 @@ import {
 } from "@/components/ui/input-group";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { usePasswordChange } from "@/hooks/use-password-change";
 import { useProfileSave } from "@/hooks/use-profile-save";
 import type { SessionUser } from "@/lib/auth-session";
+import { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH } from "@/lib/password";
 
 import { TwoFactorDisablePanel } from "./two-factor-disable-panel";
 import { TwoFactorPanel } from "./two-factor-panel";
@@ -52,8 +57,15 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
     changeBio,
     save,
   } = useProfileSave(profile);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+  const {
+    currentPassword,
+    newPassword,
+    state: passwordState,
+    isSubmitting: isChangingPassword,
+    changeCurrentPassword,
+    changeNewPassword,
+    submit: submitPasswordChange,
+  } = usePasswordChange();
   const [isCurrentPasswordVisible, setIsCurrentPasswordVisible] =
     useState(false);
   const [isNewPasswordVisible, setIsNewPasswordVisible] = useState(false);
@@ -61,6 +73,29 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
   const [isTwoFactorExpanded, setIsTwoFactorExpanded] = useState(false);
 
   const isLocked = profile === null || isSaving;
+  const isPasswordLocked = profile === null || isChangingPassword;
+  const isPasswordSubmittable =
+    currentPassword !== "" && newPassword !== "" && !isChangingPassword;
+
+  const passwordStatusText =
+    passwordState === "submitting"
+      ? t("passwordChanging")
+      : passwordState === "invalidPassword"
+        ? t("invalidPassword")
+        : passwordState === "weak"
+          ? t("passwordWeak", { minLength: PASSWORD_MIN_LENGTH })
+          : passwordState === "tooLong"
+            ? t("passwordTooLong", { maxBytes: PASSWORD_MAX_BYTES })
+            : passwordState === "unchanged"
+              ? t("passwordUnchanged")
+              : "";
+
+  function handlePasswordKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void submitPasswordChange();
+    }
+  }
 
   function openTwoFactorPanel() {
     setIsTwoFactorExpanded(true);
@@ -73,12 +108,6 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void save();
-  }
-
-  function ignoreEnter(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-    }
   }
 
   return (
@@ -169,11 +198,11 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                       <InputGroupInput
                         aria-label={t("currentPassword")}
                         autoComplete="current-password"
-                        disabled={isLocked}
+                        disabled={isPasswordLocked}
                         onChange={(event) =>
-                          setCurrentPassword(event.target.value)
+                          changeCurrentPassword(event.target.value)
                         }
-                        onKeyDown={ignoreEnter}
+                        onKeyDown={handlePasswordKeyDown}
                         type={isCurrentPasswordVisible ? "text" : "password"}
                         value={currentPassword}
                       />
@@ -185,7 +214,7 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                               ? tCommon("hidePassword")
                               : tCommon("showPassword")
                           }
-                          disabled={isLocked}
+                          disabled={isPasswordLocked}
                           onClick={() =>
                             setIsCurrentPasswordVisible((visible) => !visible)
                           }
@@ -203,9 +232,11 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                       <InputGroupInput
                         aria-label={t("newPassword")}
                         autoComplete="new-password"
-                        disabled={isLocked}
-                        onChange={(event) => setNewPassword(event.target.value)}
-                        onKeyDown={ignoreEnter}
+                        disabled={isPasswordLocked}
+                        onChange={(event) =>
+                          changeNewPassword(event.target.value)
+                        }
+                        onKeyDown={handlePasswordKeyDown}
                         type={isNewPasswordVisible ? "text" : "password"}
                         value={newPassword}
                       />
@@ -217,7 +248,7 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                               ? tCommon("hidePassword")
                               : tCommon("showPassword")
                           }
-                          disabled={isLocked}
+                          disabled={isPasswordLocked}
                           onClick={() =>
                             setIsNewPasswordVisible((visible) => !visible)
                           }
@@ -229,6 +260,32 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                   }
                   label={t("newPassword")}
                 />
+                <div className="flex items-center gap-3 px-5 py-3.5">
+                  <p
+                    aria-live="polite"
+                    className={cn(
+                      "flex min-h-4 flex-1 items-center gap-1.5 text-xs leading-4",
+                      passwordState === "invalidPassword" ||
+                        passwordState === "weak" ||
+                        passwordState === "tooLong" ||
+                        passwordState === "unchanged"
+                        ? "text-destructive"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {passwordState === "submitting" ? (
+                      <LoaderCircle className="size-3 animate-spin" />
+                    ) : null}
+                    {passwordStatusText}
+                  </p>
+                  <Button
+                    disabled={!isPasswordSubmittable}
+                    onClick={() => void submitPasswordChange()}
+                    type="button"
+                  >
+                    {t("changePasswordSubmit")}
+                  </Button>
+                </div>
               </>
             }
             icon={<KeyRound />}
