@@ -52,15 +52,14 @@ export function parseUserSessions(payload: unknown): UserSession[] {
   return items.map((item) => toSession(item as SessionItemPayload));
 }
 
+export const userSessionsPath = "/api/v1/users/me/sessions";
+
 export async function fetchUserSessions(): Promise<UserSession[]> {
-  return parseUserSessions(await apiRequest("/api/v1/users/me/sessions"));
+  return parseUserSessions(await apiRequest(userSessionsPath));
 }
 
 export async function revokeUserSession(sessionId: string): Promise<void> {
-  await apiRequest(
-    `/api/v1/users/me/sessions/${encodeURIComponent(sessionId)}`,
-    {
-      method: "DELETE",
-    },
-  );
+  await apiRequest(`${userSessionsPath}/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
 }

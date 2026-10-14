@@ -30,23 +30,23 @@ function buildPageOptionValues(
 }
 
 export type ConsoleListPaginationProperties = {
-  totalCount: number;
   currentPage: number;
   totalPages: number;
   pageSize: number;
   pageSizeOptions: readonly number[];
   onPageChange: (nextPage: number) => void;
   onPageSizeChange: (nextPageSize: number) => void;
-  summary?: ReactNode;
-  previousLabel?: string;
-  nextLabel?: string;
-  pageLabel?: string;
-  perPageLabel?: string;
+  summary: ReactNode;
+  previousLabel: string;
+  nextLabel: string;
+  pageLabel: string;
+  perPageLabel: string;
+  pageSelectAriaLabel: string;
+  pageSizeSelectAriaLabel: string;
   className?: string;
 };
 
 export function ConsoleListPagination({
-  totalCount,
   currentPage,
   totalPages,
   pageSize,
@@ -54,10 +54,12 @@ export function ConsoleListPagination({
   onPageChange,
   onPageSizeChange,
   summary,
-  previousLabel = "上一页",
-  nextLabel = "下一页",
-  pageLabel = "页",
-  perPageLabel = "条/页",
+  previousLabel,
+  nextLabel,
+  pageLabel,
+  perPageLabel,
+  pageSelectAriaLabel,
+  pageSizeSelectAriaLabel,
   className,
 }: ConsoleListPaginationProperties) {
   const safeTotalPages = Math.max(1, totalPages);
@@ -76,10 +78,7 @@ export function ConsoleListPagination({
         className,
       )}
     >
-      <p>
-        {summary ??
-          `共 ${totalCount} 条 · 第 ${safeCurrentPage}/${safeTotalPages} 页`}
-      </p>
+      <p>{summary}</p>
       <div className="flex flex-wrap items-center gap-2 text-[13px]">
         <Button
           type="button"
@@ -117,7 +116,7 @@ export function ConsoleListPagination({
         >
           <SelectTrigger
             size="sm"
-            aria-label="页码"
+            aria-label={pageSelectAriaLabel}
             className="h-8 min-w-[72px] gap-1 px-2 text-[13px]"
           >
             <SelectValue>
@@ -159,7 +158,7 @@ export function ConsoleListPagination({
         >
           <SelectTrigger
             size="sm"
-            aria-label="每页条数"
+            aria-label={pageSizeSelectAriaLabel}
             className="h-8 min-w-[68px] gap-1 px-2 text-[13px]"
           >
             <SelectValue />

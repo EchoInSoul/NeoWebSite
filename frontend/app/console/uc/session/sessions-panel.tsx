@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Ellipsis, LogOut, MonitorSmartphone, ServerOff } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { toast } from "sonner";
 
 import {
   ConsoleListTable,
+  ConsoleListTitleBlock,
   type ConsoleListColumn,
   type ConsoleListSortDirection,
 } from "@/components/console/console-list-table";
@@ -42,16 +41,15 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { ApiError, looksLikeServiceFailure } from "@/lib/api";
+import { useSessions } from "@/hooks/use-sessions";
 import { formatTimestamp } from "@/lib/datetime";
 import { describeUserAgent } from "@/lib/user-agent";
-import {
-  fetchUserSessions,
-  revokeUserSession,
-  type UserSession,
-} from "@/lib/user-sessions";
+import type { UserSession } from "@/lib/user-sessions";
 
 const missingValue = "—";
+const deviceChipClassName =
+  "flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground";
+const timeCellClassName = "px-4 text-xs text-muted-foreground";
 
 const sessionSortFields = ["lastSeenAt", "createdAt", "expiresAt"] as const;
 
@@ -61,14 +59,25 @@ function isSessionSortField(value: string): value is SessionSortField {
   return (sessionSortFields as readonly string[]).includes(value);
 }
 
+function describeDeviceLabel(
+  userAgent: string,
+  unknownDeviceLabel: string,
+): string {
+  const { browser, os } = describeUserAgent(userAgent);
+  const parts = [browser, os].filter((part): part is string => part !== null);
+  return parts.length === 0 ? unknownDeviceLabel : parts.join(" / ");
+}
+
 type SessionRowActionsProperties = {
   session: UserSession;
+  deviceLabel: string;
   isBusy: boolean;
   onRevoke: () => void;
 };
 
 function SessionRowActions({
   session,
+  deviceLabel,
   isBusy,
   onRevoke,
 }: SessionRowActionsProperties) {
@@ -82,7 +91,6 @@ function SessionRowActions({
         size="icon-sm"
         disabled
         aria-label={t("current")}
-        title={t("current")}
       >
         <Ellipsis aria-hidden="true" />
       </Button>
@@ -98,7 +106,7 @@ function SessionRowActions({
             variant="ghost"
             size="icon-sm"
             disabled={isBusy}
-            aria-label={t("actions")}
+            aria-label={t("actionsForDevice", { device: deviceLabel })}
           />
         }
       >
@@ -125,80 +133,26 @@ export function SessionsPanel({
 }) {
   const t = useTranslations("sessions");
   const tCommon = useTranslations("common");
-  const router = useRouter();
-  const [sessions, setSessions] = useState(initialSessions);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const {
+    sessions,
+    isRefreshing,
+    isListLocked,
+    isConfirmOpen,
+    revokeTarget,
+    setConfirmOpen,
+    refreshSessions,
+    requestRevoke,
+    confirmRevoke,
+  } = useSessions(initialSessions);
   const [searchText, setSearchText] = useState("");
   const [sortField, setSortField] = useState<SessionSortField>("lastSeenAt");
   const [sortDirection, setSortDirection] =
     useState<ConsoleListSortDirection>("desc");
-  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(
-    null,
-  );
-  const [pendingRevoke, setPendingRevoke] = useState<UserSession | null>(null);
 
-  const isBusy = revokingSessionId !== null;
   const isUnavailable = sessions === null;
 
   function describeDevice(session: UserSession): string {
-    const { browser, os } = describeUserAgent(session.userAgent);
-    const parts = [browser, os].filter((part): part is string => part !== null);
-    return parts.length === 0 ? t("unknownDevice") : parts.join(" / ");
-  }
-
-  function reportFailure(error: unknown, fallbackMessage: string): void {
-    toast.error(
-      looksLikeServiceFailure(error)
-        ? tCommon("serviceUnavailable")
-        : fallbackMessage,
-    );
-  }
-
-  async function refreshSessions(): Promise<void> {
-    if (isRefreshing || isBusy) {
-      return;
-    }
-
-    setIsRefreshing(true);
-    try {
-      setSessions(await fetchUserSessions());
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        router.replace("/signin");
-        return;
-      }
-      reportFailure(error, t("loadFailedTitle"));
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
-
-  async function revokeSession(session: UserSession): Promise<void> {
-    setRevokingSessionId(session.id);
-    try {
-      await revokeUserSession(session.id);
-      setSessions(
-        (previous) =>
-          previous?.filter((row) => row.id !== session.id) ?? previous,
-      );
-      toast.success(t("revoked"));
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        router.replace("/signin");
-        return;
-      }
-      reportFailure(error, t("revokeFailed"));
-    } finally {
-      setRevokingSessionId(null);
-    }
-  }
-
-  async function confirmRevoke(): Promise<void> {
-    const target = pendingRevoke;
-    setPendingRevoke(null);
-    if (target !== null) {
-      await revokeSession(target);
-    }
+    return describeDeviceLabel(session.userAgent, t("unknownDevice"));
   }
 
   function toggleSort(nextSortField: string): void {
@@ -222,9 +176,8 @@ export function SessionsPanel({
         return true;
       }
 
-      return [describeDevice(session), session.userAgent, session.ip].some(
-        (searchablePart) =>
-          searchablePart.toLowerCase().includes(searchKeyword),
+      return [describeDevice(session), session.ip].some((searchablePart) =>
+        searchablePart.toLowerCase().includes(searchKeyword),
       );
     })
     .sort((left, right) => {
@@ -248,22 +201,18 @@ export function SessionsPanel({
       cellClassName: "px-4",
       render: (session) => (
         <span className="flex min-w-0 items-center gap-3">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground">
+          <span className={deviceChipClassName}>
             <MonitorSmartphone className="size-4" aria-hidden="true" />
           </span>
-          <span className="min-w-0">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-medium">
-                {describeDevice(session)}
-              </span>
-              {session.current ? (
+          <ConsoleListTitleBlock
+            title={describeDevice(session)}
+            trailing={
+              session.current ? (
                 <Badge variant="secondary">{t("current")}</Badge>
-              ) : null}
-            </span>
-            <span className="block truncate font-mono text-xs text-muted-foreground">
-              {session.ip === "" ? t("unknownIp") : session.ip}
-            </span>
-          </span>
+              ) : undefined
+            }
+            secondary={session.ip === "" ? t("unknownIp") : session.ip}
+          />
         </span>
       ),
     },
@@ -272,7 +221,7 @@ export function SessionsPanel({
       header: t("lastSeen"),
       sortField: "lastSeenAt",
       headerClassName: "px-4",
-      cellClassName: "px-4 text-xs text-muted-foreground",
+      cellClassName: timeCellClassName,
       render: (session) => formatTimestamp(session.lastSeenAt) || missingValue,
     },
     {
@@ -280,7 +229,7 @@ export function SessionsPanel({
       header: t("signedIn"),
       sortField: "createdAt",
       headerClassName: "px-4",
-      cellClassName: "px-4 text-xs text-muted-foreground",
+      cellClassName: timeCellClassName,
       render: (session) => formatTimestamp(session.createdAt) || missingValue,
     },
     {
@@ -288,13 +237,13 @@ export function SessionsPanel({
       header: t("expiresAt"),
       sortField: "expiresAt",
       headerClassName: "px-4",
-      cellClassName: "px-4 text-xs text-muted-foreground",
+      cellClassName: timeCellClassName,
       render: (session) => formatTimestamp(session.expiresAt) || missingValue,
     },
   ];
 
   const emptyState = isUnavailable ? (
-    <Empty className="py-12">
+    <Empty size="lg">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <ServerOff aria-hidden="true" />
@@ -309,11 +258,11 @@ export function SessionsPanel({
         disabled={isRefreshing}
         onClick={() => void refreshSessions()}
       >
-        {t("retry")}
+        {tCommon("retry")}
       </Button>
     </Empty>
   ) : (
-    <Empty className="py-12">
+    <Empty size="lg">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <MonitorSmartphone aria-hidden="true" />
@@ -344,7 +293,7 @@ export function SessionsPanel({
               disabled={isUnavailable}
             />
           }
-          isBusy={isBusy}
+          isBusy={isListLocked}
           isRefreshing={isRefreshing}
           onRefresh={() => void refreshSessions()}
           refreshLabel={tCommon("refresh")}
@@ -359,8 +308,9 @@ export function SessionsPanel({
           rowActions={(session) => (
             <SessionRowActions
               session={session}
-              isBusy={isBusy}
-              onRevoke={() => setPendingRevoke(session)}
+              deviceLabel={describeDevice(session)}
+              isBusy={isListLocked}
+              onRevoke={() => requestRevoke(session)}
             />
           )}
           actionsHeader={t("actions")}
@@ -368,14 +318,7 @@ export function SessionsPanel({
         />
       </Card>
 
-      <AlertDialog
-        open={pendingRevoke !== null}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) {
-            setPendingRevoke(null);
-          }
-        }}
-      >
+      <AlertDialog open={isConfirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogMedia>
@@ -385,18 +328,13 @@ export function SessionsPanel({
             <AlertDialogDescription>
               {t("revokeConfirmDescription", {
                 device:
-                  pendingRevoke === null ? "" : describeDevice(pendingRevoke),
+                  revokeTarget === null ? "" : describeDevice(revokeTarget),
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isBusy}>
-              {tCommon("cancel")}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isBusy}
-              onClick={() => void confirmRevoke()}
-            >
+            <AlertDialogCancel>{tCommon("cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmRevoke()}>
               {t("revoke")}
             </AlertDialogAction>
           </AlertDialogFooter>

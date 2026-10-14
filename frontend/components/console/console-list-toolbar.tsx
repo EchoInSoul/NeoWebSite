@@ -12,7 +12,7 @@ export type ConsoleListToolbarSelectionProperties = {
   isAllSelected: boolean;
   isSomeSelected: boolean;
   onToggleAllSelected: (checked: boolean) => void;
-  selectAllLabel?: string;
+  selectAllLabel: string;
 };
 
 export type ConsoleListToolbarProperties = {
@@ -24,7 +24,7 @@ export type ConsoleListToolbarProperties = {
   isBusy?: boolean;
   isRefreshing?: boolean;
   onRefresh?: () => void;
-  refreshLabel?: string;
+  refreshLabel: string;
   className?: string;
 };
 
@@ -37,7 +37,7 @@ export function ConsoleListToolbar({
   isBusy = false,
   isRefreshing = false,
   onRefresh,
-  refreshLabel = "刷新",
+  refreshLabel,
   className,
 }: ConsoleListToolbarProperties) {
   return (
@@ -54,7 +54,7 @@ export function ConsoleListToolbar({
             indeterminate={selection.isSomeSelected}
             onCheckedChange={selection.onToggleAllSelected}
             disabled={isBusy}
-            aria-label={selection.selectAllLabel ?? "全选"}
+            aria-label={selection.selectAllLabel}
           />
         )}
         {isSelectionActive ? null : start}
@@ -85,7 +85,7 @@ export function ConsoleListToolbar({
 export type ConsoleListSearchInputProperties = {
   value: string;
   onValueChange: (nextValue: string) => void;
-  placeholder?: string;
+  placeholder: string;
   disabled?: boolean;
   className?: string;
 };
@@ -93,7 +93,7 @@ export type ConsoleListSearchInputProperties = {
 export function ConsoleListSearchInput({
   value,
   onValueChange,
-  placeholder = "搜索",
+  placeholder,
   disabled = false,
   className,
 }: ConsoleListSearchInputProperties) {

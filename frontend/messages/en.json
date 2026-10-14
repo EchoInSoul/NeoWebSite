@@ -82,6 +82,7 @@
     "signedIn": "Signed in",
     "expiresAt": "Expires",
     "actions": "Actions",
+    "actionsForDevice": "Actions for “{device}”",
     "current": "Current device",
     "unknownDevice": "Unknown device",
     "unknownIp": "Unknown IP",
@@ -92,7 +93,6 @@
     "revokeFailed": "Could not sign out that session, please try again later",
     "loadFailedTitle": "Could not load sessions",
     "loadFailedDescription": "Check the service status and try again.",
-    "retry": "Retry",
     "emptyTitle": "No sessions",
     "emptyDescription": "Your signed-in devices show up here after you sign in.",
     "emptyFilteredTitle": "No matching sessions",
@@ -104,7 +104,8 @@
     "serviceUnavailable": "The service is unavailable, please try again later",
     "serviceUnavailableButton": "Service unavailable",
     "refresh": "Refresh",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "retry": "Retry"
   },
   "auth": {
     "signin": {

@@ -26,6 +26,20 @@ export type ConsoleListColumn<TRow> = {
   render: (row: TRow) => ReactNode;
 };
 
+type ConsoleListTableExpansionProperties<TRow> =
+  | {
+      expandedKeys?: ReadonlySet<string>;
+      onToggleRowExpanded: (rowKey: string) => void;
+      getRowExpandLabel: (row: TRow) => string;
+      renderExpandedContent: (row: TRow) => ReactNode;
+    }
+  | {
+      expandedKeys?: undefined;
+      onToggleRowExpanded?: undefined;
+      getRowExpandLabel?: undefined;
+      renderExpandedContent?: undefined;
+    };
+
 export type ConsoleListTableProperties<TRow> = {
   rows: readonly TRow[];
   columns: readonly ConsoleListColumn<TRow>[];
@@ -37,17 +51,13 @@ export type ConsoleListTableProperties<TRow> = {
   selectedKeys?: ReadonlySet<string>;
   onToggleRowSelected?: (rowKey: string, checked: boolean) => void;
   getRowSelectionLabel?: (row: TRow) => string;
-  expandedKeys?: ReadonlySet<string>;
-  onToggleRowExpanded?: (rowKey: string) => void;
-  getRowExpandLabel?: (row: TRow) => string;
-  renderExpandedContent?: (row: TRow) => ReactNode;
   rowActions?: (row: TRow) => ReactNode;
   actionsHeader?: ReactNode;
   getRowClassName?: (row: TRow, rowIndex: number) => string | undefined;
   isBusy?: boolean;
   emptyState?: ReactNode;
   className?: string;
-};
+} & ConsoleListTableExpansionProperties<TRow>;
 
 export function ConsoleListTable<TRow>({
   rows,
@@ -123,11 +133,6 @@ export function ConsoleListTable<TRow>({
                       label={column.header}
                       isActive={isSortActive}
                       isAscending={sortDirection === "asc"}
-                      ariaLabel={
-                        typeof column.header === "string"
-                          ? `按${column.header}排序`
-                          : undefined
-                      }
                       onToggle={() =>
                         onToggleSort(column.sortField ?? column.key)
                       }
@@ -163,7 +168,7 @@ export function ConsoleListTable<TRow>({
                       type="button"
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={getRowExpandLabel?.(row) ?? "展开"}
+                      aria-label={getRowExpandLabel?.(row)}
                       aria-expanded={isExpanded}
                       onClick={() => onToggleRowExpanded?.(rowKey)}
                     >
@@ -265,20 +270,25 @@ export function ConsoleListSortHeader({
 }
 
 export type ConsoleListTitleBlockProperties = {
-  title: string;
+  title: ReactNode;
+  trailing?: ReactNode;
   secondary?: string;
   className?: string;
 };
 
 export function ConsoleListTitleBlock({
   title,
+  trailing,
   secondary,
   className,
 }: ConsoleListTitleBlockProperties) {
   return (
     <span className={cn("block min-w-0", className)}>
-      <span className="block max-w-72 truncate text-sm font-medium">
-        {title}
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="block max-w-72 truncate text-sm font-medium">
+          {title}
+        </span>
+        {trailing === undefined ? null : trailing}
       </span>
       {secondary === undefined ? null : (
         <span className="block truncate font-mono text-xs text-muted-foreground">
