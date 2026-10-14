@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, CircleUserRound } from "lucide-react";
+import { ArrowLeft, CircleUserRound, MonitorSmartphone } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "cn";
 
@@ -34,6 +34,9 @@ export function ConsoleSidebarNav() {
   const isPersonalInfoActive =
     pathname === "/console/uc/profile" ||
     pathname.startsWith("/console/uc/profile/");
+  const isSessionsActive =
+    pathname === "/console/uc/session" ||
+    pathname.startsWith("/console/uc/session/");
 
   return (
     <SidebarGroup>
@@ -72,6 +75,16 @@ export function ConsoleSidebarNav() {
           >
             <CircleUserRound />
             <span>{t("personalInfo")}</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={isSessionsActive}
+            render={<Link href="/console/uc/session" />}
+            tooltip={t("sessions")}
+          >
+            <MonitorSmartphone />
+            <span>{t("sessions")}</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>

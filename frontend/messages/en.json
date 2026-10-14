@@ -24,6 +24,7 @@
     "profile": "Personal settings",
     "account": "Account",
     "personalInfo": "Personal info",
+    "sessions": "Sessions",
     "backToConsole": "Back to console"
   },
   "console": {
@@ -73,11 +74,37 @@
     "invalidNickname": "Usernames must be 2–32 characters, with no spaces or @",
     "invalidEmail": "Enter a valid email address"
   },
+  "sessions": {
+    "title": "Sessions",
+    "searchPlaceholder": "Search device or IP",
+    "device": "Device",
+    "lastSeen": "Last active",
+    "signedIn": "Signed in",
+    "expiresAt": "Expires",
+    "actions": "Actions",
+    "current": "Current device",
+    "unknownDevice": "Unknown device",
+    "unknownIp": "Unknown IP",
+    "revoke": "Sign out this session",
+    "revokeConfirmTitle": "Sign out this session",
+    "revokeConfirmDescription": "“{device}” will be signed out immediately and must sign in again.",
+    "revoked": "Signed out that session",
+    "revokeFailed": "Could not sign out that session, please try again later",
+    "loadFailedTitle": "Could not load sessions",
+    "loadFailedDescription": "Check the service status and try again.",
+    "retry": "Retry",
+    "emptyTitle": "No sessions",
+    "emptyDescription": "Your signed-in devices show up here after you sign in.",
+    "emptyFilteredTitle": "No matching sessions",
+    "emptyFilteredDescription": "Try a different keyword."
+  },
   "common": {
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "serviceUnavailable": "The service is unavailable, please try again later",
-    "serviceUnavailableButton": "Service unavailable"
+    "serviceUnavailableButton": "Service unavailable",
+    "refresh": "Refresh",
+    "cancel": "Cancel"
   },
   "auth": {
     "signin": {

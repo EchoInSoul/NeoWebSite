@@ -24,6 +24,7 @@
     "profile": "个人设置",
     "account": "账号",
     "personalInfo": "个人信息",
+    "sessions": "会话",
     "backToConsole": "返回控制台"
   },
   "console": {
@@ -73,11 +74,37 @@
     "invalidNickname": "用户名需 2–32 个字符，不能含空格和 @",
     "invalidEmail": "邮箱格式不正确"
   },
+  "sessions": {
+    "title": "会话",
+    "searchPlaceholder": "搜索设备或 IP",
+    "device": "设备",
+    "lastSeen": "最后活跃",
+    "signedIn": "登录时间",
+    "expiresAt": "过期时间",
+    "actions": "操作",
+    "current": "当前设备",
+    "unknownDevice": "未知设备",
+    "unknownIp": "未知 IP",
+    "revoke": "退出该会话",
+    "revokeConfirmTitle": "退出该会话",
+    "revokeConfirmDescription": "「{device}」将立即退出登录，需要重新登录才能继续使用。",
+    "revoked": "已退出该会话",
+    "revokeFailed": "退出失败，请稍后重试",
+    "loadFailedTitle": "会话加载失败",
+    "loadFailedDescription": "请检查服务状态后重试。",
+    "retry": "重试",
+    "emptyTitle": "暂无会话",
+    "emptyDescription": "登录后，这里会显示你的登录设备。",
+    "emptyFilteredTitle": "没有匹配的会话",
+    "emptyFilteredDescription": "换个关键词试试。"
+  },
   "common": {
     "showPassword": "显示密码",
     "hidePassword": "隐藏密码",
     "serviceUnavailable": "服务暂时不可用，请稍后重试",
-    "serviceUnavailableButton": "服务不可用"
+    "serviceUnavailableButton": "服务不可用",
+    "refresh": "刷新",
+    "cancel": "取消"
   },
   "auth": {
     "signin": {
