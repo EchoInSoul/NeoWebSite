@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useProfileSave } from "@/hooks/use-profile-save";
 import type { SessionUser } from "@/lib/auth-session";
 
+import { TwoFactorDisablePanel } from "./two-factor-disable-panel";
 import { TwoFactorPanel } from "./two-factor-panel";
 
 const missingValue = "—";
@@ -61,14 +62,11 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
 
   const isLocked = profile === null || isSaving;
 
-  function openTwoFactorSetup() {
-    if (twoFactorEnabled) {
-      return;
-    }
+  function openTwoFactorPanel() {
     setIsTwoFactorExpanded(true);
   }
 
-  function finishTwoFactorSetup() {
+  function closeTwoFactorPanel() {
     setIsTwoFactorExpanded(false);
   }
 
@@ -147,14 +145,15 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                 aria-label={t("twoFactor")}
                 checked={twoFactorEnabled}
                 disabled={isLocked}
-                onCheckedChange={openTwoFactorSetup}
+                onCheckedChange={openTwoFactorPanel}
               />
             }
-            description={twoFactorEnabled ? t("twoFactorEnabledHint") : undefined}
             expanded={isTwoFactorExpanded}
             expandedContent={
-              twoFactorEnabled ? undefined : (
-                <TwoFactorPanel onDone={finishTwoFactorSetup} />
+              twoFactorEnabled ? (
+                <TwoFactorDisablePanel onDone={closeTwoFactorPanel} />
+              ) : (
+                <TwoFactorPanel onDone={closeTwoFactorPanel} />
               )
             }
             icon={<ShieldCheck />}
