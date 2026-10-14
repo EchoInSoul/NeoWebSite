@@ -67,7 +67,7 @@ export function ConsoleSidebarNav() {
         {t("account")}
       </SidebarGroupLabel>
       <SidebarMenu>
-        <SidebarMenuItem>
+        <SidebarMenuItem className="mb-1">
           <SidebarMenuButton
             isActive={isPersonalInfoActive}
             render={<Link href="/console/uc/profile" />}
