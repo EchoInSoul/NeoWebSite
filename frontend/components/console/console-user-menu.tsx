@@ -59,6 +59,7 @@ const localeLabels = {
 
 export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
   const t = useTranslations("userMenu");
+  const tCommon = useTranslations("common");
   const locale = useLocale();
   const router = useRouter();
   const [isSwitchingLocale, startLocaleSwitch] = useTransition();
@@ -185,7 +186,7 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSigningOut}>
-              {t("signOutConfirmCancel")}
+              {tCommon("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               disabled={isSigningOut}

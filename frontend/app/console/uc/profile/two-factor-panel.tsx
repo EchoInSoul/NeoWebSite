@@ -24,6 +24,7 @@ function groupSecret(secret: string) {
 
 export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
   const t = useTranslations("uc");
+  const tCommon = useTranslations("common");
   const { isCopied, copy } = useCopyToClipboard();
   const {
     setup,
@@ -85,7 +86,7 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
           <span className="absolute top-0 left-0 size-4 border-t border-l border-border" />
           <span className="absolute top-0 right-0 size-4 border-t border-r border-border" />
           <span className="absolute bottom-0 left-0 size-4 border-b border-l border-border" />
-          <span className="absolute bottom-0 right-0 size-4 border-b border-r border-border" />
+          <span className="absolute right-0 bottom-0 size-4 border-r border-b border-border" />
         </div>
 
         <div className="flex min-w-0 flex-1 justify-end">
@@ -177,7 +178,7 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
                     type="button"
                     variant="ghost"
                   >
-                    {t("twoFactorRetry")}
+                    {tCommon("retry")}
                   </Button>
                 ) : null}
               </p>

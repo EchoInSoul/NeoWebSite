@@ -14,7 +14,6 @@
     "signOutFailed": "退出失败，请稍后重试",
     "signOutConfirmTitle": "确定退出登录？",
     "signOutConfirmDescription": "退出后需要重新登录才能进入控制台。",
-    "signOutConfirmCancel": "取消",
     "signOutConfirm": "确认"
   },
   "sidebar": {
@@ -47,7 +46,6 @@
     "twoFactorOpenAuthenticator": "打开验证器",
     "twoFactorSetupLoading": "正在生成密钥…",
     "twoFactorSetupFailed": "密钥生成失败",
-    "twoFactorRetry": "重试",
     "twoFactorVerifying": "正在验证…",
     "twoFactorVerifyFailed": "验证失败，请稍后重试",
     "twoFactorInvalidCode": "验证码不正确，请重新输入",

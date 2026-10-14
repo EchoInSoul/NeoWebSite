@@ -14,7 +14,6 @@
     "signOutFailed": "Sign out failed, please try again later",
     "signOutConfirmTitle": "Sign out?",
     "signOutConfirmDescription": "You'll need to sign in again to access the console.",
-    "signOutConfirmCancel": "Cancel",
     "signOutConfirm": "Confirm"
   },
   "sidebar": {
@@ -47,7 +46,6 @@
     "twoFactorOpenAuthenticator": "Open authenticator",
     "twoFactorSetupLoading": "Generating secret…",
     "twoFactorSetupFailed": "Could not generate the secret",
-    "twoFactorRetry": "Retry",
     "twoFactorVerifying": "Verifying…",
     "twoFactorVerifyFailed": "Verification failed, please try again later",
     "twoFactorInvalidCode": "That code is not correct, try again",
