@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Ellipsis, LogOut, MonitorSmartphone, ServerOff } from "lucide-react";
+import { LogOut, MonitorSmartphone, ServerOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import {
@@ -28,12 +28,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Empty,
   EmptyDescription,
@@ -92,37 +86,23 @@ function SessionRowActions({
         disabled
         aria-label={t("current")}
       >
-        <Ellipsis aria-hidden="true" />
+        <LogOut aria-hidden="true" />
       </Button>
     );
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            disabled={isBusy}
-            aria-label={t("actionsForDevice", { device: deviceLabel })}
-          />
-        }
-      >
-        <Ellipsis aria-hidden="true" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          variant="destructive"
-          disabled={isBusy}
-          onClick={onRevoke}
-        >
-          <LogOut aria-hidden="true" />
-          <span>{t("revoke")}</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      disabled={isBusy}
+      aria-label={t("revokeForDevice", { device: deviceLabel })}
+      title={t("revokeForDevice", { device: deviceLabel })}
+      onClick={onRevoke}
+    >
+      <LogOut aria-hidden="true" />
+    </Button>
   );
 }
 

@@ -23,7 +23,7 @@
     "profile": "Personal settings",
     "account": "Account",
     "personalInfo": "Personal info",
-    "sessions": "Sessions",
+    "sessions": "Login sessions",
     "backToConsole": "Back to console"
   },
   "console": {
@@ -73,14 +73,14 @@
     "invalidEmail": "Enter a valid email address"
   },
   "sessions": {
-    "title": "Sessions",
+    "title": "Login sessions",
     "searchPlaceholder": "Search device or IP",
     "device": "Device",
     "lastSeen": "Last active",
     "signedIn": "Signed in",
     "expiresAt": "Expires",
     "actions": "Actions",
-    "actionsForDevice": "Actions for “{device}”",
+    "revokeForDevice": "Sign out “{device}”",
     "current": "Current device",
     "unknownDevice": "Unknown device",
     "unknownIp": "Unknown IP",

@@ -23,7 +23,7 @@
     "profile": "个人设置",
     "account": "账号",
     "personalInfo": "个人信息",
-    "sessions": "会话",
+    "sessions": "登录会话",
     "backToConsole": "返回控制台"
   },
   "console": {
@@ -73,14 +73,14 @@
     "invalidEmail": "邮箱格式不正确"
   },
   "sessions": {
-    "title": "会话",
+    "title": "登录会话",
     "searchPlaceholder": "搜索设备或 IP",
     "device": "设备",
     "lastSeen": "最后活跃",
     "signedIn": "登录时间",
     "expiresAt": "过期时间",
     "actions": "操作",
-    "actionsForDevice": "操作「{device}」",
+    "revokeForDevice": "退出「{device}」",
     "current": "当前设备",
     "unknownDevice": "未知设备",
     "unknownIp": "未知 IP",
