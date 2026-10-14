@@ -60,13 +60,6 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
 
   const isLocked = profile === null || isSaving;
 
-  const groupDescription =
-    profile === null
-      ? undefined
-      : profile.group.systemKey === null
-        ? t("customGroup")
-        : t("presetGroup", { key: profile.group.systemKey });
-
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void save();
@@ -93,7 +86,6 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                 value={nickname}
               />
             }
-            description={t("usernameHelp")}
             icon={<UserRound />}
             label={t("username")}
           />
@@ -108,7 +100,6 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                 value={bio}
               />
             }
-            description={t("bioHelp")}
             icon={<AlignLeft />}
             label={t("bio")}
           />
@@ -118,7 +109,6 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                 {profile?.group.name ?? missingValue}
               </span>
             }
-            description={groupDescription}
             icon={<UsersRound />}
             label={t("group")}
           />
@@ -136,7 +126,6 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                 value={email}
               />
             }
-            description={t("emailHelp")}
             icon={<Mail />}
             label={t("email")}
           />
@@ -153,7 +142,6 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
             label={t("twoFactor")}
           />
           <ConsoleSettingsRow
-            description={t("changePassword")}
             expandedContent={
               <>
                 <ConsoleSettingsRow
