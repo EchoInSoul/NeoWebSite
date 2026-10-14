@@ -8,6 +8,8 @@ import { ApiError, apiRequest } from "@/lib/api";
 
 export type SigninField = "identifier" | "password";
 
+export type SigninStep = "credentials" | "verify";
+
 const EMPTY_VALUES: Record<SigninField, string> = {
   identifier: "",
   password: "",
@@ -18,10 +20,21 @@ export function useSigninForm() {
   const { serviceDown, resolveServiceError } = useServiceHealth();
   const router = useRouter();
   const [values, setValues] = useState(EMPTY_VALUES);
+  const [step, setStep] = useState<SigninStep>("credentials");
+  const [code, setCode] = useState("");
   const [isPending, setIsPending] = useState(false);
 
   function changeField(field: SigninField, value: string) {
     setValues((previous) => ({ ...previous, [field]: value }));
+  }
+
+  function changeCode(value: string) {
+    setCode(value);
+  }
+
+  function backToCredentials() {
+    setCode("");
+    setStep("credentials");
   }
 
   function toMessage(error: unknown) {
@@ -29,8 +42,12 @@ export function useSigninForm() {
       switch (error.code) {
         case "invalid_credentials":
           return t("invalidCredentials");
-        case "two_factor_required":
-          return t("twoFactorUnsupported");
+        case "two_factor_invalid_code":
+          return t("invalidCode");
+        case "two_factor_locked":
+          return t("locked");
+        case "unauthorized":
+          return t("verifyExpired");
       }
     }
 
@@ -59,6 +76,13 @@ export function useSigninForm() {
       router.push("/console");
       return undefined;
     } catch (error) {
+      if (error instanceof ApiError && error.code === "two_factor_required") {
+        setValues((previous) => ({ ...previous, password: "" }));
+        setCode("");
+        setStep("verify");
+        return undefined;
+      }
+
       toast.error((await resolveServiceError(error)) ?? toMessage(error));
       return undefined;
     } finally {
@@ -66,5 +90,47 @@ export function useSigninForm() {
     }
   }
 
-  return { values, isPending, serviceDown, changeField, submit };
+  async function submitCode(): Promise<"code" | undefined> {
+    const trimmedCode = code.trim();
+
+    if (trimmedCode === "") {
+      toast.error(t("requiredCode"));
+      return "code";
+    }
+
+    setIsPending(true);
+    try {
+      await apiRequest("/api/v1/sessions/current/verify", {
+        method: "POST",
+        body: { code: trimmedCode },
+      });
+      router.push("/console");
+      return undefined;
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        (error.code === "two_factor_locked" || error.code === "unauthorized")
+      ) {
+        backToCredentials();
+      }
+
+      toast.error((await resolveServiceError(error)) ?? toMessage(error));
+      return undefined;
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return {
+    values,
+    step,
+    code,
+    isPending,
+    serviceDown,
+    changeField,
+    changeCode,
+    backToCredentials,
+    submit,
+    submitCode,
+  };
 }
