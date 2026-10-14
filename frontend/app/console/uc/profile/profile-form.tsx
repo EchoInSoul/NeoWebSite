@@ -28,7 +28,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useProfileSave } from "@/hooks/use-profile-save";
 import type { SessionUser } from "@/lib/auth-session";
 
+import { TwoFactorPanel } from "./two-factor-panel";
+
 const missingValue = "—";
+const placeholderEmail = "user@example.com";
 const valueClassName =
   "min-w-0 max-w-full truncate text-sm text-muted-foreground";
 const inputClassName = "w-70";
@@ -54,11 +57,17 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
   const [isCurrentPasswordVisible, setIsCurrentPasswordVisible] =
     useState(false);
   const [isNewPasswordVisible, setIsNewPasswordVisible] = useState(false);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(
-    profile?.twoFactorEnabled ?? false,
-  );
+  const twoFactorEnabled = profile?.twoFactorEnabled ?? false;
+  const [isTwoFactorExpanded, setIsTwoFactorExpanded] = useState(false);
 
   const isLocked = profile === null || isSaving;
+
+  function openTwoFactorSetup() {
+    if (twoFactorEnabled) {
+      return;
+    }
+    setIsTwoFactorExpanded(true);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -135,11 +144,17 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
                 aria-label={t("twoFactor")}
                 checked={twoFactorEnabled}
                 disabled={isLocked}
-                onCheckedChange={setTwoFactorEnabled}
+                onCheckedChange={openTwoFactorSetup}
               />
+            }
+            description={twoFactorEnabled ? t("twoFactorEnabledHint") : undefined}
+            expanded={isTwoFactorExpanded}
+            expandedContent={
+              <TwoFactorPanel email={profile?.email ?? placeholderEmail} />
             }
             icon={<ShieldCheck />}
             label={t("twoFactor")}
+            onExpandedChange={setIsTwoFactorExpanded}
           />
           <ConsoleSettingsRow
             expandedContent={

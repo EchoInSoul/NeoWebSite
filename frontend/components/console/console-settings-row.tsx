@@ -27,6 +27,8 @@ export type ConsoleSettingsRowProperties = {
   href?: string;
   expandedContent?: ReactNode;
   defaultExpanded?: boolean;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   className?: string;
 };
 
@@ -45,12 +47,23 @@ export function ConsoleSettingsRow({
   href,
   expandedContent,
   defaultExpanded = false,
+  expanded,
+  onExpandedChange,
   className,
 }: ConsoleSettingsRowProperties) {
-  const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
+  const [uncontrolledExpanded, setUncontrolledExpanded] =
+    useState<boolean>(defaultExpanded);
+  const isExpanded = expanded ?? uncontrolledExpanded;
   const isLinkRow = href !== undefined;
   const isExpandableRow = expandedContent !== undefined;
   const isInteractiveRow = isLinkRow || isExpandableRow;
+
+  function handleExpandedChange(nextExpanded: boolean) {
+    if (expanded === undefined) {
+      setUncontrolledExpanded(nextExpanded);
+    }
+    onExpandedChange?.(nextExpanded);
+  }
 
   const rowContentNode = (
     <>
@@ -88,7 +101,7 @@ export function ConsoleSettingsRow({
       <Collapsible
         className={className}
         open={isExpanded}
-        onOpenChange={setIsExpanded}
+        onOpenChange={handleExpandedChange}
       >
         <Item variant="flush" size="lg">
           <CollapsibleTrigger className={rowOverlayClassName}>

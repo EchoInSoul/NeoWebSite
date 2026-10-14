@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch（与 backend/.gitignore 同款：放临时脚本）
+.scratch/
