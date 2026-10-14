@@ -31,7 +31,6 @@ import type { SessionUser } from "@/lib/auth-session";
 import { TwoFactorPanel } from "./two-factor-panel";
 
 const missingValue = "—";
-const placeholderEmail = "user@example.com";
 const valueClassName =
   "min-w-0 max-w-full truncate text-sm text-muted-foreground";
 const inputClassName = "w-70";
@@ -67,6 +66,10 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
       return;
     }
     setIsTwoFactorExpanded(true);
+  }
+
+  function finishTwoFactorSetup() {
+    setIsTwoFactorExpanded(false);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -150,7 +153,9 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
             description={twoFactorEnabled ? t("twoFactorEnabledHint") : undefined}
             expanded={isTwoFactorExpanded}
             expandedContent={
-              <TwoFactorPanel email={profile?.email ?? placeholderEmail} />
+              twoFactorEnabled ? undefined : (
+                <TwoFactorPanel onDone={finishTwoFactorSetup} />
+              )
             }
             icon={<ShieldCheck />}
             label={t("twoFactor")}

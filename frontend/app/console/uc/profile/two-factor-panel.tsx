@@ -1,140 +1,192 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { Check, Copy, ExternalLink } from "lucide-react";
+import { type ChangeEvent, type KeyboardEvent } from "react";
+import { Check, Copy, ExternalLink, LoaderCircle } from "lucide-react";
+import { cn } from "cn";
 import { QRCodeSVG } from "qrcode.react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { useTwoFactorSetup } from "@/hooks/use-two-factor-setup";
 
-const placeholderSecret = "JBSWY3DPEHPK3PXP";
-const displayedSecret = placeholderSecret.replace(/(.{4})/g, "$1 ").trim();
-const codeLength = 6;
-const copiedFeedbackMs = 1600;
+import { RecoveryCodesDialog } from "./recovery-codes-dialog";
 
 const labelClassName = "text-xs leading-4 font-normal text-muted-foreground";
 const valueInputClassName = "min-w-0 flex-1 font-mono text-xs";
 
-export function TwoFactorPanel({ email }: { email: string }) {
+function groupSecret(secret: string) {
+  return secret.replace(/(.{4})/g, "$1 ").trim();
+}
+
+export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
   const t = useTranslations("uc");
-  const [code, setCode] = useState("");
-  const [isCopied, setIsCopied] = useState(false);
-  const resetTimer = useRef<number | null>(null);
+  const { isCopied, copy } = useCopyToClipboard();
+  const {
+    setup,
+    isLoading,
+    isLoadFailed,
+    code,
+    submitState,
+    recoveryCodes,
+    isBusy,
+    retrySetup,
+    submitCode,
+    changeCode,
+    finishRecovery,
+  } = useTwoFactorSetup();
 
-  useEffect(() => {
-    return () => {
-      if (resetTimer.current !== null) {
-        window.clearTimeout(resetTimer.current);
-      }
-    };
-  }, []);
-
-  const otpauthUrl = `otpauth://totp/NeoBlog:${email}?algorithm=SHA1&digits=6&issuer=NeoBlog&period=30&secret=${placeholderSecret}`;
-
-  async function copySecret() {
-    try {
-      await navigator.clipboard.writeText(placeholderSecret);
-    } catch {
-      return;
-    }
-
-    setIsCopied(true);
-
-    if (resetTimer.current !== null) {
-      window.clearTimeout(resetTimer.current);
-    }
-    resetTimer.current = window.setTimeout(
-      () => setIsCopied(false),
-      copiedFeedbackMs,
-    );
+  function handleCodeChange(event: ChangeEvent<HTMLInputElement>) {
+    changeCode(event.target.value);
   }
 
-  function changeCode(event: ChangeEvent<HTMLInputElement>) {
-    setCode(event.target.value.replace(/\D/g, "").slice(0, codeLength));
+  function handleCodeKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void submitCode(code);
+    }
   }
+
+  function finishSetup() {
+    finishRecovery();
+    onDone();
+  }
+
+  const isPending = isLoading || submitState === "verifying";
+  const statusText = isLoading
+    ? t("twoFactorSetupLoading")
+    : isLoadFailed
+      ? t("twoFactorSetupFailed")
+      : submitState === "verifying"
+        ? t("twoFactorVerifying")
+        : submitState === "invalid"
+          ? t("twoFactorInvalidCode")
+          : "";
 
   return (
-    <div className="flex items-center gap-8 px-5 pt-4 pb-[18px]">
-      <div className="relative w-48 shrink-0 p-2">
-        <QRCodeSVG
-          bgColor="#ffffff"
-          fgColor="#000000"
-          level="M"
-          marginSize={2}
-          size={176}
-          value={otpauthUrl}
-        />
-        <span className="absolute top-0 left-0 size-4 border-t border-l border-border" />
-        <span className="absolute top-0 right-0 size-4 border-t border-r border-border" />
-        <span className="absolute bottom-0 left-0 size-4 border-b border-l border-border" />
-        <span className="absolute bottom-0 right-0 size-4 border-b border-r border-border" />
-      </div>
-
-      <div className="flex min-w-0 flex-1 justify-end">
-        <div className="flex w-70 flex-col items-start gap-3.5">
-          <div className="flex w-full flex-col items-start gap-2">
-            <Label className={labelClassName} htmlFor="two-factor-secret">
-              {t("twoFactorSecret")}
-            </Label>
-            <div className="flex w-full items-center gap-2">
-              <Input
-                className={valueInputClassName}
-                id="two-factor-secret"
-                readOnly
-                value={displayedSecret}
-              />
-              <Button
-                aria-label={t("twoFactorCopySecret")}
-                onClick={copySecret}
-                size="icon"
-                title={t("twoFactorCopySecret")}
-                type="button"
-                variant="outline"
-              >
-                {isCopied ? <Check /> : <Copy />}
-              </Button>
-            </div>
-            <span className={labelClassName}>{t("twoFactorOr")}</span>
-            <div className="flex w-full items-center gap-2">
-              <Input
-                aria-label={t("twoFactorOpenAuthenticator")}
-                className={valueInputClassName}
-                readOnly
-                value={otpauthUrl}
-              />
-              <Button
-                aria-label={t("twoFactorOpenAuthenticator")}
-                nativeButton={false}
-                render={<a href={otpauthUrl} />}
-                size="icon"
-                title={t("twoFactorOpenAuthenticator")}
-                variant="outline"
-              >
-                <ExternalLink />
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex w-full flex-col items-start gap-2">
-            <Label className={labelClassName} htmlFor="two-factor-code">
-              {t("twoFactorCodePrompt")}
-            </Label>
-            <Input
-              autoComplete="one-time-code"
-              className="w-70"
-              id="two-factor-code"
-              inputMode="numeric"
-              maxLength={codeLength}
-              onChange={changeCode}
-              placeholder={t("twoFactorCodePlaceholder")}
-              value={code}
+    <>
+      <div className="flex items-center gap-8 px-5 pt-4 pb-[18px]">
+        <div className="relative w-48 shrink-0 p-2">
+          {setup === null ? (
+            <Skeleton className="size-44 rounded-sm" />
+          ) : (
+            <QRCodeSVG
+              bgColor="#ffffff"
+              fgColor="#000000"
+              level="M"
+              marginSize={2}
+              size={176}
+              value={setup.otpauthUrl}
             />
-            <p aria-live="polite" className="min-h-4 text-xs leading-4" />
+          )}
+          <span className="absolute top-0 left-0 size-4 border-t border-l border-border" />
+          <span className="absolute top-0 right-0 size-4 border-t border-r border-border" />
+          <span className="absolute bottom-0 left-0 size-4 border-b border-l border-border" />
+          <span className="absolute bottom-0 right-0 size-4 border-b border-r border-border" />
+        </div>
+
+        <div className="flex min-w-0 flex-1 justify-end">
+          <div className="flex w-70 flex-col items-start gap-3.5">
+            <div className="flex w-full flex-col items-start gap-2">
+              <Label className={labelClassName} htmlFor="two-factor-secret">
+                {t("twoFactorSecret")}
+              </Label>
+              <div className="flex w-full items-center gap-2">
+                <Input
+                  className={valueInputClassName}
+                  disabled={setup === null}
+                  id="two-factor-secret"
+                  readOnly
+                  value={setup === null ? "" : groupSecret(setup.secret)}
+                />
+                <Button
+                  aria-label={t("twoFactorCopySecret")}
+                  disabled={setup === null}
+                  onClick={() => {
+                    if (setup !== null) {
+                      void copy(setup.secret);
+                    }
+                  }}
+                  size="icon"
+                  title={t("twoFactorCopySecret")}
+                  type="button"
+                  variant="outline"
+                >
+                  {isCopied ? <Check /> : <Copy />}
+                </Button>
+              </div>
+              <span className={labelClassName}>{t("twoFactorOr")}</span>
+              <div className="flex w-full items-center gap-2">
+                <Input
+                  aria-label={t("twoFactorOpenAuthenticator")}
+                  className={valueInputClassName}
+                  disabled={setup === null}
+                  readOnly
+                  value={setup?.otpauthUrl ?? ""}
+                />
+                <Button
+                  aria-label={t("twoFactorOpenAuthenticator")}
+                  nativeButton={false}
+                  render={<a href={setup?.otpauthUrl} />}
+                  size="icon"
+                  title={t("twoFactorOpenAuthenticator")}
+                  variant="outline"
+                >
+                  <ExternalLink />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex w-full flex-col items-start gap-2">
+              <Label className={labelClassName} htmlFor="two-factor-code">
+                {t("twoFactorCodePrompt")}
+              </Label>
+              <Input
+                aria-invalid={submitState === "invalid"}
+                autoComplete="one-time-code"
+                className="w-70"
+                disabled={isBusy || setup === null}
+                id="two-factor-code"
+                inputMode="numeric"
+                maxLength={6}
+                onChange={handleCodeChange}
+                onKeyDown={handleCodeKeyDown}
+                placeholder={t("twoFactorCodePlaceholder")}
+                value={code}
+              />
+              <p
+                aria-live="polite"
+                className={cn(
+                  "flex min-h-4 items-center gap-1.5 text-xs leading-4",
+                  submitState === "invalid"
+                    ? "text-destructive"
+                    : "text-muted-foreground",
+                )}
+              >
+                {isPending ? (
+                  <LoaderCircle className="size-3 animate-spin" />
+                ) : null}
+                {statusText}
+                {isLoadFailed ? (
+                  <Button
+                    onClick={retrySetup}
+                    size="xs"
+                    type="button"
+                    variant="ghost"
+                  >
+                    {t("twoFactorRetry")}
+                  </Button>
+                ) : null}
+              </p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      <RecoveryCodesDialog codes={recoveryCodes} onClose={finishSetup} />
+    </>
   );
 }
