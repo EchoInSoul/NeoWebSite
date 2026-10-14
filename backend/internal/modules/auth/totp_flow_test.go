@@ -9,7 +9,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/alexedwards/scs/v2"
 	"github.com/google/uuid"
 
 	"website/backend/internal/database"
@@ -329,6 +331,8 @@ func TestTwoFactorSetupOverwritesSecret(t *testing.T) {
 	id := uuid.MustParse(u.ID)
 	ts := newTestApp(t, db)
 	client := testClient(t)
+	base := time.Unix(1700000001, 0)
+	advance := fakeTOTPClock(t, base)
 	loginOK(t, client, ts.URL, u.Email, password)
 
 	first := setup2FA(t, client, ts.URL)
@@ -336,6 +340,7 @@ func TestTwoFactorSetupOverwritesSecret(t *testing.T) {
 		t.Fatalf("totp_last_counter = %d after setup, want nil", *row.TotpLastCounter)
 	}
 
+	advance(base.Add(totpSetupReuseWindow + time.Second))
 	second := setup2FA(t, client, ts.URL)
 	if first.Secret == second.Secret {
 		t.Fatal("second setup returned the same secret")
@@ -477,6 +482,9 @@ func TestTwoFactorDisableLifecycle(t *testing.T) {
 	}
 	if row.TotpLastCounter != nil {
 		t.Fatalf("totp_last_counter = %v after disable, want nil", *row.TotpLastCounter)
+	}
+	if row.TotpSetupAt != nil {
+		t.Fatalf("totp_setup_at = %v after disable, want nil", *row.TotpSetupAt)
 	}
 	if hashes := recoveryCodeHashes(t, db, id); len(hashes) != 0 {
 		t.Fatalf("recovery code rows = %d after disable, want 0", len(hashes))
@@ -870,4 +878,310 @@ func containsHash(hashes []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func fakeTOTPClock(t *testing.T, base time.Time) func(time.Time) {
+	t.Helper()
+	previous := totpNow
+	now := base
+	totpNow = func() time.Time { return now }
+	t.Cleanup(func() { totpNow = previous })
+	return func(at time.Time) { now = at }
+}
+
+func TestClaimTOTPSetupRejectedWhenFresh(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	tag := uniqueTag(t)
+	u, _ := createTestUser(t, db, tag)
+	userID := uuid.MustParse(u.ID)
+	repo := newRepository(db)
+	base := time.Unix(1700000001, 0)
+
+	claimed, err := repo.claimTOTPSetup(ctx, userID, testCodeHash, base)
+	if err != nil {
+		t.Fatalf("first claim: %v", err)
+	}
+	if !claimed {
+		t.Fatal("first claim on fresh user rejected, want success")
+	}
+
+	reclaimed, err := repo.claimTOTPSetup(ctx, userID, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", base)
+	if err != nil {
+		t.Fatalf("second claim: %v", err)
+	}
+	if reclaimed {
+		t.Fatal("second claim inside reuse window accepted, want rejected")
+	}
+
+	stale, err := repo.claimTOTPSetup(ctx, userID, "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", base.Add(totpSetupReuseWindow+time.Second))
+	if err != nil {
+		t.Fatalf("stale claim: %v", err)
+	}
+	if !stale {
+		t.Fatal("claim past reuse window rejected, want success")
+	}
+}
+
+func TestTwoFactorSetupReusesSecretImmediately(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	fakeTOTPClock(t, time.Unix(1700000001, 0))
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	first := setup2FA(t, client, ts.URL)
+	before := userRow(t, db, id)
+	second := setup2FA(t, client, ts.URL)
+	after := userRow(t, db, id)
+
+	if second.Secret != first.Secret || second.OTPAuthURL != first.OTPAuthURL {
+		t.Fatalf("reuse changed response: secret %v url %v", second.Secret != first.Secret, second.OTPAuthURL != first.OTPAuthURL)
+	}
+	if *after.TotpSecret != *before.TotpSecret {
+		t.Fatal("reuse rewrote totp_secret, want zero writes")
+	}
+	if after.TotpSetupAt == nil || !after.TotpSetupAt.Equal(*before.TotpSetupAt) {
+		t.Fatalf("totp_setup_at changed on reuse: %v -> %v", before.TotpSetupAt, after.TotpSetupAt)
+	}
+	enable2FA(t, client, ts.URL, first.Secret)
+}
+
+func TestTwoFactorSetupReusesSecretJustInsideWindow(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	window := totpSetupReuseWindow
+	advance := fakeTOTPClock(t, time.Unix(1700000001, 0))
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	first := setup2FA(t, client, ts.URL)
+	advance(time.Unix(1700000001, 0).Add(window - time.Second))
+	second := setup2FA(t, client, ts.URL)
+
+	if second.Secret != first.Secret {
+		t.Fatalf("secret changed inside window: %q != %q", second.Secret, first.Secret)
+	}
+}
+
+func TestTwoFactorSetupRegeneratesAtWindowBoundary(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	base := time.Unix(1700000001, 0)
+	window := totpSetupReuseWindow
+	advance := fakeTOTPClock(t, base)
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	first := setup2FA(t, client, ts.URL)
+	advance(base.Add(window))
+	second := setup2FA(t, client, ts.URL)
+
+	if second.Secret == first.Secret {
+		t.Fatal("secret unchanged at window boundary, want regeneration")
+	}
+	row := userRow(t, db, id)
+	if row.TotpSetupAt == nil || !row.TotpSetupAt.Equal(base.Add(window)) {
+		t.Fatalf("totp_setup_at = %v, want %v", row.TotpSetupAt, base.Add(window))
+	}
+
+	stale := post2FA(t, client, ts.URL, "enable", TwoFactorCodeRequest{Code: codeAt(t, first.Secret, currentWindow())})
+	assertErrorCode(t, stale, http.StatusUnauthorized, "two_factor_invalid_code")
+
+	enable2FA(t, client, ts.URL, second.Secret)
+}
+
+func TestTwoFactorSetupConcurrentCallsShareSecret(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, _ := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	fakeTOTPClock(t, time.Unix(1700000001, 0))
+	svc := newService(db, scs.New(), testTOTPKey, nil)
+
+	results := make([]TwoFactorSetupResponse, 8)
+	errs := make([]error, 8)
+	var wg sync.WaitGroup
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i], errs[i] = svc.SetupTOTP(context.Background(), u.ID)
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("setup %d: %v", i, err)
+		}
+	}
+	for i, r := range results {
+		if r.Secret != results[0].Secret {
+			t.Fatalf("setup %d secret %q != %q, want one shared secret", i, r.Secret, results[0].Secret)
+		}
+	}
+	sealed := userRow(t, db, id).TotpSecret
+	if sealed == nil {
+		t.Fatal("totp_secret nil after concurrent setup")
+	}
+	plain, err := openSecret(testTOTPKey, *sealed)
+	if err != nil {
+		t.Fatalf("open stored secret: %v", err)
+	}
+	if plain != results[0].Secret {
+		t.Fatalf("stored secret %q != response %q", plain, results[0].Secret)
+	}
+}
+
+func TestTwoFactorSetupAtClearedByDisable(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	fakeTOTPClock(t, time.Unix(1700000001, 0))
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup2FA(t, client, ts.URL)
+	if row := userRow(t, db, id); row.TotpSetupAt == nil {
+		t.Fatal("totp_setup_at nil after setup, precondition broken")
+	}
+
+	resp := post2FA(t, client, ts.URL, "disable", TwoFactorDisableRequest{Password: password})
+	decodeJSON[map[string]any](t, resp, http.StatusOK)
+
+	row := userRow(t, db, id)
+	if row.TotpSetupAt != nil {
+		t.Fatalf("totp_setup_at = %v after disable, want nil", *row.TotpSetupAt)
+	}
+	if row.TotpSecret != nil {
+		t.Fatalf("totp_secret = %v after disable, want nil", *row.TotpSecret)
+	}
+}
+
+func TestTwoFactorSetupAtKeptByEnable(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	fakeTOTPClock(t, time.Unix(1700000001, 0))
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup2FA(t, client, ts.URL)
+	before := userRow(t, db, id).TotpSetupAt
+	if before == nil {
+		t.Fatal("totp_setup_at nil after setup, precondition broken")
+	}
+
+	enable2FA(t, client, ts.URL, userRowSecret(t, db, id))
+
+	if after := userRow(t, db, id).TotpSetupAt; after == nil || !after.Equal(*before) {
+		t.Fatalf("totp_setup_at = %v after enable, want unchanged %v", after, *before)
+	}
+}
+
+func userRowSecret(t *testing.T, db *database.Database, id uuid.UUID) string {
+	t.Helper()
+
+	row := userRow(t, db, id)
+	if row.TotpSecret == nil {
+		t.Fatal("totp_secret nil, want sealed secret")
+	}
+	plain, err := openSecret(testTOTPKey, *row.TotpSecret)
+	if err != nil {
+		t.Fatalf("open stored secret: %v", err)
+	}
+	return plain
+}
+
+func TestTwoFactorSetupLegacyPendingWithoutSetupAt(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ctx := context.Background()
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	fakeTOTPClock(t, time.Unix(1700000001, 0))
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	first := setup2FA(t, client, ts.URL)
+	if err := db.Client.User.UpdateOneID(id).ClearTotpSetupAt().Exec(ctx); err != nil {
+		t.Fatalf("clear setup_at: %v", err)
+	}
+
+	second := setup2FA(t, client, ts.URL)
+
+	if second.Secret == first.Secret {
+		t.Fatal("legacy pending row reused old secret, want regeneration")
+	}
+	if row := userRow(t, db, id); row.TotpSetupAt == nil {
+		t.Fatal("totp_setup_at still nil after legacy regeneration")
+	}
+}
+
+func TestTwoFactorSetupReuseDecryptFailureIsServerError(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ctx := context.Background()
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	fakeTOTPClock(t, time.Unix(1700000001, 0))
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup := setup2FA(t, client, ts.URL)
+	if err := db.Client.User.UpdateOneID(id).SetTotpSecret(setup.Secret).Exec(ctx); err != nil {
+		t.Fatalf("corrupt secret column: %v", err)
+	}
+
+	resp := postRaw(t, client, ts.URL+"/api/v1/users/me/2fa/setup", "")
+	assertErrorCode(t, resp, http.StatusInternalServerError, "internal_error")
+
+	row := userRow(t, db, id)
+	if row.TotpSecret == nil || *row.TotpSecret != setup.Secret {
+		t.Fatalf("totp_secret = %v, want corrupted value left in place", row.TotpSecret)
+	}
+}
+
+func TestTwoFactorSetupReuseEmptySecretIsServerError(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ctx := context.Background()
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	fakeTOTPClock(t, time.Unix(1700000001, 0))
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	setup2FA(t, client, ts.URL)
+	sealed, err := sealSecret(testTOTPKey, "")
+	if err != nil {
+		t.Fatalf("seal empty secret: %v", err)
+	}
+	if err := db.Client.User.UpdateOneID(id).SetTotpSecret(sealed).Exec(ctx); err != nil {
+		t.Fatalf("seed empty plaintext: %v", err)
+	}
+
+	resp := postRaw(t, client, ts.URL+"/api/v1/users/me/2fa/setup", "")
+	assertErrorCode(t, resp, http.StatusInternalServerError, "internal_error")
+
+	if row := userRow(t, db, id); row.TotpSecret == nil || *row.TotpSecret != sealed {
+		t.Fatalf("totp_secret = %v, want empty plaintext left in place", row.TotpSecret)
+	}
 }

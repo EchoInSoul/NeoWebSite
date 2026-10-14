@@ -253,6 +253,10 @@ func (s *Service) ensureIdentifierFree(ctx context.Context, userID, identifier s
 	return taken
 }
 
+func isFreshTOTPSetup(row *ent.User, now time.Time) bool {
+	return row.TotpSecret != nil && row.TotpSetupAt != nil && now.Sub(*row.TotpSetupAt) < totpSetupReuseWindow
+}
+
 func (s *Service) SetupTOTP(ctx context.Context, userID string) (TwoFactorSetupResponse, error) {
 	found, err := s.activeUser(ctx, userID)
 	if err != nil {
@@ -260,6 +264,11 @@ func (s *Service) SetupTOTP(ctx context.Context, userID string) (TwoFactorSetupR
 	}
 	if found.TotpEnabledAt != nil {
 		return TwoFactorSetupResponse{}, apierror.ErrTwoFactorAlreadyEnabled
+	}
+
+	now := totpNow()
+	if isFreshTOTPSetup(found, now) {
+		return s.reuseTOTPSetup(found.Email, *found.TotpSecret)
 	}
 
 	setup, err := generateTOTPSetup(found.Email)
@@ -270,8 +279,38 @@ func (s *Service) SetupTOTP(ctx context.Context, userID string) (TwoFactorSetupR
 	if err != nil {
 		return TwoFactorSetupResponse{}, err
 	}
-	if err := s.repo.updateTOTPSetup(ctx, found.ID, sealed); err != nil {
-		return TwoFactorSetupResponse{}, err
+
+	for attempt := 0; attempt < totpSetupClaimAttempts; attempt++ {
+		claimed, err := s.repo.claimTOTPSetup(ctx, found.ID, sealed, now)
+		if err != nil {
+			return TwoFactorSetupResponse{}, err
+		}
+		if claimed {
+			return TwoFactorSetupResponse{Secret: setup.Secret, OTPAuthURL: setup.OTPAuthURL}, nil
+		}
+
+		current, err := s.activeUser(ctx, userID)
+		if err != nil {
+			return TwoFactorSetupResponse{}, err
+		}
+		if current.TotpEnabledAt != nil {
+			return TwoFactorSetupResponse{}, apierror.ErrTwoFactorAlreadyEnabled
+		}
+		if isFreshTOTPSetup(current, now) {
+			return s.reuseTOTPSetup(current.Email, *current.TotpSecret)
+		}
+	}
+	return TwoFactorSetupResponse{}, apierror.ErrInternal
+}
+
+func (s *Service) reuseTOTPSetup(accountName, sealed string) (TwoFactorSetupResponse, error) {
+	plain, err := openSecret(s.totpKey, sealed)
+	if err != nil {
+		return TwoFactorSetupResponse{}, apierror.ErrInternal
+	}
+	setup, err := rebuildTOTPSetup(accountName, plain)
+	if err != nil {
+		return TwoFactorSetupResponse{}, apierror.ErrInternal
 	}
 	return TwoFactorSetupResponse{Secret: setup.Secret, OTPAuthURL: setup.OTPAuthURL}, nil
 }

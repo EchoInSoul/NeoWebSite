@@ -107,17 +107,21 @@ func toUser(u *ent.User) User {
 	}
 }
 
-func (r *repository) updateTOTPSetup(ctx context.Context, id uuid.UUID, encryptedSecret string) error {
-	if err := r.client.User.UpdateOneID(id).
+func (r *repository) claimTOTPSetup(ctx context.Context, id uuid.UUID, encryptedSecret string, now time.Time) (bool, error) {
+	claimed, err := r.client.User.Update().
+		Where(
+			user.IDEQ(id),
+			user.TotpEnabledAtIsNil(),
+			user.Or(user.TotpSetupAtIsNil(), user.TotpSetupAtLTE(now.Add(-totpSetupReuseWindow))),
+		).
 		SetTotpSecret(encryptedSecret).
+		SetTotpSetupAt(now).
 		ClearTotpLastCounter().
-		Exec(ctx); err != nil {
-		if ent.IsNotFound(err) {
-			return errUserNotFound
-		}
-		return err
+		Save(ctx)
+	if err != nil {
+		return false, err
 	}
-	return nil
+	return claimed == 1, nil
 }
 
 func (r *repository) enableTOTP(ctx context.Context, id uuid.UUID, enabledAt time.Time, codeHashes []string) error {
@@ -147,6 +151,7 @@ func (r *repository) disableTOTP(ctx context.Context, id uuid.UUID) error {
 		ClearTotpSecret().
 		ClearTotpEnabledAt().
 		ClearTotpLastCounter().
+		ClearTotpSetupAt().
 		Exec(ctx); err != nil {
 		return err
 	}

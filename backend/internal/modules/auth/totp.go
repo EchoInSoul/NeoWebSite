@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base32"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -14,10 +15,12 @@ import (
 )
 
 const (
-	totpIssuer        = "NeoBlog"
-	totpPeriodSeconds = 30
-	totpSkewWindows   = 1
-	recoveryCodeBytes = 16
+	totpIssuer             = "NeoBlog"
+	totpPeriodSeconds      = 30
+	totpSkewWindows        = 1
+	totpSetupReuseWindow   = 5 * time.Minute
+	totpSetupClaimAttempts = 2
+	recoveryCodeBytes      = 16
 )
 
 var totpNow = time.Now
@@ -37,6 +40,28 @@ func generateTOTPSetup(accountName string) (totpSetup, error) {
 	})
 	if err != nil {
 		return totpSetup{}, fmt.Errorf("generate totp key: %w", err)
+	}
+	return totpSetup{Secret: key.Secret(), OTPAuthURL: key.URL()}, nil
+}
+
+func rebuildTOTPSetup(accountName, base32Secret string) (totpSetup, error) {
+	raw, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(base32Secret)
+	if err != nil {
+		return totpSetup{}, fmt.Errorf("decode totp secret: %w", err)
+	}
+	if len(raw) == 0 {
+		return totpSetup{}, fmt.Errorf("totp secret is empty")
+	}
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      totpIssuer,
+		AccountName: accountName,
+		Period:      totpPeriodSeconds,
+		Digits:      otp.DigitsSix,
+		Algorithm:   otp.AlgorithmSHA1,
+		Secret:      raw,
+	})
+	if err != nil {
+		return totpSetup{}, fmt.Errorf("rebuild totp key: %w", err)
 	}
 	return totpSetup{Secret: key.Secret(), OTPAuthURL: key.URL()}, nil
 }
