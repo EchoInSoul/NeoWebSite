@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, type KeyboardEvent } from "react";
-import { Eye, EyeOff, LoaderCircle, ShieldOff } from "lucide-react";
-import { cn } from "cn";
+import { Eye, EyeOff, ShieldOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
@@ -18,7 +17,7 @@ import { useTwoFactorDisable } from "@/hooks/use-two-factor-disable";
 export function TwoFactorDisablePanel({ onDone }: { onDone: () => void }) {
   const t = useTranslations("uc");
   const tCommon = useTranslations("common");
-  const { password, state, isSubmitting, changePassword, submit } =
+  const { password, isSubmitting, changePassword, submit } =
     useTwoFactorDisable(onDone);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
@@ -29,66 +28,43 @@ export function TwoFactorDisablePanel({ onDone }: { onDone: () => void }) {
     }
   }
 
-  const statusText =
-    state === "submitting"
-      ? t("twoFactorDisabling")
-      : state === "invalidPassword"
-        ? t("invalidPassword")
-        : "";
-
   return (
     <ConsoleSettingsRow
       control={
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-2">
-            <InputGroup className="w-45">
-              <InputGroupInput
-                aria-label={t("currentPassword")}
-                autoComplete="current-password"
+        <div className="flex w-70 items-center gap-2">
+          <InputGroup className="min-w-0 flex-1">
+            <InputGroupInput
+              aria-label={t("currentPassword")}
+              autoComplete="current-password"
+              disabled={isSubmitting}
+              onChange={(event) => changePassword(event.target.value)}
+              onKeyDown={handleKeyDown}
+              type={isPasswordVisible ? "text" : "password"}
+              value={password}
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-xs"
+                aria-label={
+                  isPasswordVisible
+                    ? tCommon("hidePassword")
+                    : tCommon("showPassword")
+                }
                 disabled={isSubmitting}
-                onChange={(event) => changePassword(event.target.value)}
-                onKeyDown={handleKeyDown}
-                type={isPasswordVisible ? "text" : "password"}
-                value={password}
-              />
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  size="icon-xs"
-                  aria-label={
-                    isPasswordVisible
-                      ? tCommon("hidePassword")
-                      : tCommon("showPassword")
-                  }
-                  disabled={isSubmitting}
-                  onClick={() => setIsPasswordVisible((visible) => !visible)}
-                >
-                  {isPasswordVisible ? <EyeOff /> : <Eye />}
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
-            <Button
-              disabled={password === "" || isSubmitting}
-              onClick={() => void submit()}
-              type="button"
-              variant="destructive"
-            >
-              {t("twoFactorDisableSubmit")}
-            </Button>
-          </div>
-          <p
-            aria-live="polite"
-            className={cn(
-              "flex min-h-4 items-center gap-1.5 text-xs leading-4",
-              state === "invalidPassword"
-                ? "text-destructive"
-                : "text-muted-foreground",
-            )}
+                onClick={() => setIsPasswordVisible((visible) => !visible)}
+              >
+                {isPasswordVisible ? <EyeOff /> : <Eye />}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+          <Button
+            disabled={password === "" || isSubmitting}
+            onClick={() => void submit()}
+            type="button"
+            variant="destructive"
           >
-            {state === "submitting" ? (
-              <LoaderCircle className="size-3 animate-spin" />
-            ) : null}
-            {statusText}
-          </p>
+            {t("twoFactorDisableSubmit")}
+          </Button>
         </div>
       }
       icon={<ShieldOff />}

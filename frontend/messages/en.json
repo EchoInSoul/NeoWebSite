@@ -56,7 +56,6 @@
     "twoFactorRecoveryDone": "I saved them",
     "twoFactorDisableLabel": "Turn off two-factor authentication",
     "twoFactorDisableSubmit": "Turn off",
-    "twoFactorDisabling": "Turning off…",
     "twoFactorDisabled": "Two-factor authentication is off",
     "twoFactorDisableFailed": "Could not turn it off, please try again later",
     "invalidPassword": "That password is not correct",

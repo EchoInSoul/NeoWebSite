@@ -56,7 +56,6 @@
     "twoFactorRecoveryDone": "我已保存",
     "twoFactorDisableLabel": "关闭两步验证",
     "twoFactorDisableSubmit": "关闭",
-    "twoFactorDisabling": "正在关闭…",
     "twoFactorDisabled": "两步验证已关闭",
     "twoFactorDisableFailed": "关闭失败，请稍后重试",
     "invalidPassword": "密码不正确",
