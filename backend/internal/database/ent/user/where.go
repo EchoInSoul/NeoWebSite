@@ -91,6 +91,11 @@ func TotpLastCounter(v int64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldTotpLastCounter, v))
 }
 
+// TotpSetupAt applies equality check predicate on the "totp_setup_at" field. It's identical to TotpSetupAtEQ.
+func TotpSetupAt(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpSetupAt, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldCreatedAt, v))
@@ -489,6 +494,56 @@ func TotpLastCounterIsNil() predicate.User {
 // TotpLastCounterNotNil applies the NotNil predicate on the "totp_last_counter" field.
 func TotpLastCounterNotNil() predicate.User {
 	return predicate.User(sql.FieldNotNull(FieldTotpLastCounter))
+}
+
+// TotpSetupAtEQ applies the EQ predicate on the "totp_setup_at" field.
+func TotpSetupAtEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTotpSetupAt, v))
+}
+
+// TotpSetupAtNEQ applies the NEQ predicate on the "totp_setup_at" field.
+func TotpSetupAtNEQ(v time.Time) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTotpSetupAt, v))
+}
+
+// TotpSetupAtIn applies the In predicate on the "totp_setup_at" field.
+func TotpSetupAtIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldIn(FieldTotpSetupAt, vs...))
+}
+
+// TotpSetupAtNotIn applies the NotIn predicate on the "totp_setup_at" field.
+func TotpSetupAtNotIn(vs ...time.Time) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldTotpSetupAt, vs...))
+}
+
+// TotpSetupAtGT applies the GT predicate on the "totp_setup_at" field.
+func TotpSetupAtGT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGT(FieldTotpSetupAt, v))
+}
+
+// TotpSetupAtGTE applies the GTE predicate on the "totp_setup_at" field.
+func TotpSetupAtGTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldTotpSetupAt, v))
+}
+
+// TotpSetupAtLT applies the LT predicate on the "totp_setup_at" field.
+func TotpSetupAtLT(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLT(FieldTotpSetupAt, v))
+}
+
+// TotpSetupAtLTE applies the LTE predicate on the "totp_setup_at" field.
+func TotpSetupAtLTE(v time.Time) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldTotpSetupAt, v))
+}
+
+// TotpSetupAtIsNil applies the IsNil predicate on the "totp_setup_at" field.
+func TotpSetupAtIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldTotpSetupAt))
+}
+
+// TotpSetupAtNotNil applies the NotNil predicate on the "totp_setup_at" field.
+func TotpSetupAtNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldTotpSetupAt))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

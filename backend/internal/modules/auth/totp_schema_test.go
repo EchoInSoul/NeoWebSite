@@ -117,3 +117,47 @@ func TestTOTPLastCounterColumn(t *testing.T) {
 		t.Fatalf("counter after clear %d, want nil", *cleared.TotpLastCounter)
 	}
 }
+
+func TestTOTPSetupAtColumn(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	tag := uniqueTag(t)
+	user, err := db.Client.User.Create().
+		SetEmail("setupat+" + tag + "@test.local").
+		SetNickname("setupat" + tag).
+		SetPasswordHash("hash-" + tag).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create user without setup_at: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Client.User.DeleteOneID(user.ID).Exec(context.Background())
+	})
+	if user.TotpSetupAt != nil {
+		t.Fatalf("totp_setup_at default %v, want nil", *user.TotpSetupAt)
+	}
+
+	setupAt := time.Now().UTC().Truncate(time.Microsecond)
+	if _, err := user.Update().SetTotpSetupAt(setupAt).Save(ctx); err != nil {
+		t.Fatalf("set setup_at: %v", err)
+	}
+	fetched, err := db.Client.User.Get(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if fetched.TotpSetupAt == nil || !fetched.TotpSetupAt.Equal(setupAt) {
+		t.Fatalf("setup_at roundtrip %v, want %v", fetched.TotpSetupAt, setupAt)
+	}
+
+	if _, err := fetched.Update().ClearTotpSetupAt().Save(ctx); err != nil {
+		t.Fatalf("clear setup_at: %v", err)
+	}
+	cleared, err := db.Client.User.Get(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("reload user after clear: %v", err)
+	}
+	if cleared.TotpSetupAt != nil {
+		t.Fatalf("setup_at after clear %v, want nil", *cleared.TotpSetupAt)
+	}
+}

@@ -2754,6 +2754,7 @@ type UserMutation struct {
 	totp_enabled_at      *time.Time
 	totp_last_counter    *int64
 	addtotp_last_counter *int64
+	totp_setup_at        *time.Time
 	created_at           *time.Time
 	updated_at           *time.Time
 	clearedFields        map[string]struct{}
@@ -3186,6 +3187,55 @@ func (m *UserMutation) ResetTotpLastCounter() {
 	delete(m.clearedFields, user.FieldTotpLastCounter)
 }
 
+// SetTotpSetupAt sets the "totp_setup_at" field.
+func (m *UserMutation) SetTotpSetupAt(t time.Time) {
+	m.totp_setup_at = &t
+}
+
+// TotpSetupAt returns the value of the "totp_setup_at" field in the mutation.
+func (m *UserMutation) TotpSetupAt() (r time.Time, exists bool) {
+	v := m.totp_setup_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotpSetupAt returns the old "totp_setup_at" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTotpSetupAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotpSetupAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotpSetupAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotpSetupAt: %w", err)
+	}
+	return oldValue.TotpSetupAt, nil
+}
+
+// ClearTotpSetupAt clears the value of the "totp_setup_at" field.
+func (m *UserMutation) ClearTotpSetupAt() {
+	m.totp_setup_at = nil
+	m.clearedFields[user.FieldTotpSetupAt] = struct{}{}
+}
+
+// TotpSetupAtCleared returns if the "totp_setup_at" field was cleared in this mutation.
+func (m *UserMutation) TotpSetupAtCleared() bool {
+	_, ok := m.clearedFields[user.FieldTotpSetupAt]
+	return ok
+}
+
+// ResetTotpSetupAt resets all changes to the "totp_setup_at" field.
+func (m *UserMutation) ResetTotpSetupAt() {
+	m.totp_setup_at = nil
+	delete(m.clearedFields, user.FieldTotpSetupAt)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *UserMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -3427,7 +3477,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.email != nil {
 		fields = append(fields, user.FieldEmail)
 	}
@@ -3448,6 +3498,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.totp_last_counter != nil {
 		fields = append(fields, user.FieldTotpLastCounter)
+	}
+	if m.totp_setup_at != nil {
+		fields = append(fields, user.FieldTotpSetupAt)
 	}
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
@@ -3477,6 +3530,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.TotpEnabledAt()
 	case user.FieldTotpLastCounter:
 		return m.TotpLastCounter()
+	case user.FieldTotpSetupAt:
+		return m.TotpSetupAt()
 	case user.FieldCreatedAt:
 		return m.CreatedAt()
 	case user.FieldUpdatedAt:
@@ -3504,6 +3559,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTotpEnabledAt(ctx)
 	case user.FieldTotpLastCounter:
 		return m.OldTotpLastCounter(ctx)
+	case user.FieldTotpSetupAt:
+		return m.OldTotpSetupAt(ctx)
 	case user.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case user.FieldUpdatedAt:
@@ -3565,6 +3622,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetTotpLastCounter(v)
+		return nil
+	case user.FieldTotpSetupAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotpSetupAt(v)
 		return nil
 	case user.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -3634,6 +3698,9 @@ func (m *UserMutation) ClearedFields() []string {
 	if m.FieldCleared(user.FieldTotpLastCounter) {
 		fields = append(fields, user.FieldTotpLastCounter)
 	}
+	if m.FieldCleared(user.FieldTotpSetupAt) {
+		fields = append(fields, user.FieldTotpSetupAt)
+	}
 	return fields
 }
 
@@ -3656,6 +3723,9 @@ func (m *UserMutation) ClearField(name string) error {
 		return nil
 	case user.FieldTotpLastCounter:
 		m.ClearTotpLastCounter()
+		return nil
+	case user.FieldTotpSetupAt:
+		m.ClearTotpSetupAt()
 		return nil
 	}
 	return fmt.Errorf("unknown User nullable field %s", name)
@@ -3685,6 +3755,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldTotpLastCounter:
 		m.ResetTotpLastCounter()
+		return nil
+	case user.FieldTotpSetupAt:
+		m.ResetTotpSetupAt()
 		return nil
 	case user.FieldCreatedAt:
 		m.ResetCreatedAt()

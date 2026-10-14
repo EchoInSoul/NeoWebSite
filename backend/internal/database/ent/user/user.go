@@ -29,6 +29,8 @@ const (
 	FieldTotpEnabledAt = "totp_enabled_at"
 	// FieldTotpLastCounter holds the string denoting the totp_last_counter field in the database.
 	FieldTotpLastCounter = "totp_last_counter"
+	// FieldTotpSetupAt holds the string denoting the totp_setup_at field in the database.
+	FieldTotpSetupAt = "totp_setup_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -74,6 +76,7 @@ var Columns = []string{
 	FieldTotpSecret,
 	FieldTotpEnabledAt,
 	FieldTotpLastCounter,
+	FieldTotpSetupAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -148,6 +151,11 @@ func ByTotpEnabledAt(opts ...sql.OrderTermOption) OrderOption {
 // ByTotpLastCounter orders the results by the totp_last_counter field.
 func ByTotpLastCounter(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTotpLastCounter, opts...).ToFunc()
+}
+
+// ByTotpSetupAt orders the results by the totp_setup_at field.
+func ByTotpSetupAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotpSetupAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

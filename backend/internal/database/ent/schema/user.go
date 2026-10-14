@@ -27,6 +27,7 @@ func (User) Fields() []ent.Field {
 		field.String("totp_secret").Optional().Nillable(),
 		field.Time("totp_enabled_at").Optional().Nillable(),
 		field.Int64("totp_last_counter").Optional().Nillable(),
+		field.Time("totp_setup_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

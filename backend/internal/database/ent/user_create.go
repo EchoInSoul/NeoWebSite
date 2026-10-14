@@ -101,6 +101,20 @@ func (_c *UserCreate) SetNillableTotpLastCounter(v *int64) *UserCreate {
 	return _c
 }
 
+// SetTotpSetupAt sets the "totp_setup_at" field.
+func (_c *UserCreate) SetTotpSetupAt(v time.Time) *UserCreate {
+	_c.mutation.SetTotpSetupAt(v)
+	return _c
+}
+
+// SetNillableTotpSetupAt sets the "totp_setup_at" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTotpSetupAt(v *time.Time) *UserCreate {
+	if v != nil {
+		_c.SetTotpSetupAt(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *UserCreate) SetCreatedAt(v time.Time) *UserCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -329,6 +343,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldTotpLastCounter, field.TypeInt64, value)
 		_node.TotpLastCounter = &value
 	}
+	if value, ok := _c.mutation.TotpSetupAt(); ok {
+		_spec.SetField(user.FieldTotpSetupAt, field.TypeTime, value)
+		_node.TotpSetupAt = &value
+	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(user.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
@@ -546,6 +564,24 @@ func (u *UserUpsert) ClearTotpLastCounter() *UserUpsert {
 	return u
 }
 
+// SetTotpSetupAt sets the "totp_setup_at" field.
+func (u *UserUpsert) SetTotpSetupAt(v time.Time) *UserUpsert {
+	u.Set(user.FieldTotpSetupAt, v)
+	return u
+}
+
+// UpdateTotpSetupAt sets the "totp_setup_at" field to the value that was provided on create.
+func (u *UserUpsert) UpdateTotpSetupAt() *UserUpsert {
+	u.SetExcluded(user.FieldTotpSetupAt)
+	return u
+}
+
+// ClearTotpSetupAt clears the value of the "totp_setup_at" field.
+func (u *UserUpsert) ClearTotpSetupAt() *UserUpsert {
+	u.SetNull(user.FieldTotpSetupAt)
+	return u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (u *UserUpsert) SetUpdatedAt(v time.Time) *UserUpsert {
 	u.Set(user.FieldUpdatedAt, v)
@@ -732,6 +768,27 @@ func (u *UserUpsertOne) UpdateTotpLastCounter() *UserUpsertOne {
 func (u *UserUpsertOne) ClearTotpLastCounter() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.ClearTotpLastCounter()
+	})
+}
+
+// SetTotpSetupAt sets the "totp_setup_at" field.
+func (u *UserUpsertOne) SetTotpSetupAt(v time.Time) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTotpSetupAt(v)
+	})
+}
+
+// UpdateTotpSetupAt sets the "totp_setup_at" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateTotpSetupAt() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTotpSetupAt()
+	})
+}
+
+// ClearTotpSetupAt clears the value of the "totp_setup_at" field.
+func (u *UserUpsertOne) ClearTotpSetupAt() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearTotpSetupAt()
 	})
 }
 
@@ -1090,6 +1147,27 @@ func (u *UserUpsertBulk) UpdateTotpLastCounter() *UserUpsertBulk {
 func (u *UserUpsertBulk) ClearTotpLastCounter() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.ClearTotpLastCounter()
+	})
+}
+
+// SetTotpSetupAt sets the "totp_setup_at" field.
+func (u *UserUpsertBulk) SetTotpSetupAt(v time.Time) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTotpSetupAt(v)
+	})
+}
+
+// UpdateTotpSetupAt sets the "totp_setup_at" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateTotpSetupAt() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTotpSetupAt()
+	})
+}
+
+// ClearTotpSetupAt clears the value of the "totp_setup_at" field.
+func (u *UserUpsertBulk) ClearTotpSetupAt() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearTotpSetupAt()
 	})
 }
 
