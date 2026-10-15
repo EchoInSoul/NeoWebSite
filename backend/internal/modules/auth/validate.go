@@ -15,6 +15,10 @@ func normalizeNickname(raw string) string {
 	return strings.TrimSpace(raw)
 }
 
+func normalizeBio(raw string) string {
+	return strings.TrimSpace(raw)
+}
+
 func validEmail(email string) bool {
 	if len(email) > 254 {
 		return false
@@ -32,6 +36,10 @@ func validNickname(nickname string) bool {
 		return false
 	}
 	return !strings.ContainsFunc(nickname, unicode.IsSpace)
+}
+
+func validBio(bio string) bool {
+	return utf8.RuneCountInString(bio) <= 1000
 }
 
 func validPassword(password string) bool {

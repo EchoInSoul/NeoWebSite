@@ -4,6 +4,7 @@ type User struct {
 	ID               string
 	Email            string
 	Nickname         string
+	Bio              *string
 	TwoFactorEnabled bool
 }
 
@@ -21,6 +22,7 @@ type RegisterRequest struct {
 type ProfileUpdateRequest struct {
 	Nickname *string `json:"nickname"`
 	Email    *string `json:"email"`
+	Bio      *string `json:"bio"`
 }
 
 type PasswordChangeRequest struct {
@@ -46,8 +48,9 @@ type RecoveryCodesResponse struct {
 }
 
 type UserResponse struct {
-	Email    string `json:"email"`
-	Nickname string `json:"nickname"`
+	Email    string  `json:"email"`
+	Nickname string  `json:"nickname"`
+	Bio      *string `json:"bio"`
 }
 
 type GroupResponse struct {
@@ -59,6 +62,7 @@ type GroupResponse struct {
 type MeResponse struct {
 	Email            string        `json:"email"`
 	Nickname         string        `json:"nickname"`
+	Bio              *string       `json:"bio"`
 	Group            GroupResponse `json:"group"`
 	Permissions      []string      `json:"permissions"`
 	TwoFactorEnabled bool          `json:"two_factor_enabled"`

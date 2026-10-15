@@ -74,7 +74,7 @@ func (r *repository) updatePasswordHash(ctx context.Context, id string, password
 	return nil
 }
 
-func (r *repository) updateProfile(ctx context.Context, id string, nickname, email *string) (*ent.User, error) {
+func (r *repository) updateProfile(ctx context.Context, id string, nickname, email, bio *string) (*ent.User, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
 		return nil, errUserNotFound
@@ -86,6 +86,13 @@ func (r *repository) updateProfile(ctx context.Context, id string, nickname, ema
 	}
 	if email != nil {
 		update = update.SetEmail(*email)
+	}
+	if bio != nil {
+		if *bio == "" {
+			update = update.ClearBio()
+		} else {
+			update = update.SetBio(*bio)
+		}
 	}
 
 	updated, err := update.Save(ctx)
@@ -103,6 +110,7 @@ func toUser(u *ent.User) User {
 		ID:               u.ID.String(),
 		Email:            u.Email,
 		Nickname:         u.Nickname,
+		Bio:              u.Bio,
 		TwoFactorEnabled: u.TotpEnabledAt != nil,
 	}
 }

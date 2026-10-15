@@ -660,6 +660,7 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 		map[string]any{},
 		json.RawMessage("null"),
 		map[string]any{"nickname": nil},
+		map[string]any{"bio": nil},
 	} {
 		status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, absent)
 		if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "" {
@@ -672,6 +673,7 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 		"nickname",
 		42,
 		map[string]any{"nickname": 42},
+		map[string]any{"bio": 42},
 	} {
 		status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, malformed)
 		if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "" {
@@ -770,6 +772,70 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 		t.Fatalf("254 byte email = %d %v, want 200 keeping nickname", status, body)
 	}
 	assertProfile(t, client, ts, longestNickname, longestEmail)
+}
+
+func TestUpdateProfileBio(t *testing.T) {
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
+	u, password := createTestUser(t, db)
+	client := newClient(t)
+	loginWithLogout(t, client, ts, u.Email, password)
+
+	endpoint := ts.URL + "/api/v1/users/me"
+
+	status, me := exchangeJSON(t, client, http.MethodGet, endpoint, nil)
+	if status != http.StatusOK {
+		t.Fatalf("fresh me = %d %v, want 200", status, me)
+	}
+	if bio, present := me["bio"]; !present || bio != nil {
+		t.Fatalf("fresh bio = %v (present=%v), want null", bio, present)
+	}
+
+	status, body := exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"bio": "  第一行\n第二行  "})
+	if status != http.StatusOK || body["bio"] != "第一行\n第二行" {
+		t.Fatalf("set bio = %d %v, want 200 with trimmed multiline bio", status, body)
+	}
+	if body["nickname"] != u.Nickname || body["email"] != u.Email {
+		t.Fatalf("bio-only patch moved identity: %v", body)
+	}
+	assertBio(t, client, ts, "第一行\n第二行")
+	assertStoredBio(t, db, u.ID, "第一行\n第二行")
+
+	longestBio := strings.Repeat("长", 1000)
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"bio": longestBio})
+	if status != http.StatusOK || body["bio"] != longestBio {
+		t.Fatalf("1000 rune bio = %d, want 200 counting runes not bytes", status)
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"bio": strings.Repeat("长", 1001)})
+	if status != http.StatusBadRequest || envelopeCode(body) != "invalid_request" || envelopeParam(body) != "bio" {
+		t.Fatalf("1001 rune bio = %d %v, want 400 invalid_request with param bio", status, body)
+	}
+	assertStoredBio(t, db, u.ID, longestBio)
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"bio": "   "})
+	if status != http.StatusOK || body["bio"] != nil {
+		t.Fatalf("blank bio = %d %v, want 200 with null bio", status, body)
+	}
+	assertBio(t, client, ts, "")
+	assertStoredBio(t, db, u.ID, "")
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"bio": "keep-me"})
+	if status != http.StatusOK || body["bio"] != "keep-me" {
+		t.Fatalf("reset bio = %d %v, want 200", status, body)
+	}
+
+	renamed := u.Nickname + "b"
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"nickname": renamed})
+	if status != http.StatusOK || body["bio"] != "keep-me" || body["nickname"] != renamed {
+		t.Fatalf("nickname-only patch = %d %v, want bio kept", status, body)
+	}
+
+	status, body = exchangeJSON(t, client, http.MethodPatch, endpoint, map[string]any{"bio": ""})
+	if status != http.StatusOK || body["bio"] != nil {
+		t.Fatalf("explicit clear = %d %v, want 200 with null bio", status, body)
+	}
+	assertBio(t, client, ts, "")
+	assertStoredBio(t, db, u.ID, "")
 }
 
 func TestUpdateProfileRejectedWriteLeavesBothFieldsUnchanged(t *testing.T) {
@@ -1055,6 +1121,49 @@ func assertProfile(t *testing.T, client *http.Client, ts *httptest.Server, nickn
 	}
 	if meBody["nickname"] != nickname || meBody["email"] != email {
 		t.Fatalf("profile = %v, want %s / %s", meBody, nickname, email)
+	}
+}
+
+func assertBio(t *testing.T, client *http.Client, ts *httptest.Server, want string) {
+	t.Helper()
+
+	me, err := client.Get(ts.URL + "/api/v1/users/me")
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	defer me.Body.Close()
+
+	var meBody map[string]any
+	if err := json.NewDecoder(me.Body).Decode(&meBody); err != nil {
+		t.Fatalf("decode me: %v", err)
+	}
+	got, present := meBody["bio"]
+	if want == "" {
+		if !present || got != nil {
+			t.Fatalf("bio = %v (present=%v), want null", got, present)
+		}
+		return
+	}
+	if got != want {
+		t.Fatalf("bio = %v, want %q", got, want)
+	}
+}
+
+func assertStoredBio(t *testing.T, db *database.Database, userID, want string) {
+	t.Helper()
+
+	stored, err := db.Client.User.Get(context.Background(), uuid.MustParse(userID))
+	if err != nil {
+		t.Fatalf("load stored user: %v", err)
+	}
+	if want == "" {
+		if stored.Bio != nil {
+			t.Fatalf("stored bio = %q, want NULL", *stored.Bio)
+		}
+		return
+	}
+	if stored.Bio == nil || *stored.Bio != want {
+		t.Fatalf("stored bio = %v, want %q", stored.Bio, want)
 	}
 }
 

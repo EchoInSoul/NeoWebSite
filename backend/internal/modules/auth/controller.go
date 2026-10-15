@@ -55,7 +55,7 @@ func (c *controller) login(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname})
+	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname, Bio: user.Bio})
 }
 
 func (c *controller) signup(ctx *gin.Context) {
@@ -71,7 +71,7 @@ func (c *controller) signup(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, UserResponse{Email: user.Email, Nickname: user.Nickname})
+	ctx.JSON(http.StatusCreated, UserResponse{Email: user.Email, Nickname: user.Nickname, Bio: user.Bio})
 }
 
 func (c *controller) logout(ctx *gin.Context) {
@@ -106,6 +106,7 @@ func (c *controller) me(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, MeResponse{
 		Email:    user.Email,
 		Nickname: user.Nickname,
+		Bio:      user.Bio,
 		Group: GroupResponse{
 			ID:        identity.GroupID,
 			SystemKey: systemKey,
@@ -123,13 +124,13 @@ func (c *controller) updateProfile(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.UpdateProfile(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Nickname, req.Email)
+	user, err := c.service.UpdateProfile(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Nickname, req.Email, req.Bio)
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname})
+	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname, Bio: user.Bio})
 }
 
 func (c *controller) changePassword(ctx *gin.Context) {
@@ -238,7 +239,7 @@ func (c *controller) verifySecondFactor(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname})
+	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname, Bio: user.Bio})
 }
 
 func (c *controller) listSessions(ctx *gin.Context) {

@@ -190,12 +190,12 @@ func (s *Service) CurrentUser(ctx context.Context, userID string) (User, error) 
 	return toUser(found), nil
 }
 
-func (s *Service) UpdateProfile(ctx context.Context, userID string, nickname, email *string) (User, error) {
-	if nickname == nil && email == nil {
+func (s *Service) UpdateProfile(ctx context.Context, userID string, nickname, email, bio *string) (User, error) {
+	if nickname == nil && email == nil && bio == nil {
 		return User{}, apierror.ErrInvalidRequest
 	}
 
-	var nextNickname, nextEmail *string
+	var nextNickname, nextEmail, nextBio *string
 
 	if nickname != nil {
 		normalized := normalizeNickname(*nickname)
@@ -213,6 +213,14 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, nickname, em
 		nextEmail = &normalized
 	}
 
+	if bio != nil {
+		normalized := normalizeBio(*bio)
+		if !validBio(normalized) {
+			return User{}, apierror.WithParam(apierror.ErrInvalidRequest, "bio")
+		}
+		nextBio = &normalized
+	}
+
 	if nextNickname != nil {
 		if err := s.ensureIdentifierFree(ctx, userID, *nextNickname, apierror.ErrNicknameTaken); err != nil {
 			return User{}, err
@@ -224,7 +232,7 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, nickname, em
 		}
 	}
 
-	updated, err := s.repo.updateProfile(ctx, userID, nextNickname, nextEmail)
+	updated, err := s.repo.updateProfile(ctx, userID, nextNickname, nextEmail, nextBio)
 	if err != nil {
 		if errors.Is(err, errUserNotFound) {
 			s.sessions.Destroy(ctx)
