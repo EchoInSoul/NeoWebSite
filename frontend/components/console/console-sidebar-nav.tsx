@@ -1,93 +1,146 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, CircleUserRound, MonitorSmartphone } from "lucide-react";
+import {
+  CircleUserRound,
+  MonitorSmartphone,
+  Settings,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
-import { cn } from "cn";
 
-import { useSidebar } from "@/components/ui/sidebar";
 import {
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+
 import {
-  SIDEBAR_LABEL_TRANSITION,
-  sidebarLabelFade,
-} from "@/lib/sidebar-transition";
+  ConsoleSidebarSection,
+  type ConsoleSidebarBack,
+  type ConsoleSidebarSectionItem,
+} from "./console-sidebar-section";
+
+const PANEL_PREFIXES = {
+  uc: "/console/uc",
+  settings: "/console/settings",
+} as const;
+
+const SETTINGS_GENERAL_HREF = `${PANEL_PREFIXES.settings}/general`;
+
+type PanelKey = "main" | keyof typeof PANEL_PREFIXES;
+
+type ConsoleSidebarPanelContent = {
+  title: string;
+  tooltip: string;
+  groupLabel: string;
+  back: ConsoleSidebarBack;
+  items: ConsoleSidebarSectionItem[];
+};
+
+function isUnder(pathname: string, base: string) {
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
+
+function resolvePanel(pathname: string): PanelKey {
+  if (isUnder(pathname, PANEL_PREFIXES.uc)) {
+    return "uc";
+  }
+  if (isUnder(pathname, PANEL_PREFIXES.settings)) {
+    return "settings";
+  }
+  return "main";
+}
 
 export function ConsoleSidebarNav() {
   const t = useTranslations("sidebar");
+  const ts = useTranslations("settings");
   const pathname = usePathname();
-  const { state } = useSidebar();
-  const isCollapsed = state === "collapsed";
-  const isUserCenter =
-    pathname === "/console/uc" || pathname.startsWith("/console/uc/");
 
-  if (!isUserCenter) {
-    return null;
+  const routePanel = resolvePanel(pathname);
+  const [displayedPanel, setDisplayedPanel] = useState<PanelKey>(routePanel);
+  const [syncedRoutePanel, setSyncedRoutePanel] =
+    useState<PanelKey>(routePanel);
+
+  if (routePanel !== syncedRoutePanel) {
+    setSyncedRoutePanel(routePanel);
+    setDisplayedPanel(routePanel);
   }
 
-  const isPersonalInfoActive =
-    pathname === "/console/uc/profile" ||
-    pathname.startsWith("/console/uc/profile/");
-  const isSessionsActive =
-    pathname === "/console/uc/session" ||
-    pathname.startsWith("/console/uc/session/");
+  const panels: Record<
+    Exclude<PanelKey, "main">,
+    ConsoleSidebarPanelContent
+  > = {
+    uc: {
+      title: t("profile"),
+      tooltip: t("backToConsole"),
+      groupLabel: t("account"),
+      back: { kind: "link", href: "/console" },
+      items: [
+        {
+          href: "/console/uc/profile",
+          label: t("personalInfo"),
+          icon: <CircleUserRound />,
+          className: "mb-1",
+        },
+        {
+          href: "/console/uc/session",
+          label: t("sessions"),
+          icon: <MonitorSmartphone />,
+        },
+      ],
+    },
+    settings: {
+      title: t("settings"),
+      tooltip: t("backToConsole"),
+      groupLabel: t("settings"),
+      back: { kind: "button", onClick: () => setDisplayedPanel("main") },
+      items: [
+        {
+          href: SETTINGS_GENERAL_HREF,
+          label: ts("general"),
+          icon: <SlidersHorizontal />,
+        },
+      ],
+    },
+  };
+
+  if (displayedPanel === "main") {
+    return (
+      <SidebarGroup>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={displayedPanel === "main" && routePanel === "settings"}
+              render={
+                <Link
+                  href={SETTINGS_GENERAL_HREF}
+                  onClick={() => setDisplayedPanel("settings")}
+                />
+              }
+              tooltip={t("settings")}
+            >
+              <Settings />
+              <span>{t("settings")}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroup>
+    );
+  }
+
+  const panel = panels[displayedPanel];
 
   return (
-    <SidebarGroup>
-      <SidebarMenu>
-        <SidebarMenuItem className="mb-2">
-          <SidebarMenuButton
-            render={<Link href="/console" />}
-            tooltip={t("backToConsole")}
-          >
-            <ArrowLeft />
-            <span
-              className={cn(
-                "flex-1 text-center",
-                SIDEBAR_LABEL_TRANSITION,
-                sidebarLabelFade(isCollapsed),
-              )}
-            >
-              {t("profile")}
-            </span>
-            <span
-              aria-hidden="true"
-              className={cn("size-4 shrink-0", sidebarLabelFade(isCollapsed))}
-            />
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-      <SidebarGroupLabel className="pointer-events-none">
-        {t("account")}
-      </SidebarGroupLabel>
-      <SidebarMenu>
-        <SidebarMenuItem className="mb-1">
-          <SidebarMenuButton
-            isActive={isPersonalInfoActive}
-            render={<Link href="/console/uc/profile" />}
-            tooltip={t("personalInfo")}
-          >
-            <CircleUserRound />
-            <span>{t("personalInfo")}</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={isSessionsActive}
-            render={<Link href="/console/uc/session" />}
-            tooltip={t("sessions")}
-          >
-            <MonitorSmartphone />
-            <span>{t("sessions")}</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    </SidebarGroup>
+    <ConsoleSidebarSection
+      title={panel.title}
+      tooltip={panel.tooltip}
+      back={panel.back}
+      groupLabel={panel.groupLabel}
+      items={panel.items}
+    />
   );
 }

@@ -47,6 +47,37 @@
 
 ---
 
+## 2026-10-15 · 侧栏面板状态化（无动画）
+
+**范围**：纯前端，后端零改动，零新依赖。spec：`docs/superpowers/specs/2026-10-15-neoblog-sidebar-panel-state-design.md`；计划：`docs/superpowers/plans/2026-10-15-neoblog-sidebar-panel-state.md`。
+
+**动机**：主侧栏导航区在 `/console` 下整片空白——`console-sidebar-nav.tsx` 在路径不是 `/console/uc` 打头时直接 `return null`，而 `SidebarContent` 是 `flex-1`，空了就整片留白；且「个人设置」那栏的形状每次都要重写、面板显示完全由 URL 决定。
+
+**本轮口径**：
+
+- **state 为真源、URL 只同步**：`displayedPanel` / `syncedRoutePanel` 双 state，渲染期比对接管（不用 `useEffect`），两个初值都取路由面板，避免首屏先渲染主栏再纠正。
+- **动画整条不做**（推翻上一轮定的 ±48px 对滑）：无叠层绝对定位、无新增 transition 常量、无 `outgoingPanel` / `setTimeout` / `onTransitionEnd`，面板切换即显隐。`sidebarLabelFade`（折叠时文字淡出）属既有折叠机制，保留。
+- **返回语义两套并存**：settings 面板返回是按钮，只改 state、URL 不动；uc 面板返回仍是 Link（未改）。这是"最小化 + 尊重上轮口径"换来的不一致，登记为债务。
+- 抽出复用件 `console-sidebar-section.tsx`：`back` 用判别联合自带 `onClick`（不留可能永不触发的必填回调）；`items[].className` 承接 `31fac91` 的 `mb-1`，防止注册表形态把它丢掉。
+- 主侧栏只加「设置」一个入口；子栏只有「常规」一项 + 一页只有标题的占位页，**不接任何真实系统设置内容**。
+
+**已知缺口 / 未实测**：
+
+- **八条交互实测一条都没做成**：dev server 在 3000，但 `/console`、`/console/settings/general`、`/console/uc/profile` 全部回 `307 → /signin`，无登录态就拿不到侧栏 SSR HTML；开发库注册是关闭态、也没有可用凭据。已证明的只有三件：`tsc --noEmit` 退出码 0、`eslint .` **0 error**（剩 2 条 warning 在 `components/ui/sonner.tsx`，非本轮引入）、`npm run format:check` 全通过（**作用域是 `frontend/`**——仓库根没有 prettier 配置，`docs/*.md` 不在格式检查范围内），外加三条路由返回 307 而非 500（说明模块能编译）。
+- **B1 错位窗口**：点返回后 URL 仍停在 `/console/settings/general`，此时**刷新会回到 settings 面板**（state 不持久）。这是 D1+D2 合取的既定结果，不是 bug，但尚未眼验。
+- **B5 移动端**：Sheet 抽屉里点「设置」后是否自动关闭未设计、未测。
+- **B6 无测试兜底**：前端无测试运行器（`package.json` 只有 `dev/build/start/lint/format`，全仓 0 个 `*.test.ts*`），本轮不引入 ⇒ 面板切换不变量拆在判定层与编排层，**没有自动测试承载**。
+- **B8 键盘焦点缺口（审查发现，本轮未修）**：settings 面板的「返回」是按钮，点击后整棵子面板卸载，聚焦的按钮消失 → `activeElement` 退化到 `<body>`，再按 Tab 从文档起点重来、侧栏被整体跳过。鼠标用户无感；旧版 `uc` 那栏的返回是真链接，跳页后浏览器自行重置焦点，所以这条缺口是 settings 路径新增的。修法是在返回后把焦点交给主栏「设置」项，需要引 ref/焦点转移，与本轮「最小化」口径冲突，**按用户口径登记不修**。
+
+**审查后更正两处**：
+
+- 代码 `console-sidebar-nav.tsx:117` 原写 `isActive={routePanel === "settings"}`，与 spec §4.5 / plan Task 3 的全式 `displayedPanel === "main" && routePanel === "settings"` 不一致（行为等价：该判断在 `:111` 的 `displayedPanel === "main"` 提前 return 之内，前缀恒真），已补全以对齐文档并防后续改成叠层时静默变语义。
+- plan Review Focus 5 原写「`en.json` 漏键会抛 `MissingMessageError`」**是错的**：实测 `use-intl` 的 `defaultOnError` 是 `console.error(error)`（`initializeConfig-CUsOI8u2.js:17-19`），缺键走 `getFallbackFromErrorAndNotify` 返回 `namespace.key`（同文件 `:95-103`），不抛错、不会让任何校验命令变红；本项目全文无 `onError` 覆盖。plan 已同步更正。
+
+**提交状态**：五个代码文件（两份 messages、`app/console/settings/general/page.tsx`、`console-sidebar-section.tsx`、`console-sidebar-nav.tsx`）与本节**均未提交**（用户口径：不要擅自提交）；本轮已入库的只有 `46052b8`（spec + plan 两份文档，未推送）。
+
+---
+
 ## 2026-10-14 · 两步验证 setup 复用窗口（0.17.0）
 
 **版本**：后端 0.16.0 → **0.17.0**（minor）。一个迁移（`totp_setup_at`，纯 DDL）、零新依赖、前端零改动。设计 spec：`docs/superpowers/specs/2026-10-14-neoblog-2fa-setup-reuse-window-design.md`；实施计划：`docs/superpowers/plans/2026-10-14-neoblog-2fa-setup-reuse-window.md`（用户口语称「防抖」，实现语义是**复用窗口**）。

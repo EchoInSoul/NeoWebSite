@@ -24,7 +24,11 @@
     "account": "Account",
     "personalInfo": "Personal info",
     "sessions": "Login sessions",
-    "backToConsole": "Back to console"
+    "backToConsole": "Back to console",
+    "settings": "Settings"
+  },
+  "settings": {
+    "general": "General"
   },
   "console": {
     "title": "Console"

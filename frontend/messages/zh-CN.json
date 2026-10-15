@@ -24,7 +24,11 @@
     "account": "账号",
     "personalInfo": "个人信息",
     "sessions": "登录会话",
-    "backToConsole": "返回控制台"
+    "backToConsole": "返回控制台",
+    "settings": "设置"
+  },
+  "settings": {
+    "general": "常规"
   },
   "console": {
     "title": "控制台"

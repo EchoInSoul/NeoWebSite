@@ -27,7 +27,7 @@ spec 隐含但无自动测试兜底、最可能咬人的六条，逐条在对应
 2. **返回后刷新会回到 settings 面板**（B1 的错位窗口），这是设计结果不是 bug，必须写进 DEVLOG「已知缺口」→ Task 3 行为 + Task 4 文档。
 3. **uc 栏两项高亮贴合**（`31fac91` 的 `mb-1`）在注册表形态下最容易丢 → Task 2/3。
 4. **折叠态进子面板**：返回行文字要随 `sidebarLabelFade` 淡出、tooltip 仍可及 → Task 2。
-5. **`en.json` 漏键会抛 `MissingMessageError`**（next-intl 缺键是抛错不是回退）→ Task 1。
+5. **`en.json` 漏键不会抛错，而是 `console.error` + 把键路径当文本渲染出来**（实测库源码：`use-intl/dist/esm/development/initializeConfig-CUsOI8u2.js:17-19` 的 `defaultOnError` 是 `console.error(error)`；`:95-103` 的 `getFallbackFromErrorAndNotify` 调完 `onError` 直接**返回** `defaultGetMessageFallback`，即 `joinPath(namespace, key)`，无 throw；本项目源码全文无 `onError` 覆盖）。后果是页面上出现 `settings.general` 这种字面量而不是白屏，**不会让任何校验命令变红**，所以必须靠显式的键位比对来兜 → Task 1。（本条原文写的是「会抛 `MissingMessageError`」，2026-10-15 经审查复验后更正。）
 6. **移动端 Sheet 里点「设置」后抽屉是否自动关闭**spec 未定义（B5），实测并如实报告，不自作主张改 → Task 3。
 
 ---
