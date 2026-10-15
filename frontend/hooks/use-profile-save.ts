@@ -9,6 +9,7 @@ import type { SessionUser } from "@/lib/auth-session";
 type ProfileUpdateResponse = {
   email: string;
   nickname: string;
+  bio: string | null;
 };
 
 export function useProfileSave(profile: SessionUser | null) {
@@ -17,8 +18,8 @@ export function useProfileSave(profile: SessionUser | null) {
   const router = useRouter();
   const [nickname, setNickname] = useState(profile?.nickname ?? "");
   const [email, setEmail] = useState(profile?.email ?? "");
-  const [bio, setBio] = useState("");
-  const [savedBio, setSavedBio] = useState("");
+  const [bio, setBio] = useState(profile?.bio ?? "");
+  const [savedBio, setSavedBio] = useState(profile?.bio ?? "");
   const [isSaving, setIsSaving] = useState(false);
 
   const isDirty =
@@ -65,7 +66,9 @@ export function useProfileSave(profile: SessionUser | null) {
       );
       setNickname(updated.nickname);
       setEmail(updated.email);
-      setSavedBio(bio);
+      const savedValue = updated.bio ?? "";
+      setBio(savedValue);
+      setSavedBio(savedValue);
       toast.success(t("saved"));
       router.refresh();
     } catch (error) {

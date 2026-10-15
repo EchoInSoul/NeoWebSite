@@ -12,6 +12,7 @@ export type SessionGroup = {
 export type SessionUser = {
   email: string;
   nickname: string;
+  bio: string | null;
   group: SessionGroup;
   twoFactorEnabled: boolean;
 };
@@ -19,6 +20,7 @@ export type SessionUser = {
 type MeResponse = {
   email?: unknown;
   nickname?: unknown;
+  bio?: unknown;
   group?: unknown;
   two_factor_enabled?: unknown;
 };
@@ -77,9 +79,16 @@ export const getAuthenticatedUser = cache(
       throw new Error(malformedResponse);
     }
 
+    const bio = me.bio;
+
+    if (bio !== null && bio !== undefined && typeof bio !== "string") {
+      throw new Error(malformedResponse);
+    }
+
     return {
       email: me.email,
       nickname: me.nickname,
+      bio: bio ?? null,
       group: parseGroup(me.group),
       twoFactorEnabled: me.two_factor_enabled,
     };
