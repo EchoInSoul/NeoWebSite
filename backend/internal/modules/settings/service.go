@@ -232,6 +232,15 @@ func (s *Service) PatchGroup(ctx context.Context, group string, raw map[string]j
 	if err != nil {
 		return nil, err
 	}
+	if validator, ok := s.registry.validators[group]; ok && validatorApplies(validator, writes) {
+		merged, err := s.mergedGroupValues(ctx, group, writes)
+		if err != nil {
+			return nil, err
+		}
+		if err := validator.check(merged); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.upsertMany(ctx, group, values); err != nil {
 		return nil, err
 	}
@@ -273,6 +282,28 @@ func (s *Service) resolveGroupWrites(group string, items []ItemWrite) (map[strin
 		values[item.Name] = marshalJSON(item.Value)
 	}
 	return values, nil
+}
+
+func validatorApplies(validator groupValidator, writes []ItemWrite) bool {
+	for _, write := range writes {
+		for _, item := range validator.items {
+			if write.Name == item {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *Service) mergedGroupValues(ctx context.Context, group string, items []ItemWrite) (map[string]any, error) {
+	merged, err := s.readGroup(ctx, group, func(Definition) bool { return true })
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		merged[item.Name] = item.Value
+	}
+	return merged, nil
 }
 
 func (s *Service) ResetItem(ctx context.Context, group, name string) error {

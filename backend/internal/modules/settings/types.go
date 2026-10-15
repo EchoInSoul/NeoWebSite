@@ -16,11 +16,19 @@ type Definition struct {
 }
 
 type Group struct {
-	Name  string
-	Items []Definition
+	Name       string
+	Items      []Definition
+	ValidateOn []string
+	Validate   func(values map[string]any) error
+}
+
+type groupValidator struct {
+	items []string
+	check func(values map[string]any) error
 }
 
 type Registry struct {
-	groups map[string]map[string]Definition
-	order  []string
+	groups     map[string]map[string]Definition
+	validators map[string]groupValidator
+	order      []string
 }

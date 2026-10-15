@@ -610,3 +610,80 @@ func TestSettingsPatchNeedsEditPermission(t *testing.T) {
 	expectStatus(t, allowed, http.StatusOK)
 	allowed.Body.Close()
 }
+
+func TestSettingsPatchRegisterDomainControlRequiresList(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	enable := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"email_domain_control_enabled": true})
+	expectStatus(t, enable, http.StatusConflict)
+	body := decodeError(t, enable)
+	if body["code"] != "setting_conflict" || body["param"] != "email_domain_control_enabled" {
+		t.Fatalf("conflict body = %v, want setting_conflict/email_domain_control_enabled", body)
+	}
+	if count := registerRowCount(t, db); count != 0 {
+		t.Fatalf("register rows = %d, want 0 after rejected write", count)
+	}
+
+	set := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"allowed_email_domains": "example.com"})
+	expectStatus(t, set, http.StatusOK)
+	set.Body.Close()
+
+	enable = doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"email_domain_control_enabled": true})
+	expectStatus(t, enable, http.StatusOK)
+	enable.Body.Close()
+
+	clear := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"allowed_email_domains": ""})
+	expectStatus(t, clear, http.StatusConflict)
+	body = decodeError(t, clear)
+	if body["code"] != "setting_conflict" || body["param"] != "email_domain_control_enabled" {
+		t.Fatalf("clear conflict body = %v, want setting_conflict/email_domain_control_enabled", body)
+	}
+}
+
+func TestSettingsPatchAuthMinLengthRange(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "auth")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	for _, length := range []int{3, 65} {
+		resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"password_min_length": length})
+		expectStatus(t, resp, http.StatusConflict)
+		body := decodeError(t, resp)
+		if body["code"] != "setting_conflict" || body["param"] != "password_min_length" {
+			t.Fatalf("length %d: conflict body = %v", length, body)
+		}
+	}
+
+	ok := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"password_min_length": 16})
+	expectStatus(t, ok, http.StatusOK)
+	_, values := decodeGroup(t, ok)
+	if values["password_min_length"] != float64(16) {
+		t.Fatalf("password_min_length = %v, want 16", values["password_min_length"])
+	}
+}
+
+func TestSettingsPatchIgnoresDirtyStateOutsideValidateOn(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	module, err := New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	if err := module.Service.SetBool(context.Background(), "register", "email_domain_control_enabled", true); err != nil {
+		t.Fatalf("seed dirty state: %v", err)
+	}
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": false})
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	touch := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"email_domain_control_enabled": false})
+	expectStatus(t, touch, http.StatusOK)
+	touch.Body.Close()
+}

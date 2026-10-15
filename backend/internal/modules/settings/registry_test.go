@@ -1,9 +1,12 @@
 package settings
 
 import (
+	"errors"
 	"reflect"
 	"sort"
 	"testing"
+
+	"website/backend/internal/common/apierror"
 )
 
 type wantItem struct {
@@ -227,6 +230,66 @@ func TestRegistryRejects(t *testing.T) {
 	for _, tc := range cases {
 		if _, err := compileRegistry(tc.groups); err == nil {
 			t.Fatalf("%s: accepted, want error", tc.name)
+		}
+	}
+}
+
+func TestValidateRegisterGroup(t *testing.T) {
+	cases := []struct {
+		name   string
+		values map[string]any
+		want   string
+	}{
+		{"switch off", map[string]any{"email_domain_control_enabled": false, "allowed_email_domains": ""}, ""},
+		{"switch on with list", map[string]any{"email_domain_control_enabled": true, "allowed_email_domains": "a.com, b.com"}, ""},
+		{"switch on empty list", map[string]any{"email_domain_control_enabled": true, "allowed_email_domains": ""}, "email_domain_control_enabled"},
+		{"switch on blank list", map[string]any{"email_domain_control_enabled": true, "allowed_email_domains": " , ，"}, "email_domain_control_enabled"},
+	}
+	for _, tc := range cases {
+		err := validateRegisterGroup(tc.values)
+		if tc.want == "" {
+			if err != nil {
+				t.Fatalf("%s: err = %v, want nil", tc.name, err)
+			}
+			continue
+		}
+		var itemErr *ItemError
+		if !errors.As(err, &itemErr) || itemErr.Item != tc.want || !errors.Is(err, apierror.ErrSettingConflict) {
+			t.Fatalf("%s: err = %v, want ItemError{%s, ErrSettingConflict}", tc.name, err, tc.want)
+		}
+	}
+}
+
+func TestValidateAuthGroup(t *testing.T) {
+	for _, tc := range []struct {
+		length  int64
+		wantErr bool
+	}{
+		{8, false}, {16, false}, {64, false}, {7, true}, {0, true}, {-3, true}, {65, true},
+	} {
+		err := validateAuthGroup(map[string]any{"password_min_length": tc.length})
+		if (err != nil) != tc.wantErr {
+			t.Fatalf("length %d: err = %v, wantErr = %v", tc.length, err, tc.wantErr)
+		}
+	}
+}
+
+func TestSplitListValue(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want []string
+	}{
+		{"", []string{}},
+		{" , ，", []string{}},
+		{"a.com", []string{"a.com"}},
+		{"a.com, b.com", []string{"a.com", "b.com"}},
+		{"a.com，b.com", []string{"a.com", "b.com"}},
+		{" a.com ,, b.com ", []string{"a.com", "b.com"}},
+	}
+	for _, tc := range cases {
+		got := SplitListValue(tc.raw)
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("SplitListValue(%q) = %v, want %v", tc.raw, got, tc.want)
 		}
 	}
 }

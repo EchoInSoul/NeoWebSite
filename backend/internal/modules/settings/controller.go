@@ -92,6 +92,10 @@ func (c *controller) patchGroup(ctx *gin.Context) {
 func writeSettingError(ctx *gin.Context, err error) {
 	var itemErr *ItemError
 	if errors.As(err, &itemErr) {
+		if errors.Is(err, apierror.ErrSettingConflict) {
+			apierror.Write(ctx, apierror.WithParam(apierror.ErrSettingConflict, itemErr.Item))
+			return
+		}
 		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, itemErr.Item))
 		return
 	}

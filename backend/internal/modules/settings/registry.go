@@ -3,6 +3,9 @@ package settings
 import (
 	"fmt"
 	"regexp"
+	"strings"
+
+	"website/backend/internal/common/apierror"
 )
 
 var builtinRegistry = []Group{
@@ -18,7 +21,9 @@ var builtinRegistry = []Group{
 		},
 	},
 	{
-		Name: "register",
+		Name:       "register",
+		ValidateOn: []string{"email_domain_control_enabled", "allowed_email_domains"},
+		Validate:   validateRegisterGroup,
 		Items: []Definition{
 			{Name: "enabled", Type: FieldTypeBool, Default: true, Public: true},
 			{Name: "default_group", Type: FieldTypeString, Default: "user"},
@@ -28,7 +33,9 @@ var builtinRegistry = []Group{
 		},
 	},
 	{
-		Name: "auth",
+		Name:       "auth",
+		ValidateOn: []string{"password_min_length"},
+		Validate:   validateAuthGroup,
 		Items: []Definition{
 			{Name: "password_requirements_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "password_min_length", Type: FieldTypeNumber, Default: int64(8)},
@@ -47,8 +54,9 @@ var namePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 func compileRegistry(groups []Group) (Registry, error) {
 	registry := Registry{
-		groups: make(map[string]map[string]Definition, len(groups)),
-		order:  make([]string, 0, len(groups)),
+		groups:     make(map[string]map[string]Definition, len(groups)),
+		validators: make(map[string]groupValidator, len(groups)),
+		order:      make([]string, 0, len(groups)),
 	}
 	for _, group := range groups {
 		if !namePattern.MatchString(group.Name) {
@@ -71,6 +79,17 @@ func compileRegistry(groups []Group) (Registry, error) {
 			items[item.Name] = item
 		}
 		registry.groups[group.Name] = items
+		if group.Validate != nil {
+			if len(group.ValidateOn) == 0 {
+				return Registry{}, fmt.Errorf("settings: group %q has a validator without items", group.Name)
+			}
+			for _, name := range group.ValidateOn {
+				if _, ok := items[name]; !ok {
+					return Registry{}, fmt.Errorf("settings: group %q validator references unknown item %q", group.Name, name)
+				}
+			}
+			registry.validators[group.Name] = groupValidator{items: group.ValidateOn, check: group.Validate}
+		}
 		registry.order = append(registry.order, group.Name)
 	}
 	return registry, nil
@@ -94,4 +113,51 @@ func checkDefault(item Definition) error {
 		return fmt.Errorf("unknown field type %d", item.Type)
 	}
 	return nil
+}
+
+const (
+	passwordMinLengthFloor = 8
+	passwordMinLengthCap   = 64
+)
+
+func validateRegisterGroup(values map[string]any) error {
+	enabled, ok := values["email_domain_control_enabled"].(bool)
+	if !ok {
+		return fmt.Errorf("settings: email_domain_control_enabled is not a bool")
+	}
+	if !enabled {
+		return nil
+	}
+	raw, ok := values["allowed_email_domains"].(string)
+	if !ok {
+		return fmt.Errorf("settings: allowed_email_domains is not a string")
+	}
+	if len(SplitListValue(raw)) > 0 {
+		return nil
+	}
+	return &ItemError{Item: "email_domain_control_enabled", Err: apierror.ErrSettingConflict}
+}
+
+func validateAuthGroup(values map[string]any) error {
+	length, ok := values["password_min_length"].(int64)
+	if !ok {
+		return fmt.Errorf("settings: password_min_length is not a number")
+	}
+	if length < passwordMinLengthFloor || length > passwordMinLengthCap {
+		return &ItemError{Item: "password_min_length", Err: apierror.ErrSettingConflict}
+	}
+	return nil
+}
+
+func SplitListValue(raw string) []string {
+	parts := strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == '，' })
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
 }
