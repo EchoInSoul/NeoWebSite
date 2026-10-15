@@ -29,6 +29,11 @@
   },
   "settings": {
     "general": "General",
+    "noPermission": "You do not have permission to view settings",
+    "loadFailed": "Failed to load settings. Please refresh and try again.",
+    "save": "Save",
+    "saved": "Saved",
+    "saveFailed": "Saving failed. Please try again later.",
     "register": "User registration",
     "registerGroup": "Registration",
     "allowPublicRegistration": "Allow public registration",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import type { FormEvent } from "react";
 import {
   AlignLeft,
   CirclePlus,
@@ -14,12 +14,15 @@ import {
 import { cn } from "cn";
 import { useTranslations } from "next-intl";
 
+import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useSiteSettingsSave } from "@/hooks/use-site-settings-save";
+import type { SiteSettingsValues } from "@/lib/site-settings";
 
 const inputClassName = "w-70";
 const textareaClassName = "w-70 min-h-20";
@@ -48,187 +51,210 @@ const chooseImageButtonClassName =
 const removeImageButtonClassName =
   "rounded-md border border-red-500 bg-neutral-50 px-4 py-1.5 text-sm text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-400 dark:bg-[#030303] dark:text-red-400 dark:hover:bg-red-950/40";
 
-export function SiteSettingsForm() {
+export function SiteSettingsForm({
+  settings,
+}: {
+  settings: SiteSettingsValues;
+}) {
   const t = useTranslations("settings");
-  const [title, setTitle] = useState("");
-  const [subtitle, setSubtitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [keywords, setKeywords] = useState("");
-  const [url, setUrl] = useState("");
-  const [blockSearchEngines, setBlockSearchEngines] = useState(false);
+  const { values, isDirty, isSaving, updateText, setBlockSearchEngines, save } =
+    useSiteSettingsSave(settings);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void save();
+  }
 
   return (
-    <ConsoleSettingsGroup title={t("siteGroup")}>
-      <ConsoleSettingsRow
-        control={
-          <Input
-            aria-label={t("siteTitle")}
-            className={inputClassName}
-            onChange={(event) => setTitle(event.target.value)}
-            value={title}
-          />
-        }
-        icon={<Type />}
-        label={t("siteTitle")}
-      />
-      <ConsoleSettingsRow
-        control={
-          <Input
-            aria-label={t("siteSubtitle")}
-            className={inputClassName}
-            onChange={(event) => setSubtitle(event.target.value)}
-            value={subtitle}
-          />
-        }
-        icon={<TextQuote />}
-        label={t("siteSubtitle")}
-      />
-      <ConsoleSettingsRow
-        className="items-start"
-        control={
-          <button
-            type="button"
-            aria-label={t("siteLogo")}
-            disabled
-            className={cn(thumbnailBoxClassName, "cursor-not-allowed")}
-          >
-            <CirclePlus
-              size={20}
-              strokeWidth={1.5}
-              aria-hidden="true"
-              className="text-muted-foreground"
+    <form onSubmit={handleSubmit} noValidate>
+      <ConsoleSettingsGroup title={t("siteGroup")}>
+        <ConsoleSettingsRow
+          control={
+            <Input
+              aria-label={t("siteTitle")}
+              className={inputClassName}
+              disabled={isSaving}
+              onChange={(event) => updateText("title", event.target.value)}
+              value={values.title}
             />
-          </button>
-        }
-        icon={<CirclePlus />}
-        label={t("siteLogo")}
-      />
-      <ConsoleSettingsRow
-        className="items-start"
-        control={
-          <div className="flex flex-col gap-1.5">
-            <div
-              role="group"
-              aria-label={t("faviconPreview")}
-              title={t("faviconPreview")}
-              className={browserMockClassName}
+          }
+          icon={<Type />}
+          label={t("siteTitle")}
+        />
+        <ConsoleSettingsRow
+          control={
+            <Input
+              aria-label={t("siteSubtitle")}
+              className={inputClassName}
+              disabled={isSaving}
+              onChange={(event) => updateText("subtitle", event.target.value)}
+              value={values.subtitle}
+            />
+          }
+          icon={<TextQuote />}
+          label={t("siteSubtitle")}
+        />
+        <ConsoleSettingsRow
+          className="items-start"
+          control={
+            <button
+              type="button"
+              aria-label={t("siteLogo")}
+              disabled
+              className={cn(thumbnailBoxClassName, "cursor-not-allowed")}
             >
-              <div className={browserMockGridClassName}>
-                <span
-                  role="img"
-                  aria-label={t("faviconLargePreviewAlt")}
-                  title={t("faviconLargePreviewAlt")}
-                  className={largePreviewClassName}
-                >
-                  <CirclePlus size={20} strokeWidth={1.5} aria-hidden="true" />
-                </span>
-                <div className={browserTabClassName}>
+              <CirclePlus
+                size={20}
+                strokeWidth={1.5}
+                aria-hidden="true"
+                className="text-muted-foreground"
+              />
+            </button>
+          }
+          icon={<CirclePlus />}
+          label={t("siteLogo")}
+        />
+        <ConsoleSettingsRow
+          className="items-start"
+          control={
+            <div className="flex flex-col gap-1.5">
+              <div
+                role="group"
+                aria-label={t("faviconPreview")}
+                title={t("faviconPreview")}
+                className={browserMockClassName}
+              >
+                <div className={browserMockGridClassName}>
                   <span
-                    aria-hidden="true"
-                    className="flex h-10 w-12 shrink-0 items-center gap-1.5"
+                    role="img"
+                    aria-label={t("faviconLargePreviewAlt")}
+                    title={t("faviconLargePreviewAlt")}
+                    className={largePreviewClassName}
                   >
-                    <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
-                    <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
-                    <span className="h-3 w-3 rounded-full bg-[#28c840]" />
-                  </span>
-                  <span className={browserTabBarClassName}>
-                    <span
-                      role="img"
-                      aria-label={t("faviconTabIconAlt")}
-                      title={t("faviconTabIconAlt")}
-                      className="h-6 w-6 shrink-0 rounded-[2px] bg-neutral-300 dark:bg-white/20"
+                    <CirclePlus
+                      size={20}
+                      strokeWidth={1.5}
+                      aria-hidden="true"
                     />
-                    {title.trim() !== "" ? (
-                      <span className="truncate select-text">
-                        {title.trim()}
-                      </span>
-                    ) : (
-                      <span aria-hidden="true" />
-                    )}
-                    <span
-                      role="img"
-                      aria-label={t("browserTabClose")}
-                      title={t("browserTabClose")}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center text-neutral-500 dark:text-[#f0f0f1]"
-                    >
-                      <X size={14} aria-hidden="true" />
-                    </span>
                   </span>
+                  <div className={browserTabClassName}>
+                    <span
+                      aria-hidden="true"
+                      className="flex h-10 w-12 shrink-0 items-center gap-1.5"
+                    >
+                      <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
+                      <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
+                      <span className="h-3 w-3 rounded-full bg-[#28c840]" />
+                    </span>
+                    <span className={browserTabBarClassName}>
+                      <span
+                        role="img"
+                        aria-label={t("faviconTabIconAlt")}
+                        title={t("faviconTabIconAlt")}
+                        className="h-6 w-6 shrink-0 rounded-[2px] bg-neutral-300 dark:bg-white/20"
+                      />
+                      {values.title.trim() !== "" ? (
+                        <span className="truncate select-text">
+                          {values.title.trim()}
+                        </span>
+                      ) : (
+                        <span aria-hidden="true" />
+                      )}
+                      <span
+                        role="img"
+                        aria-label={t("browserTabClose")}
+                        title={t("browserTabClose")}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center text-neutral-500 dark:text-[#f0f0f1]"
+                      >
+                        <X size={14} aria-hidden="true" />
+                      </span>
+                    </span>
+                  </div>
                 </div>
               </div>
+              <div className="mt-2 flex items-center gap-3">
+                <Button
+                  type="button"
+                  disabled
+                  variant="outline"
+                  className={chooseImageButtonClassName}
+                >
+                  {t("changeIcon")}
+                </Button>
+                <Button
+                  type="button"
+                  disabled
+                  variant="outline"
+                  className={removeImageButtonClassName}
+                >
+                  {t("removeIcon")}
+                </Button>
+              </div>
             </div>
-            <div className="mt-2 flex items-center gap-3">
-              <Button
-                type="button"
-                disabled
-                variant="outline"
-                className={chooseImageButtonClassName}
-              >
-                {t("changeIcon")}
-              </Button>
-              <Button
-                type="button"
-                disabled
-                variant="outline"
-                className={removeImageButtonClassName}
-              >
-                {t("removeIcon")}
-              </Button>
-            </div>
-          </div>
-        }
-        icon={<CirclePlus />}
-        label={t("siteIcon")}
+          }
+          icon={<CirclePlus />}
+          label={t("siteIcon")}
+        />
+        <ConsoleSettingsRow
+          className="items-start"
+          control={
+            <Textarea
+              aria-label={t("siteDescription")}
+              className={textareaClassName}
+              disabled={isSaving}
+              onChange={(event) =>
+                updateText("description", event.target.value)
+              }
+              value={values.description}
+            />
+          }
+          icon={<AlignLeft />}
+          label={t("siteDescription")}
+        />
+        <ConsoleSettingsRow
+          control={
+            <Input
+              aria-label={t("siteKeywords")}
+              className={inputClassName}
+              disabled={isSaving}
+              onChange={(event) => updateText("keywords", event.target.value)}
+              value={values.keywords}
+            />
+          }
+          icon={<Tags />}
+          label={t("siteKeywords")}
+        />
+        <ConsoleSettingsRow
+          control={
+            <Input
+              aria-label={t("siteUrl")}
+              className={inputClassName}
+              disabled={isSaving}
+              onChange={(event) => updateText("url", event.target.value)}
+              value={values.url}
+            />
+          }
+          icon={<Globe />}
+          label={t("siteUrl")}
+        />
+        <ConsoleSettingsRow
+          control={
+            <Switch
+              aria-label={t("blockSearchEngines")}
+              checked={values.blockSearchEngines}
+              disabled={isSaving}
+              onCheckedChange={setBlockSearchEngines}
+            />
+          }
+          icon={<SearchX />}
+          label={t("blockSearchEngines")}
+        />
+      </ConsoleSettingsGroup>
+      <ConsoleFloatingSaveButton
+        isDirty={isDirty}
+        isPending={isSaving}
+        label={t("save")}
       />
-      <ConsoleSettingsRow
-        className="items-start"
-        control={
-          <Textarea
-            aria-label={t("siteDescription")}
-            className={textareaClassName}
-            onChange={(event) => setDescription(event.target.value)}
-            value={description}
-          />
-        }
-        icon={<AlignLeft />}
-        label={t("siteDescription")}
-      />
-      <ConsoleSettingsRow
-        control={
-          <Input
-            aria-label={t("siteKeywords")}
-            className={inputClassName}
-            onChange={(event) => setKeywords(event.target.value)}
-            value={keywords}
-          />
-        }
-        icon={<Tags />}
-        label={t("siteKeywords")}
-      />
-      <ConsoleSettingsRow
-        control={
-          <Input
-            aria-label={t("siteUrl")}
-            className={inputClassName}
-            onChange={(event) => setUrl(event.target.value)}
-            value={url}
-          />
-        }
-        icon={<Globe />}
-        label={t("siteUrl")}
-      />
-      <ConsoleSettingsRow
-        control={
-          <Switch
-            aria-label={t("blockSearchEngines")}
-            checked={blockSearchEngines}
-            disabled
-            onCheckedChange={setBlockSearchEngines}
-          />
-        }
-        icon={<SearchX />}
-        label={t("blockSearchEngines")}
-      />
-    </ConsoleSettingsGroup>
+    </form>
   );
 }
