@@ -19,6 +19,8 @@ const (
 	FieldEmail = "email"
 	// FieldNickname holds the string denoting the nickname field in the database.
 	FieldNickname = "nickname"
+	// FieldBio holds the string denoting the bio field in the database.
+	FieldBio = "bio"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
 	FieldPasswordHash = "password_hash"
 	// FieldGroupID holds the string denoting the group_id field in the database.
@@ -71,6 +73,7 @@ var Columns = []string{
 	FieldID,
 	FieldEmail,
 	FieldNickname,
+	FieldBio,
 	FieldPasswordHash,
 	FieldGroupID,
 	FieldTotpSecret,
@@ -126,6 +129,11 @@ func ByEmail(opts ...sql.OrderTermOption) OrderOption {
 // ByNickname orders the results by the nickname field.
 func ByNickname(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldNickname, opts...).ToFunc()
+}
+
+// ByBio orders the results by the bio field.
+func ByBio(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBio, opts...).ToFunc()
 }
 
 // ByPasswordHash orders the results by the password_hash field.

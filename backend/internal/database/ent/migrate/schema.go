@@ -125,6 +125,7 @@ var (
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "email", Type: field.TypeString, Unique: true},
 		{Name: "nickname", Type: field.TypeString, Unique: true},
+		{Name: "bio", Type: field.TypeString, Nullable: true},
 		{Name: "password_hash", Type: field.TypeString},
 		{Name: "totp_secret", Type: field.TypeString, Nullable: true},
 		{Name: "totp_enabled_at", Type: field.TypeTime, Nullable: true},
@@ -142,7 +143,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "users_groups_users",
-				Columns:    []*schema.Column{UsersColumns[10]},
+				Columns:    []*schema.Column{UsersColumns[11]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -151,12 +152,12 @@ var (
 			{
 				Name:    "user_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[8]},
+				Columns: []*schema.Column{UsersColumns[9]},
 			},
 			{
 				Name:    "user_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[10]},
+				Columns: []*schema.Column{UsersColumns[11]},
 			},
 		},
 	}

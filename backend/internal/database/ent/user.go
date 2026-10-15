@@ -23,6 +23,8 @@ type User struct {
 	Email string `json:"email,omitempty"`
 	// Nickname holds the value of the "nickname" field.
 	Nickname string `json:"nickname,omitempty"`
+	// Bio holds the value of the "bio" field.
+	Bio *string `json:"bio,omitempty"`
 	// PasswordHash holds the value of the "password_hash" field.
 	PasswordHash string `json:"password_hash,omitempty"`
 	// GroupID holds the value of the "group_id" field.
@@ -94,7 +96,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldTotpLastCounter:
 			values[i] = new(sql.NullInt64)
-		case user.FieldEmail, user.FieldNickname, user.FieldPasswordHash, user.FieldTotpSecret:
+		case user.FieldEmail, user.FieldNickname, user.FieldBio, user.FieldPasswordHash, user.FieldTotpSecret:
 			values[i] = new(sql.NullString)
 		case user.FieldTotpEnabledAt, user.FieldTotpSetupAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -132,6 +134,13 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field nickname", values[i])
 			} else if value.Valid {
 				_m.Nickname = value.String
+			}
+		case user.FieldBio:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field bio", values[i])
+			} else if value.Valid {
+				_m.Bio = new(string)
+				*_m.Bio = value.String
 			}
 		case user.FieldPasswordHash:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -241,6 +250,11 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("nickname=")
 	builder.WriteString(_m.Nickname)
+	builder.WriteString(", ")
+	if v := _m.Bio; v != nil {
+		builder.WriteString("bio=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("password_hash=")
 	builder.WriteString(_m.PasswordHash)

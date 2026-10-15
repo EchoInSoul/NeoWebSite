@@ -22,6 +22,7 @@ func (User) Fields() []ent.Field {
 		field.UUID("id", uuid.UUID{}).Default(func() uuid.UUID { return uuid.Must(uuid.NewV7()) }),
 		field.String("email").NotEmpty().Unique(),
 		field.String("nickname").NotEmpty().Unique(),
+		field.String("bio").Optional().Nillable(),
 		field.String("password_hash").NotEmpty(),
 		field.UUID("group_id", uuid.UUID{}).Default(func() uuid.UUID { return rbac.GroupIDUser }),
 		field.String("totp_secret").Optional().Nillable(),

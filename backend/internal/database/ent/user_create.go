@@ -39,6 +39,20 @@ func (_c *UserCreate) SetNickname(v string) *UserCreate {
 	return _c
 }
 
+// SetBio sets the "bio" field.
+func (_c *UserCreate) SetBio(v string) *UserCreate {
+	_c.mutation.SetBio(v)
+	return _c
+}
+
+// SetNillableBio sets the "bio" field if the given value is not nil.
+func (_c *UserCreate) SetNillableBio(v *string) *UserCreate {
+	if v != nil {
+		_c.SetBio(*v)
+	}
+	return _c
+}
+
 // SetPasswordHash sets the "password_hash" field.
 func (_c *UserCreate) SetPasswordHash(v string) *UserCreate {
 	_c.mutation.SetPasswordHash(v)
@@ -327,6 +341,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldNickname, field.TypeString, value)
 		_node.Nickname = value
 	}
+	if value, ok := _c.mutation.Bio(); ok {
+		_spec.SetField(user.FieldBio, field.TypeString, value)
+		_node.Bio = &value
+	}
 	if value, ok := _c.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 		_node.PasswordHash = value
@@ -477,6 +495,24 @@ func (u *UserUpsert) SetNickname(v string) *UserUpsert {
 // UpdateNickname sets the "nickname" field to the value that was provided on create.
 func (u *UserUpsert) UpdateNickname() *UserUpsert {
 	u.SetExcluded(user.FieldNickname)
+	return u
+}
+
+// SetBio sets the "bio" field.
+func (u *UserUpsert) SetBio(v string) *UserUpsert {
+	u.Set(user.FieldBio, v)
+	return u
+}
+
+// UpdateBio sets the "bio" field to the value that was provided on create.
+func (u *UserUpsert) UpdateBio() *UserUpsert {
+	u.SetExcluded(user.FieldBio)
+	return u
+}
+
+// ClearBio clears the value of the "bio" field.
+func (u *UserUpsert) ClearBio() *UserUpsert {
+	u.SetNull(user.FieldBio)
 	return u
 }
 
@@ -670,6 +706,27 @@ func (u *UserUpsertOne) SetNickname(v string) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateNickname() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateNickname()
+	})
+}
+
+// SetBio sets the "bio" field.
+func (u *UserUpsertOne) SetBio(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetBio(v)
+	})
+}
+
+// UpdateBio sets the "bio" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateBio() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateBio()
+	})
+}
+
+// ClearBio clears the value of the "bio" field.
+func (u *UserUpsertOne) ClearBio() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearBio()
 	})
 }
 
@@ -1049,6 +1106,27 @@ func (u *UserUpsertBulk) SetNickname(v string) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateNickname() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateNickname()
+	})
+}
+
+// SetBio sets the "bio" field.
+func (u *UserUpsertBulk) SetBio(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetBio(v)
+	})
+}
+
+// UpdateBio sets the "bio" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateBio() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateBio()
+	})
+}
+
+// ClearBio clears the value of the "bio" field.
+func (u *UserUpsertBulk) ClearBio() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearBio()
 	})
 }
 

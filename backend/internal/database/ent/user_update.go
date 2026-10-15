@@ -60,6 +60,26 @@ func (_u *UserUpdate) SetNillableNickname(v *string) *UserUpdate {
 	return _u
 }
 
+// SetBio sets the "bio" field.
+func (_u *UserUpdate) SetBio(v string) *UserUpdate {
+	_u.mutation.SetBio(v)
+	return _u
+}
+
+// SetNillableBio sets the "bio" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableBio(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetBio(*v)
+	}
+	return _u
+}
+
+// ClearBio clears the value of the "bio" field.
+func (_u *UserUpdate) ClearBio() *UserUpdate {
+	_u.mutation.ClearBio()
+	return _u
+}
+
 // SetPasswordHash sets the "password_hash" field.
 func (_u *UserUpdate) SetPasswordHash(v string) *UserUpdate {
 	_u.mutation.SetPasswordHash(v)
@@ -346,6 +366,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Nickname(); ok {
 		_spec.SetField(user.FieldNickname, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Bio(); ok {
+		_spec.SetField(user.FieldBio, field.TypeString, value)
+	}
+	if _u.mutation.BioCleared() {
+		_spec.ClearField(user.FieldBio, field.TypeString)
+	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
@@ -543,6 +569,26 @@ func (_u *UserUpdateOne) SetNillableNickname(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetNickname(*v)
 	}
+	return _u
+}
+
+// SetBio sets the "bio" field.
+func (_u *UserUpdateOne) SetBio(v string) *UserUpdateOne {
+	_u.mutation.SetBio(v)
+	return _u
+}
+
+// SetNillableBio sets the "bio" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableBio(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetBio(*v)
+	}
+	return _u
+}
+
+// ClearBio clears the value of the "bio" field.
+func (_u *UserUpdateOne) ClearBio() *UserUpdateOne {
+	_u.mutation.ClearBio()
 	return _u
 }
 
@@ -861,6 +907,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.Nickname(); ok {
 		_spec.SetField(user.FieldNickname, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Bio(); ok {
+		_spec.SetField(user.FieldBio, field.TypeString, value)
+	}
+	if _u.mutation.BioCleared() {
+		_spec.ClearField(user.FieldBio, field.TypeString)
 	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
