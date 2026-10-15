@@ -33,7 +33,7 @@
 | D5 | 站点关键词 | `<meta name="keywords">` = 站点关键词按逗号拆分（trim、丢空段）；配了才输出；搜索引擎早已不看，纯保留字段、成本为零 | 「可以」（原文照录） |
 | D6 | OG（社交卡片） | 只出三个**文字**字段：`og:title`（= D2 拼好的标题）、`og:description`（= 站点描述，配了才出）、`og:site_name`（= 站名）；`og:image` **不做** | 「可以做」（问知 OG 是什么之后拍板） |
 | D7 | 站点 URL | 配了才设 `metadataBase`（URL 合法才设，非法/空不设、不报错）；页面级 canonical / OG url **不做**（留给将来的内容页）；后端邮件链接基址**不在本轮**（后端轮） | 「这个可以」「这个不做」 |
-| D8 | 屏蔽搜索引擎 | 新增 `app/robots.ts`（**60 秒缓存**、非实时）：开关**开** = 全站 `Disallow: /`（已覆盖 /console，不加重复条目）；开关**关** = 放行 + **`/console` 永久 disallow**。根 metadata 带 `robots: { index: false }` **仅开关开着时**（robots.txt 管爬虫抓不抓、meta 管搜索引擎收不收，双保险，照 D 盘做法） | 「需要缓存时间，…不要实时刷新！」「这个可以」「添加上吧」 |
+| D8 | 屏蔽搜索引擎 | 新增 `app/robots.ts`（**60 秒缓存**、非实时）：开关**开** = 全站 `Disallow: /`（已覆盖 /console，不加重复条目）；开关**关** = 放行 + **`/console` 永久 disallow**。根 metadata 带 `robots: { index: false, follow: false }`（`noindex, nofollow`，对齐 WordPress 的 `wp_robots_no_robots`）**仅开关开着时**（robots.txt 管爬虫抓不抓、meta 管搜索引擎收不收，双保险；WordPress 5.3 起已不再封 robots.txt，本仓按用户口径保留封禁） | 「需要缓存时间，…不要实时刷新！」「这个可以」「添加上吧」「按照这个开始改吧」（nofollow） |
 | D9 | 副标题落点 | 拼进站点级默认标题（D2）。**不进** description 兜底、**不上**登录/注册页当标语 | 「这样，我支持你这么做」 |
 
 ---
@@ -85,7 +85,7 @@ export function blocksSearchEngines(settings: unknown): boolean;
 - `description` = `siteDescription(settings)`；
 - `keywords` = `siteKeywords(settings)`（空数组不输出）；
 - `metadataBase` = `siteBaseUrl(settings)`（null 不输出）；
-- `robots: { index: false }` 仅 `blocksSearchEngines(settings)` 为真时；
+- `robots: { index: false, follow: false }` 仅 `blocksSearchEngines(settings)` 为真时（`noindex, nofollow`）；
 - `openGraph`：`title`（拼好的标题）、`description`（配了才带）、`siteName`（站名，配了才带）。
 
 `instant = false` 维持不动（全站动态渲染）；本函数每次渲染读一次公开设置（60 秒缓存兜底，不产生每请求的后端查询）。

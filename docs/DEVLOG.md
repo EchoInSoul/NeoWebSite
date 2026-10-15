@@ -26,6 +26,8 @@
 
 **已知缺口**：① 注册闸随缓存 ≤60 秒延迟（用户接受）；② 全空配置 = 无标题无 description（不兜底，有意）；③ `settings.siteSettings`（标签）与 `settings.general`（侧栏 / h1）是两个键，将来改名要改两处；④ `/console` 的 disallow 硬编码在 `robots.ts`，换后台前缀要同步改；⑤ 无测试运行器（离线断言不入库）；⑥ 后台页面会继承站点级 description / OG（无实际影响）。
 
+**参考实现对齐（当晚后续）**：屏蔽搜索引擎对齐 WordPress——根 metadata 的 `robots` 由 `{ index: false }` 改为 **`{ index: false, follow: false }`**（`noindex, nofollow`，WP `wp_robots_no_robots` 同款）；robots.txt 保持"开着 = 全站 Disallow"的**双保险**不动（用户点名保留；WordPress 5.3 起已不再封 robots.txt、只靠 meta 去收录，本仓的差异按用户口径登记在 spec D8）。
+
 **提交状态**：本轮按批入库（① `lib/site-metadata.ts` → ② `lib/public-settings.ts` 缓存 → ③ 根 layout → ④ `app/robots.ts` → ⑤ 控制台四页 + 两份 messages → ⑥ 本节 + 两份 spec / plan 文档，共 6 个提交）；**评审后加固三条随后另成一小批**——均未推送。
 
 ---
