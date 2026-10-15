@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
-import { apiRequest } from "@/lib/api";
+import { ApiError, apiRequest } from "@/lib/api";
 
 export function useSignout() {
   const t = useTranslations("userMenu");
@@ -16,7 +16,11 @@ export function useSignout() {
       await apiRequest("/api/v1/sessions/current", { method: "DELETE" });
       router.replace("/signin");
       return;
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        window.location.replace("/signin");
+        return;
+      }
       toast.error(t("signOutFailed"));
     } finally {
       setIsSigningOut(false);
