@@ -11,17 +11,103 @@ export type PermissionCatalogItem = { key: string; name: string };
 
 export type PermissionMatrixCell = { action: string; key: string } | null;
 
+export type PermissionMatrixRow = {
+  resource: string;
+  cells: PermissionMatrixCell[];
+};
+
 export type PermissionMatrix = {
   actions: string[];
-  rows: Array<{ resource: string; cells: PermissionMatrixCell[] }>;
+  rows: PermissionMatrixRow[];
 };
+
+export function parseAdminGroup(payload: unknown): AdminGroup | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+
+  const raw = payload as Record<string, unknown>;
+
+  if (
+    typeof raw.id !== "string" ||
+    typeof raw.name !== "string" ||
+    typeof raw.is_preset !== "boolean" ||
+    typeof raw.member_count !== "number" ||
+    !Array.isArray(raw.permissions) ||
+    !raw.permissions.every((permission) => typeof permission === "string")
+  ) {
+    return null;
+  }
+
+  const systemKey = raw.system_key;
+
+  if (systemKey !== null && typeof systemKey !== "string") {
+    return null;
+  }
+
+  return {
+    id: raw.id,
+    systemKey,
+    name: raw.name,
+    isPreset: raw.is_preset,
+    memberCount: raw.member_count,
+    permissions: raw.permissions as string[],
+  };
+}
+
+export function parseAdminGroups(payload: unknown): AdminGroup[] | null {
+  const items = (payload as { items?: unknown } | null)?.items;
+
+  if (!Array.isArray(items)) {
+    return null;
+  }
+
+  const groups: AdminGroup[] = [];
+
+  for (const item of items) {
+    const group = parseAdminGroup(item);
+
+    if (group === null) {
+      return null;
+    }
+
+    groups.push(group);
+  }
+
+  return groups;
+}
+
+export function parsePermissionCatalog(
+  payload: unknown,
+): PermissionCatalogItem[] | null {
+  const items = (payload as { items?: unknown } | null)?.items;
+
+  if (!Array.isArray(items)) {
+    return null;
+  }
+
+  const catalog: PermissionCatalogItem[] = [];
+
+  for (const item of items) {
+    const raw = item as { key?: unknown; name?: unknown } | null;
+
+    if (typeof raw?.key !== "string" || typeof raw.name !== "string") {
+      return null;
+    }
+
+    catalog.push({ key: raw.key, name: raw.name });
+  }
+
+  return catalog;
+}
 
 const IMPLIED_ACTIONS: Record<string, string[]> = { edit: ["view"] };
 const PRESET_ORDER = ["owner", "admin", "user"];
 const RESOURCE_LABEL_KEYS: Record<string, string> = {
   "system.users": "resourceUsers",
   "system.groups": "resourceGroups",
-  "system.settings": "resourceSettings",
+  "system.settings": "resourceGeneral",
+  "system.register": "resourceRegister",
 };
 const ACTION_LABEL_KEYS: Record<string, string> = {
   view: "actionView",
@@ -65,6 +151,43 @@ export function resourceLabelKey(resource: string): string | null {
 
 export function actionLabelKey(action: string): string | null {
   return ACTION_LABEL_KEYS[action] ?? null;
+}
+
+// 矩阵显示分组照侧栏（labelKey 取 sidebar 命名空间）；「用户」暂不显示——用户页未建，键仍在后端目录
+const MATRIX_GROUPS: Array<{ labelKey: string; resources: string[] }> = [
+  { labelKey: "settings", resources: ["system.settings"] },
+  { labelKey: "signInAndRegister", resources: ["system.register"] },
+  { labelKey: "permissionGroups", resources: ["system.groups"] },
+];
+
+const DISPLAYED_RESOURCES = new Set(
+  MATRIX_GROUPS.flatMap((group) => group.resources),
+);
+
+export type MatrixSection = {
+  labelKey: string;
+  rows: PermissionMatrixRow[];
+};
+
+export function buildMatrixSections(matrix: PermissionMatrix): MatrixSection[] {
+  const rowsByResource = new Map(matrix.rows.map((row) => [row.resource, row]));
+
+  return MATRIX_GROUPS.map((group) => ({
+    labelKey: group.labelKey,
+    rows: group.resources
+      .map((resource) => rowsByResource.get(resource))
+      .filter((row): row is PermissionMatrixRow => row !== undefined),
+  })).filter((section) => section.rows.length > 0);
+}
+
+export function isDisplayedPermission(permission: string): boolean {
+  const separator = permission.lastIndexOf(".");
+
+  if (separator < 0) {
+    return false;
+  }
+
+  return DISPLAYED_RESOURCES.has(permission.slice(0, separator));
 }
 
 export function applyPermissionToggle(
@@ -147,4 +270,26 @@ export function sortGroupsForDisplay(groups: AdminGroup[]): AdminGroup[] {
   presets.sort((left, right) => presetIndex(left) - presetIndex(right));
 
   return [...presets, ...others];
+}
+
+const ERROR_KEYS: Record<string, string> = {
+  preset_group_locked: "presetLocked",
+  group_name_taken: "nameTaken",
+  group_not_empty: "notEmpty",
+  grant_forbidden: "grantForbidden",
+  forbidden: "forbidden",
+  not_found: "groupMissing",
+};
+
+const FALLBACK_KEYS: Record<"create" | "edit" | "delete", string> = {
+  create: "createFailed",
+  edit: "saveFailed",
+  delete: "deleteFailed",
+};
+
+export function groupErrorKey(
+  code: string,
+  context: "create" | "edit" | "delete",
+): string {
+  return ERROR_KEYS[code] ?? FALLBACK_KEYS[context];
 }

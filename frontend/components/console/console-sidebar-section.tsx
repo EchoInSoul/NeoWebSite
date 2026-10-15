@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -27,6 +27,11 @@ export type ConsoleSidebarSectionItem = {
   className?: string;
 };
 
+export type ConsoleSidebarSectionGroup = {
+  label: string;
+  items: ConsoleSidebarSectionItem[];
+};
+
 export type ConsoleSidebarBack =
   { kind: "link"; href: string } | { kind: "button"; onClick: () => void };
 
@@ -34,16 +39,14 @@ export type ConsoleSidebarSectionProps = {
   title: string;
   tooltip: string;
   back: ConsoleSidebarBack;
-  groupLabel: string;
-  items: ConsoleSidebarSectionItem[];
+  groups: ConsoleSidebarSectionGroup[];
 };
 
 export function ConsoleSidebarSection({
   title,
   tooltip,
   back,
-  groupLabel,
-  items,
+  groups,
 }: ConsoleSidebarSectionProps) {
   const pathname = usePathname();
   const { state } = useSidebar();
@@ -78,25 +81,32 @@ export function ConsoleSidebarSection({
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
-      <SidebarGroupLabel className="pointer-events-none">
-        {groupLabel}
-      </SidebarGroupLabel>
-      <SidebarMenu>
-        {items.map((item) => (
-          <SidebarMenuItem key={item.href} className={item.className}>
-            <SidebarMenuButton
-              isActive={
-                pathname === item.href || pathname.startsWith(`${item.href}/`)
-              }
-              render={<Link href={item.href} />}
-              tooltip={item.label}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
-      </SidebarMenu>
+      {groups.map((group, index) => (
+        <Fragment key={group.label}>
+          <SidebarGroupLabel
+            className={cn("pointer-events-none", index > 0 && "mt-4")}
+          >
+            {group.label}
+          </SidebarGroupLabel>
+          <SidebarMenu>
+            {group.items.map((item) => (
+              <SidebarMenuItem key={item.href} className={item.className}>
+                <SidebarMenuButton
+                  isActive={
+                    pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`)
+                  }
+                  render={<Link href={item.href} />}
+                  tooltip={item.label}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </Fragment>
+      ))}
     </SidebarGroup>
   );
 }

@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { useTranslations } from "next-intl";
+import { cn } from "cn";
 
 import {
   AlertDialog,
@@ -28,12 +29,14 @@ import { Label } from "@/components/ui/label";
 import {
   actionLabelKey,
   applyPermissionToggle,
+  buildMatrixSections,
   permissionColumnState,
   resourceLabelKey,
   samePermissionSet,
   togglePermissionColumn,
   type AdminGroup,
   type PermissionMatrix,
+  type PermissionMatrixCell,
 } from "@/lib/groups";
 
 type GroupDialogProperties = {
@@ -57,6 +60,7 @@ export function GroupDialog({
   onSubmit,
 }: GroupDialogProperties) {
   const t = useTranslations("groups");
+  const ts = useTranslations("sidebar");
   const tCommon = useTranslations("common");
   const initialName = group?.name ?? "";
   const initialPermissions = group?.permissions ?? [];
@@ -72,17 +76,20 @@ export function GroupDialog({
   const [isPending, setIsPending] = useState(false);
 
   const isReadOnly = group?.isPreset ?? false;
-  const isPrivileged =
-    group?.systemKey === "owner" || group?.systemKey === "admin";
   const isDirty =
     name.trim() !== baseline.name.trim() ||
     !samePermissionSet(selected, baseline.permissions);
 
+  const sections = buildMatrixSections(matrix);
+  const visibleRows = sections.flatMap((section) => section.rows);
+
   function columnKeys(action: string): string[] {
     const index = matrix.actions.indexOf(action);
-    return matrix.rows
+    return visibleRows
       .map((row) => row.cells[index])
-      .filter((cell): cell is { action: string; key: string } => cell !== null)
+      .filter(
+        (cell): cell is NonNullable<PermissionMatrixCell> => cell !== null,
+      )
       .map((cell) => cell.key);
   }
 
@@ -161,13 +168,14 @@ export function GroupDialog({
               return (
                 <div
                   key={action}
-                  className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"
+                  className="flex flex-col items-center gap-1 text-xs text-muted-foreground"
                 >
+                  <span>{actionText(action)}</span>
                   {isReadOnly ? null : (
                     <Checkbox
                       checked={state === "all"}
                       indeterminate={state === "some"}
-                      disabled={isPending}
+                      disabled={isPending || keys.length === 0}
                       aria-label={t("selectAllColumn", {
                         action: actionText(action),
                       })}
@@ -178,44 +186,61 @@ export function GroupDialog({
                       }
                     />
                   )}
-                  <span>{actionText(action)}</span>
                 </div>
               );
             })}
-            {matrix.rows.map((row) => (
-              <Fragment key={row.resource}>
-                <span className="py-0.5 text-sm">
-                  {resourceText(row.resource)}
+            {sections.map((section, sectionIndex) => (
+              <Fragment key={section.labelKey}>
+                <span
+                  className={cn(
+                    "col-span-full text-xs font-medium text-muted-foreground",
+                    sectionIndex === 0 ? "pt-2" : "pt-4",
+                  )}
+                >
+                  {ts(section.labelKey)}
                 </span>
-                {row.cells.map((cell, index) =>
-                  cell === null ? (
-                    <span key={`${row.resource}-${matrix.actions[index]}`} />
-                  ) : (
-                    <span
-                      key={cell.key}
-                      className="flex items-center justify-center"
-                    >
-                      <Checkbox
-                        checked={selected.includes(cell.key)}
-                        disabled={isReadOnly || isPending}
-                        aria-label={`${resourceText(row.resource)} ${actionText(cell.action)}`}
-                        onCheckedChange={(checked) =>
-                          setSelected((previous) =>
-                            applyPermissionToggle(previous, cell.key, checked),
-                          )
-                        }
-                      />
+                {section.rows.map((row) => (
+                  <Fragment key={row.resource}>
+                    <span className="py-0.5 text-sm">
+                      {resourceText(row.resource)}
                     </span>
-                  ),
-                )}
+                    {row.cells.map((cell, index) =>
+                      cell === null ? (
+                        <span
+                          key={`${row.resource}-${matrix.actions[index]}`}
+                        />
+                      ) : (
+                        <span
+                          key={cell.key}
+                          className="flex items-center justify-center"
+                        >
+                          <Checkbox
+                            checked={selected.includes(cell.key)}
+                            disabled={isReadOnly || isPending}
+                            aria-label={`${resourceText(row.resource)} ${actionText(cell.action)}`}
+                            onCheckedChange={(checked) =>
+                              setSelected((previous) =>
+                                applyPermissionToggle(
+                                  previous,
+                                  cell.key,
+                                  checked,
+                                ),
+                              )
+                            }
+                          />
+                        </span>
+                      ),
+                    )}
+                  </Fragment>
+                ))}
               </Fragment>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {isReadOnly
-              ? t(isPrivileged ? "readOnlyPrivileged" : "readOnlyPreset")
-              : t("hintEditImpliesView")}
-          </p>
+          {isReadOnly ? null : (
+            <p className="text-xs text-muted-foreground">
+              {t("hintEditImpliesView")}
+            </p>
+          )}
           <DialogFooter>
             {isReadOnly ? (
               <DialogClose render={<Button type="button" variant="outline" />}>

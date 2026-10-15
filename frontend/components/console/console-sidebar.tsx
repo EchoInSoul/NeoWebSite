@@ -7,7 +7,17 @@ import {
 import { ConsoleSidebarFooter } from "./console-sidebar-footer";
 import { ConsoleSidebarNav } from "./console-sidebar-nav";
 
-export function ConsoleSidebar({ displayName }: { displayName?: string }) {
+export function ConsoleSidebar({
+  displayName,
+  canViewSettings = false,
+  canViewRegister = false,
+  canViewGroups = false,
+}: {
+  displayName?: string;
+  canViewSettings?: boolean;
+  canViewRegister?: boolean;
+  canViewGroups?: boolean;
+}) {
   return (
     <Sidebar
       id="console-sidebar"
@@ -15,7 +25,11 @@ export function ConsoleSidebar({ displayName }: { displayName?: string }) {
       className="top-(--console-banner-h) h-[calc(100svh-var(--console-banner-h))] border-r border-border"
     >
       <SidebarContent>
-        <ConsoleSidebarNav />
+        <ConsoleSidebarNav
+          canViewSettings={canViewSettings}
+          canViewRegister={canViewRegister}
+          canViewGroups={canViewGroups}
+        />
       </SidebarContent>
       <SidebarFooter className="border-t border-border">
         <ConsoleSidebarFooter displayName={displayName} />

@@ -24,6 +24,7 @@ import {
 import {
   ConsoleSidebarSection,
   type ConsoleSidebarBack,
+  type ConsoleSidebarSectionGroup,
   type ConsoleSidebarSectionItem,
 } from "./console-sidebar-section";
 
@@ -41,9 +42,8 @@ type PanelKey = "main" | keyof typeof PANEL_PREFIXES;
 type ConsoleSidebarPanelContent = {
   title: string;
   tooltip: string;
-  groupLabel: string;
   back: ConsoleSidebarBack;
-  items: ConsoleSidebarSectionItem[];
+  groups: ConsoleSidebarSectionGroup[];
 };
 
 function isUnder(pathname: string, base: string) {
@@ -60,12 +60,22 @@ function resolvePanel(pathname: string): PanelKey {
   return "main";
 }
 
-export function ConsoleSidebarNav() {
+export function ConsoleSidebarNav({
+  canViewSettings = false,
+  canViewRegister = false,
+  canViewGroups = false,
+}: {
+  canViewSettings?: boolean;
+  canViewRegister?: boolean;
+  canViewGroups?: boolean;
+}) {
   const t = useTranslations("sidebar");
   const ts = useTranslations("settings");
   const pathname = usePathname();
 
   const settingsEntryRef = useRef<HTMLAnchorElement>(null);
+
+  const hasSettingsAccess = canViewSettings || canViewRegister || canViewGroups;
 
   const routePanel = resolvePanel(pathname);
   const [displayedPanel, setDisplayedPanel] = useState<PanelKey>(routePanel);
@@ -84,26 +94,29 @@ export function ConsoleSidebarNav() {
     uc: {
       title: t("profile"),
       tooltip: t("backToConsole"),
-      groupLabel: t("account"),
       back: { kind: "link", href: "/console" },
-      items: [
+      groups: [
         {
-          href: "/console/uc/profile",
-          label: t("personalInfo"),
-          icon: <CircleUserRound />,
-          className: "mb-1",
-        },
-        {
-          href: "/console/uc/session",
-          label: t("sessions"),
-          icon: <MonitorSmartphone />,
+          label: t("account"),
+          items: [
+            {
+              href: "/console/uc/profile",
+              label: t("personalInfo"),
+              icon: <CircleUserRound />,
+              className: "mb-1",
+            },
+            {
+              href: "/console/uc/session",
+              label: t("sessions"),
+              icon: <MonitorSmartphone />,
+            },
+          ],
         },
       ],
     },
     settings: {
       title: t("settings"),
       tooltip: t("backToConsole"),
-      groupLabel: t("settings"),
       back: {
         kind: "button",
         onClick: () => {
@@ -113,25 +126,44 @@ export function ConsoleSidebarNav() {
           settingsEntryRef.current?.focus();
         },
       },
-      items: [
+      groups: [
         {
-          href: SETTINGS_GENERAL_HREF,
-          label: ts("general"),
-          icon: <SlidersHorizontal />,
-          className: "mb-1",
+          label: t("settings"),
+          items: canViewSettings
+            ? [
+                {
+                  href: SETTINGS_GENERAL_HREF,
+                  label: ts("general"),
+                  icon: <SlidersHorizontal />,
+                } satisfies ConsoleSidebarSectionItem,
+              ]
+            : [],
         },
         {
-          href: SETTINGS_REGISTER_HREF,
-          label: ts("register"),
-          icon: <UserRoundPlus />,
-          className: "mb-1",
+          label: t("signInAndRegister"),
+          items: canViewRegister
+            ? [
+                {
+                  href: SETTINGS_REGISTER_HREF,
+                  label: ts("register"),
+                  icon: <UserRoundPlus />,
+                } satisfies ConsoleSidebarSectionItem,
+              ]
+            : [],
         },
         {
-          href: SETTINGS_GROUPS_HREF,
-          label: ts("groups"),
-          icon: <Users />,
+          label: t("permissionGroups"),
+          items: canViewGroups
+            ? [
+                {
+                  href: SETTINGS_GROUPS_HREF,
+                  label: ts("groups"),
+                  icon: <Users />,
+                } satisfies ConsoleSidebarSectionItem,
+              ]
+            : [],
         },
-      ],
+      ].filter((group) => group.items.length > 0),
     },
   };
 
@@ -139,22 +171,26 @@ export function ConsoleSidebarNav() {
     return (
       <SidebarGroup>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={displayedPanel === "main" && routePanel === "settings"}
-              render={
-                <Link
-                  ref={settingsEntryRef}
-                  href={SETTINGS_GENERAL_HREF}
-                  onClick={() => setDisplayedPanel("settings")}
-                />
-              }
-              tooltip={t("settings")}
-            >
-              <Settings />
-              <span>{t("settings")}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {hasSettingsAccess ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={
+                  displayedPanel === "main" && routePanel === "settings"
+                }
+                render={
+                  <Link
+                    ref={settingsEntryRef}
+                    href={SETTINGS_GENERAL_HREF}
+                    onClick={() => setDisplayedPanel("settings")}
+                  />
+                }
+                tooltip={t("settings")}
+              >
+                <Settings />
+                <span>{t("settings")}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
         </SidebarMenu>
       </SidebarGroup>
     );
@@ -167,8 +203,7 @@ export function ConsoleSidebarNav() {
       title={panel.title}
       tooltip={panel.tooltip}
       back={panel.back}
-      groupLabel={panel.groupLabel}
-      items={panel.items}
+      groups={panel.groups}
     />
   );
 }

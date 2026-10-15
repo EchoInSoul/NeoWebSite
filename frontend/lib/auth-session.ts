@@ -14,6 +14,7 @@ export type SessionUser = {
   nickname: string;
   bio: string | null;
   group: SessionGroup;
+  permissions: string[];
   twoFactorEnabled: boolean;
 };
 
@@ -22,6 +23,7 @@ type MeResponse = {
   nickname?: unknown;
   bio?: unknown;
   group?: unknown;
+  permissions?: unknown;
   two_factor_enabled?: unknown;
 };
 
@@ -74,7 +76,9 @@ export const getAuthenticatedUser = cache(
     if (
       typeof me?.email !== "string" ||
       typeof me.nickname !== "string" ||
-      typeof me.two_factor_enabled !== "boolean"
+      typeof me.two_factor_enabled !== "boolean" ||
+      !Array.isArray(me.permissions) ||
+      !me.permissions.every((permission) => typeof permission === "string")
     ) {
       throw new Error(malformedResponse);
     }
@@ -90,6 +94,7 @@ export const getAuthenticatedUser = cache(
       nickname: me.nickname,
       bio: bio ?? null,
       group: parseGroup(me.group),
+      permissions: me.permissions as string[],
       twoFactorEnabled: me.two_factor_enabled,
     };
   },

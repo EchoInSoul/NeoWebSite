@@ -25,7 +25,9 @@
     "personalInfo": "个人信息",
     "sessions": "登录会话",
     "backToConsole": "返回控制台",
-    "settings": "设置"
+    "settings": "设置",
+    "signInAndRegister": "注册与登录",
+    "permissionGroups": "权限组"
   },
   "settings": {
     "general": "常规",
@@ -142,6 +144,8 @@
   },
   "groups": {
     "title": "用户组",
+    "noPermission": "无权查看用户组",
+    "loadFailed": "用户组读取失败，请刷新重试",
     "newGroup": "新建用户组",
     "preset": "预设",
     "empty": "暂无用户组",
@@ -162,22 +166,29 @@
     "namePlaceholder": "例如：内容编辑",
     "permissionsLabel": "权限",
     "hintEditImpliesView": "勾选「编辑」会自动勾选「查看」。",
-    "readOnlyPreset": "系统内置组，权限由系统固定，不可修改。",
-    "readOnlyPrivileged": "系统内置组，自带全部权限，不可修改。",
     "save": "保存",
     "close": "关闭",
     "created": "用户组已创建",
     "saved": "已保存",
     "deleted": "用户组已删除",
     "nameTaken": "这个组名已被使用",
+    "createFailed": "创建失败，请稍后重试",
+    "saveFailed": "保存失败，请稍后重试",
+    "deleteFailed": "删除失败，请稍后重试",
+    "groupMissing": "该组已不存在",
+    "presetLocked": "系统内置组不能修改",
+    "grantForbidden": "不能授出你自己没有的权限",
+    "forbidden": "你没有管理用户组的权限",
+    "notEmpty": "组里还有成员，先移走成员再删除",
     "discardTitle": "放弃未保存的修改？",
     "discardDescription": "关闭后这些修改会丢失。",
     "discard": "放弃",
     "actionView": "查看",
     "actionEdit": "编辑",
     "resourceUsers": "用户",
-    "resourceGroups": "用户组",
-    "resourceSettings": "设置"
+    "resourceGeneral": "常规",
+    "resourceRegister": "用户注册",
+    "resourceGroups": "用户组"
   },
   "sessionExpiry": {
     "title": "登录会话已失效",

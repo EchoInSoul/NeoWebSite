@@ -25,7 +25,9 @@
     "personalInfo": "Personal info",
     "sessions": "Login sessions",
     "backToConsole": "Back to console",
-    "settings": "Settings"
+    "settings": "Settings",
+    "signInAndRegister": "Registration and sign-in",
+    "permissionGroups": "Permission groups"
   },
   "settings": {
     "general": "General",
@@ -142,6 +144,8 @@
   },
   "groups": {
     "title": "User groups",
+    "noPermission": "You do not have permission to view user groups",
+    "loadFailed": "Failed to load user groups. Please refresh and try again.",
     "newGroup": "New group",
     "preset": "Preset",
     "empty": "No groups yet",
@@ -162,22 +166,29 @@
     "namePlaceholder": "For example: Editors",
     "permissionsLabel": "Permissions",
     "hintEditImpliesView": "Checking “Edit” also checks “View”.",
-    "readOnlyPreset": "Built-in group — permissions are fixed and cannot be changed.",
-    "readOnlyPrivileged": "Built-in group — always has every permission and cannot be changed.",
     "save": "Save",
     "close": "Close",
     "created": "Group created",
     "saved": "Saved",
     "deleted": "Group deleted",
     "nameTaken": "That group name is already in use",
+    "createFailed": "Creating the group failed. Please try again later.",
+    "saveFailed": "Saving failed. Please try again later.",
+    "deleteFailed": "Deleting the group failed. Please try again later.",
+    "groupMissing": "This group no longer exists",
+    "presetLocked": "Built-in groups cannot be modified",
+    "grantForbidden": "You cannot grant permissions you do not have",
+    "forbidden": "You do not have permission to manage user groups",
+    "notEmpty": "This group still has members — move them out before deleting",
     "discardTitle": "Discard unsaved changes?",
     "discardDescription": "Your changes will be lost when you close.",
     "discard": "Discard",
     "actionView": "View",
     "actionEdit": "Edit",
     "resourceUsers": "Users",
-    "resourceGroups": "Groups",
-    "resourceSettings": "Settings"
+    "resourceGeneral": "General",
+    "resourceRegister": "User registration",
+    "resourceGroups": "Groups"
   },
   "sessionExpiry": {
     "title": "Your session has expired",

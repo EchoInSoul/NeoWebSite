@@ -12,16 +12,27 @@ export const instant = false;
 
 function ConsoleShell({
   displayName,
+  canViewSettings = false,
+  canViewRegister = false,
+  canViewGroups = false,
   children,
 }: {
   displayName?: string;
+  canViewSettings?: boolean;
+  canViewRegister?: boolean;
+  canViewGroups?: boolean;
   children: ReactNode;
 }) {
   return (
     <SidebarProvider className="h-svh min-h-0 flex-col overflow-hidden bg-background">
       <ConsoleTopBanner />
       <div className="flex min-h-0 flex-1">
-        <ConsoleSidebar displayName={displayName} />
+        <ConsoleSidebar
+          displayName={displayName}
+          canViewSettings={canViewSettings}
+          canViewRegister={canViewRegister}
+          canViewGroups={canViewGroups}
+        />
         <SidebarInset className="overflow-y-auto">{children}</SidebarInset>
       </div>
       <SessionExpiryDialog />
@@ -48,5 +59,14 @@ export default async function ConsoleLayout({
     redirect("/signin");
   }
 
-  return <ConsoleShell displayName={user.nickname}>{children}</ConsoleShell>;
+  return (
+    <ConsoleShell
+      displayName={user.nickname}
+      canViewSettings={user.permissions.includes("system.settings.view")}
+      canViewRegister={user.permissions.includes("system.register.view")}
+      canViewGroups={user.permissions.includes("system.groups.view")}
+    >
+      {children}
+    </ConsoleShell>
+  );
 }

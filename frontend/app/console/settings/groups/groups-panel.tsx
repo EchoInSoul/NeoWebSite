@@ -1,9 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Ellipsis, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { toast } from "sonner";
 
 import {
   ConsoleListTable,
@@ -32,25 +31,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useGroups } from "@/hooks/use-groups";
 import {
-  buildPermissionMatrix,
+  isDisplayedPermission,
   sortGroupsForDisplay,
   type AdminGroup,
-  type PermissionCatalogItem,
+  type PermissionMatrix,
 } from "@/lib/groups";
 
 import { GroupDialog } from "./group-dialog";
-
-const CATALOG: PermissionCatalogItem[] = [
-  { key: "system.users.view", name: "查看用户" },
-  { key: "system.users.edit", name: "管理用户" },
-  { key: "system.groups.view", name: "查看用户组" },
-  { key: "system.groups.edit", name: "管理用户组" },
-  { key: "system.settings.view", name: "查看设置" },
-  { key: "system.settings.edit", name: "管理设置" },
-];
-
-const PERMISSION_MATRIX = buildPermissionMatrix(CATALOG);
 
 const SORT_FIELDS = ["memberCount", "permissions"] as const;
 
@@ -60,33 +49,45 @@ function isGroupSortField(value: string): value is GroupSortField {
   return (SORT_FIELDS as readonly string[]).includes(value);
 }
 
+function permissionCount(group: AdminGroup): number {
+  return group.permissions.filter(isDisplayedPermission).length;
+}
+
 type RowActionsProperties = {
   group: AdminGroup;
+  isBusy: boolean;
   onEdit: (group: AdminGroup) => void;
   onDelete: (group: AdminGroup) => void;
 };
 
-function RowActions({ group, onEdit, onDelete }: RowActionsProperties) {
+function RowActions({ group, isBusy, onEdit, onDelete }: RowActionsProperties) {
   const t = useTranslations("groups");
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button type="button" variant="ghost" size="icon-sm" />}
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={isBusy}
+          />
+        }
         aria-label={t("actionsMenu", { name: group.name })}
         title={t("actionsMenu", { name: group.name })}
       >
         <Ellipsis aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => onEdit(group)}>
+        <DropdownMenuItem disabled={isBusy} onClick={() => onEdit(group)}>
           <Pencil aria-hidden="true" />
           {t("edit")}
         </DropdownMenuItem>
         {group.isPreset ? null : (
           <DropdownMenuItem
             variant="destructive"
-            disabled={group.memberCount > 0}
+            disabled={isBusy || group.memberCount > 0}
             title={group.memberCount > 0 ? t("deleteBlocked") : undefined}
             onClick={() => onDelete(group)}
           >
@@ -99,10 +100,28 @@ function RowActions({ group, onEdit, onDelete }: RowActionsProperties) {
   );
 }
 
-export function GroupsPanel() {
+export function GroupsPanel({
+  initialGroups,
+  matrix,
+  canEdit,
+}: {
+  initialGroups: AdminGroup[];
+  matrix: PermissionMatrix;
+  canEdit: boolean;
+}) {
   const t = useTranslations("groups");
   const tCommon = useTranslations("common");
-  const [groups, setGroups] = useState<AdminGroup[]>([]);
+  const {
+    groups,
+    isRefreshing,
+    isListLocked,
+    isDeleteOpen,
+    setDeleteOpen,
+    refreshGroups,
+    submitGroup,
+    requestDelete,
+    confirmDelete,
+  } = useGroups(initialGroups);
   const [sortField, setSortField] = useState<GroupSortField | null>(null);
   const [sortDirection, setSortDirection] =
     useState<ConsoleListSortDirection>("desc");
@@ -111,20 +130,16 @@ export function GroupsPanel() {
     sequence: number;
   } | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<AdminGroup | null>(null);
-  const nextGroupId = useRef(1);
 
   let visibleGroups = sortGroupsForDisplay(groups);
   if (sortField !== null) {
     visibleGroups = [...visibleGroups].sort((left, right) => {
       const leftValue =
-        sortField === "memberCount"
-          ? left.memberCount
-          : left.permissions.length;
+        sortField === "memberCount" ? left.memberCount : permissionCount(left);
       const rightValue =
         sortField === "memberCount"
           ? right.memberCount
-          : right.permissions.length;
+          : permissionCount(right);
       if (leftValue === rightValue) {
         return 0;
       }
@@ -154,64 +169,6 @@ export function GroupsPanel() {
       sequence: (previous?.sequence ?? 0) + 1,
     }));
     setIsDialogOpen(true);
-  }
-
-  async function submitGroup(input: {
-    name: string;
-    permissions: string[];
-  }): Promise<boolean> {
-    const name = input.name.trim();
-    const current = dialog?.group ?? null;
-    const duplicated = groups.some(
-      (group) => group !== current && group.name === name,
-    );
-
-    if (duplicated) {
-      toast.error(t("nameTaken"));
-      return false;
-    }
-
-    if (current === null) {
-      setGroups((previous) => [
-        ...previous,
-        {
-          id: `group-${nextGroupId.current++}`,
-          systemKey: null,
-          name,
-          isPreset: false,
-          memberCount: 0,
-          permissions: input.permissions,
-        },
-      ]);
-      toast.success(t("created"));
-    } else {
-      setGroups((previous) =>
-        previous.map((group) =>
-          group.id === current.id
-            ? { ...group, name, permissions: input.permissions }
-            : group,
-        ),
-      );
-      toast.success(t("saved"));
-    }
-
-    return true;
-  }
-
-  function requestDelete(group: AdminGroup) {
-    setDeleteTarget(group);
-  }
-
-  function confirmDelete() {
-    if (deleteTarget === null) {
-      return;
-    }
-
-    setGroups((previous) =>
-      previous.filter((group) => group.id !== deleteTarget.id),
-    );
-    setDeleteTarget(null);
-    toast.success(t("deleted"));
   }
 
   const columns: readonly ConsoleListColumn<AdminGroup>[] = [
@@ -250,7 +207,7 @@ export function GroupsPanel() {
       sortField: "permissions",
       headerClassName: "px-4",
       cellClassName: "px-4 text-xs text-muted-foreground",
-      render: (group) => group.permissions.length,
+      render: (group) => permissionCount(group),
     },
   ];
 
@@ -259,17 +216,22 @@ export function GroupsPanel() {
       <Card size="none">
         <ConsoleListToolbar
           end={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => openDialog(null)}
-            >
-              <Plus aria-hidden="true" />
-              {t("newGroup")}
-            </Button>
+            canEdit ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isListLocked}
+                onClick={() => openDialog(null)}
+              >
+                <Plus aria-hidden="true" />
+                {t("newGroup")}
+              </Button>
+            ) : undefined
           }
-          onRefresh={() => {}}
+          isBusy={isListLocked}
+          isRefreshing={isRefreshing}
+          onRefresh={() => void refreshGroups()}
           refreshLabel={tCommon("refresh")}
         />
         <ConsoleListTable
@@ -279,14 +241,19 @@ export function GroupsPanel() {
           sortField={sortField ?? undefined}
           sortDirection={sortDirection}
           onToggleSort={toggleSort}
-          rowActions={(group) => (
-            <RowActions
-              group={group}
-              onEdit={openDialog}
-              onDelete={requestDelete}
-            />
-          )}
-          actionsHeader={t("actions")}
+          rowActions={
+            canEdit
+              ? (group) => (
+                  <RowActions
+                    group={group}
+                    isBusy={isListLocked}
+                    onEdit={openDialog}
+                    onDelete={requestDelete}
+                  />
+                )
+              : undefined
+          }
+          actionsHeader={canEdit ? t("actions") : undefined}
           emptyState={
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
               {t("empty")}
@@ -305,19 +272,14 @@ export function GroupsPanel() {
             }
           }}
           group={dialog.group}
-          matrix={PERMISSION_MATRIX}
-          onSubmit={submitGroup}
+          matrix={matrix}
+          onSubmit={(input) =>
+            submitGroup({ groupId: dialog.group?.id ?? null, ...input })
+          }
         />
       )}
 
-      <AlertDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeleteTarget(null);
-          }
-        }}
-      >
+      <AlertDialog open={isDeleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogMedia>
@@ -330,7 +292,10 @@ export function GroupsPanel() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{tCommon("cancel")}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmDelete}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => void confirmDelete()}
+            >
               {t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
