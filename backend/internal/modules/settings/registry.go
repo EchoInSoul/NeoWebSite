@@ -20,6 +20,24 @@ var builtinRegistry = []Group{
 		Name: "register",
 		Items: []Definition{
 			{Name: "enabled", Type: FieldTypeBool, Default: true, Public: true},
+			{Name: "default_group", Type: FieldTypeString, Default: "user"},
+			{Name: "email_domain_control_enabled", Type: FieldTypeBool, Default: false},
+			{Name: "allowed_email_domains", Type: FieldTypeString, Default: ""},
+			{Name: "email_verification_enabled", Type: FieldTypeBool, Default: false},
+		},
+	},
+	{
+		Name: "auth",
+		Items: []Definition{
+			{Name: "password_requirements_enabled", Type: FieldTypeBool, Default: false},
+			{Name: "password_min_length", Type: FieldTypeNumber, Default: int64(8)},
+			{Name: "password_complexity", Type: FieldTypeString, Default: ""},
+			{Name: "session_max_age_enabled", Type: FieldTypeBool, Default: false},
+			{Name: "session_max_age_days", Type: FieldTypeNumber, Default: int64(7)},
+			{Name: "totp_enabled", Type: FieldTypeBool, Default: false},
+			{Name: "password_reset_enabled", Type: FieldTypeBool, Default: false},
+			{Name: "captcha_enabled", Type: FieldTypeBool, Default: false},
+			{Name: "captcha_provider", Type: FieldTypeString, Default: ""},
 		},
 	},
 }

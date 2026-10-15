@@ -317,6 +317,78 @@ func TestSettingsPatchSiteTitleReadsBackPublicly(t *testing.T) {
 	}
 }
 
+func TestSettingsAdminReadsRegisterDefaults(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/settings/register", nil)
+	expectStatus(t, resp, http.StatusOK)
+	group, values := decodeGroup(t, resp)
+	if group != "register" {
+		t.Fatalf("group = %q, want register", group)
+	}
+	if len(values) != 5 {
+		t.Fatalf("register values = %v, want the five defaults", values)
+	}
+	if values["enabled"] != true {
+		t.Fatalf("register.enabled = %v, want true", values["enabled"])
+	}
+	if values["default_group"] != "user" {
+		t.Fatalf("register.default_group = %v, want user", values["default_group"])
+	}
+	if values["email_domain_control_enabled"] != false || values["email_verification_enabled"] != false {
+		t.Fatalf("register flags = %v, want false", values)
+	}
+	if values["allowed_email_domains"] != "" {
+		t.Fatalf("register.allowed_email_domains = %v, want empty", values["allowed_email_domains"])
+	}
+}
+
+func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "auth")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/settings/auth", nil)
+	expectStatus(t, resp, http.StatusOK)
+	group, values := decodeGroup(t, resp)
+	if group != "auth" {
+		t.Fatalf("group = %q, want auth", group)
+	}
+	if len(values) != 9 {
+		t.Fatalf("auth values = %v, want the nine defaults", values)
+	}
+	if values["session_max_age_days"] != float64(7) {
+		t.Fatalf("auth.session_max_age_days = %v, want 7", values["session_max_age_days"])
+	}
+	if values["password_min_length"] != float64(8) {
+		t.Fatalf("auth.password_min_length = %v, want 8", values["password_min_length"])
+	}
+	if values["captcha_provider"] != "" {
+		t.Fatalf("auth.captcha_provider = %v, want empty", values["captcha_provider"])
+	}
+
+	patch := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"session_max_age_days": 14})
+	expectStatus(t, patch, http.StatusOK)
+	_, values = decodeGroup(t, patch)
+	if values["session_max_age_days"] != float64(14) {
+		t.Fatalf("patched session_max_age_days = %v, want 14", values["session_max_age_days"])
+	}
+	if values["password_min_length"] != float64(8) {
+		t.Fatalf("untouched password_min_length = %v, want 8", values["password_min_length"])
+	}
+
+	after := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/settings/auth", nil)
+	expectStatus(t, after, http.StatusOK)
+	_, values = decodeGroup(t, after)
+	if values["session_max_age_days"] != float64(14) {
+		t.Fatalf("readback session_max_age_days = %v, want 14", values["session_max_age_days"])
+	}
+}
+
 func TestSettingsPatchTurnsRegistrationOff(t *testing.T) {
 	db := testDB(t)
 	resetGroups(t, db, "register")

@@ -6,6 +6,33 @@ import (
 	"testing"
 )
 
+type wantItem struct {
+	name   string
+	typ    FieldType
+	def    any
+	public bool
+}
+
+func assertDefinitions(t *testing.T, items map[string]Definition, wants []wantItem) {
+	t.Helper()
+
+	for _, want := range wants {
+		def, ok := items[want.name]
+		if !ok {
+			t.Fatalf("missing item %s", want.name)
+		}
+		if def.Type != want.typ {
+			t.Fatalf("item %s type = %v, want %v", want.name, def.Type, want.typ)
+		}
+		if !reflect.DeepEqual(def.Default, want.def) {
+			t.Fatalf("item %s default = %#v, want %#v", want.name, def.Default, want.def)
+		}
+		if def.Public != want.public {
+			t.Fatalf("item %s public = %v, want %v", want.name, def.Public, want.public)
+		}
+	}
+}
+
 func recipeGroups() []Group {
 	return []Group{
 		{
@@ -65,6 +92,31 @@ func TestBuiltinRegistryShape(t *testing.T) {
 			t.Fatalf("site.%s must be Public, otherwise the frontend cannot read it", name)
 		}
 	}
+
+	if len(reg.groups["register"]) != 5 {
+		t.Fatalf("register items = %d, want 5", len(reg.groups["register"]))
+	}
+	assertDefinitions(t, reg.groups["register"], []wantItem{
+		{name: "default_group", typ: FieldTypeString, def: "user"},
+		{name: "email_domain_control_enabled", typ: FieldTypeBool, def: false},
+		{name: "allowed_email_domains", typ: FieldTypeString, def: ""},
+		{name: "email_verification_enabled", typ: FieldTypeBool, def: false},
+	})
+
+	if len(reg.groups["auth"]) != 9 {
+		t.Fatalf("auth items = %d, want 9", len(reg.groups["auth"]))
+	}
+	assertDefinitions(t, reg.groups["auth"], []wantItem{
+		{name: "password_requirements_enabled", typ: FieldTypeBool, def: false},
+		{name: "password_min_length", typ: FieldTypeNumber, def: int64(8)},
+		{name: "password_complexity", typ: FieldTypeString, def: ""},
+		{name: "session_max_age_enabled", typ: FieldTypeBool, def: false},
+		{name: "session_max_age_days", typ: FieldTypeNumber, def: int64(7)},
+		{name: "totp_enabled", typ: FieldTypeBool, def: false},
+		{name: "password_reset_enabled", typ: FieldTypeBool, def: false},
+		{name: "captcha_enabled", typ: FieldTypeBool, def: false},
+		{name: "captcha_provider", typ: FieldTypeString, def: ""},
+	})
 }
 
 func TestBuiltinPublicAllowlist(t *testing.T) {
