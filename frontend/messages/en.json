@@ -146,7 +146,7 @@
     "title": "User groups",
     "noPermission": "You do not have permission to view user groups",
     "loadFailed": "Failed to load user groups. Please refresh and try again.",
-    "newGroup": "New group",
+    "newGroup": "New",
     "preset": "Preset",
     "empty": "No groups yet",
     "columnName": "Group",

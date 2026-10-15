@@ -215,12 +215,12 @@ export function GroupsPanel({
     <>
       <Card size="none">
         <ConsoleListToolbar
-          end={
+          start={
             canEdit ? (
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="default"
                 disabled={isListLocked}
                 onClick={() => openDialog(null)}
               >
