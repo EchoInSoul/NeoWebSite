@@ -41,6 +41,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   try {
     const response = await fetch(`${backendUrl}/api/v1/public/settings`, {
       next: { revalidate: 60 },
+      signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
       throw new Error(
