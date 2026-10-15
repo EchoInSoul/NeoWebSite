@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -60,6 +61,8 @@ export function ConsoleSidebarNav() {
   const ts = useTranslations("settings");
   const pathname = usePathname();
 
+  const settingsEntryRef = useRef<HTMLAnchorElement>(null);
+
   const routePanel = resolvePanel(pathname);
   const [displayedPanel, setDisplayedPanel] = useState<PanelKey>(routePanel);
   const [syncedRoutePanel, setSyncedRoutePanel] =
@@ -97,7 +100,15 @@ export function ConsoleSidebarNav() {
       title: t("settings"),
       tooltip: t("backToConsole"),
       groupLabel: t("settings"),
-      back: { kind: "button", onClick: () => setDisplayedPanel("main") },
+      back: {
+        kind: "button",
+        onClick: () => {
+          flushSync(() => {
+            setDisplayedPanel("main");
+          });
+          settingsEntryRef.current?.focus();
+        },
+      },
       items: [
         {
           href: SETTINGS_GENERAL_HREF,
@@ -117,6 +128,7 @@ export function ConsoleSidebarNav() {
               isActive={displayedPanel === "main" && routePanel === "settings"}
               render={
                 <Link
+                  ref={settingsEntryRef}
                   href={SETTINGS_GENERAL_HREF}
                   onClick={() => setDisplayedPanel("settings")}
                 />
