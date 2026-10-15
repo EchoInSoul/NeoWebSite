@@ -252,22 +252,68 @@ func TestSettingsGetForbiddenForPlainUser(t *testing.T) {
 
 func TestSettingsPublicGetAnonymously(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetGroups(t, db, "register", "site")
 	ts := newSettingsTestApp(t, db)
 
 	resp := doJSON(t, &http.Client{}, http.MethodGet, ts.URL+"/api/v1/public/settings", nil)
 	expectStatus(t, resp, http.StatusOK)
 
 	items := decodePublicItems(t, resp)
-	if len(items) != 1 {
-		t.Fatalf("public items = %v, want only the register group", items)
+	if len(items) != 2 {
+		t.Fatalf("public items = %v, want the site and register groups", items)
 	}
-	if items[0]["group"] != "register" {
-		t.Fatalf("group = %v, want register", items[0]["group"])
+	if items[0]["group"] != "site" {
+		t.Fatalf("group = %v, want site first in registry order", items[0]["group"])
 	}
-	values, ok := items[0]["values"].(map[string]any)
+	siteValues, ok := items[0]["values"].(map[string]any)
+	if !ok {
+		t.Fatalf("site values = %v, want an object", items[0]["values"])
+	}
+	if len(siteValues) != 5 {
+		t.Fatalf("site values = %v, want exactly the five defaults", items[0]["values"])
+	}
+	for _, name := range []string{"title", "subtitle", "description", "keywords", "url"} {
+		if siteValues[name] != "" {
+			t.Fatalf("site.%s = %v, want the empty default", name, siteValues[name])
+		}
+	}
+	if items[1]["group"] != "register" {
+		t.Fatalf("group = %v, want register", items[1]["group"])
+	}
+	values, ok := items[1]["values"].(map[string]any)
 	if !ok || values["enabled"] != true {
-		t.Fatalf("values = %v, want enabled true merged from default", items[0]["values"])
+		t.Fatalf("values = %v, want enabled true merged from default", items[1]["values"])
+	}
+}
+
+func TestSettingsPatchSiteTitleReadsBackPublicly(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register", "site")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/site", map[string]any{"title": "我的博客"})
+	expectStatus(t, resp, http.StatusOK)
+	group, values := decodeGroup(t, resp)
+	if group != "site" {
+		t.Fatalf("group = %q, want site", group)
+	}
+	if values["title"] != "我的博客" {
+		t.Fatalf("site.title = %v, want the written title", values["title"])
+	}
+	if values["subtitle"] != "" {
+		t.Fatalf("site.subtitle = %v, want the untouched empty default", values["subtitle"])
+	}
+
+	public := doJSON(t, &http.Client{}, http.MethodGet, ts.URL+"/api/v1/public/settings", nil)
+	expectStatus(t, public, http.StatusOK)
+	items := decodePublicItems(t, public)
+	if len(items) != 2 || items[0]["group"] != "site" {
+		t.Fatalf("public items = %v, want site first then register", items)
+	}
+	siteValues, ok := items[0]["values"].(map[string]any)
+	if !ok || siteValues["title"] != "我的博客" {
+		t.Fatalf("public site values = %v, want the written title", items[0]["values"])
 	}
 }
 

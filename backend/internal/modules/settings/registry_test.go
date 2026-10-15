@@ -1,11 +1,15 @@
 package settings
 
-import "testing"
+import (
+	"reflect"
+	"sort"
+	"testing"
+)
 
 func recipeGroups() []Group {
 	return []Group{
 		{
-			Name: "site",
+			Name: "demo",
 			Items: []Definition{
 				{Name: "title", Type: FieldTypeString, Default: "我的博客"},
 				{Name: "port", Type: FieldTypeNumber, Default: int64(8080)},
@@ -20,7 +24,7 @@ func TestRegistryRecipeShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recipe-shaped registry rejected: %v", err)
 	}
-	def, ok := reg.groups["site"]["port"]
+	def, ok := reg.groups["demo"]["port"]
 	if !ok || def.Type != FieldTypeNumber || def.Default.(int64) != 8080 {
 		t.Fatalf("recipe item lookup wrong: %+v ok=%v", def, ok)
 	}
@@ -41,6 +45,26 @@ func TestBuiltinRegistryShape(t *testing.T) {
 	if !def.Public {
 		t.Fatal("register.enabled must be Public, otherwise the frontend cannot read the signup gate")
 	}
+
+	siteItems, ok := reg.groups["site"]
+	if !ok {
+		t.Fatal("builtin registry missing the site group")
+	}
+	if len(siteItems) != 5 {
+		t.Fatalf("site items = %d, want 5", len(siteItems))
+	}
+	for _, name := range []string{"title", "subtitle", "description", "keywords", "url"} {
+		def, ok := siteItems[name]
+		if !ok {
+			t.Fatalf("builtin registry missing site.%s", name)
+		}
+		if def.Type != FieldTypeString || def.Default.(string) != "" {
+			t.Fatalf("site.%s = %+v, want string default \"\"", name, def)
+		}
+		if !def.Public {
+			t.Fatalf("site.%s must be Public, otherwise the frontend cannot read it", name)
+		}
+	}
 }
 
 func TestBuiltinPublicAllowlist(t *testing.T) {
@@ -57,8 +81,17 @@ func TestBuiltinPublicAllowlist(t *testing.T) {
 			}
 		}
 	}
-	if len(public) != 1 || public[0] != "register.enabled" {
-		t.Fatalf("public items = %v, want [register.enabled] — marking a setting public exposes it anonymously", public)
+	sort.Strings(public)
+	want := []string{
+		"register.enabled",
+		"site.description",
+		"site.keywords",
+		"site.subtitle",
+		"site.title",
+		"site.url",
+	}
+	if !reflect.DeepEqual(public, want) {
+		t.Fatalf("public items = %v, want %v — marking a setting public exposes it anonymously", public, want)
 	}
 }
 

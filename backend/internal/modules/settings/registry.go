@@ -7,6 +7,16 @@ import (
 
 var builtinRegistry = []Group{
 	{
+		Name: "site",
+		Items: []Definition{
+			{Name: "title", Type: FieldTypeString, Default: "", Public: true},
+			{Name: "subtitle", Type: FieldTypeString, Default: "", Public: true},
+			{Name: "description", Type: FieldTypeString, Default: "", Public: true},
+			{Name: "keywords", Type: FieldTypeString, Default: "", Public: true},
+			{Name: "url", Type: FieldTypeString, Default: "", Public: true},
+		},
+	},
+	{
 		Name: "register",
 		Items: []Definition{
 			{Name: "enabled", Type: FieldTypeBool, Default: true, Public: true},
