@@ -269,13 +269,16 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 	if !ok {
 		t.Fatalf("site values = %v, want an object", items[0]["values"])
 	}
-	if len(siteValues) != 5 {
-		t.Fatalf("site values = %v, want exactly the five defaults", items[0]["values"])
+	if len(siteValues) != 6 {
+		t.Fatalf("site values = %v, want exactly the six defaults", items[0]["values"])
 	}
 	for _, name := range []string{"title", "subtitle", "description", "keywords", "url"} {
 		if siteValues[name] != "" {
 			t.Fatalf("site.%s = %v, want the empty default", name, siteValues[name])
 		}
+	}
+	if siteValues["block_search_engines"] != false {
+		t.Fatalf("site.block_search_engines = %v, want the false default", siteValues["block_search_engines"])
 	}
 	if items[1]["group"] != "register" {
 		t.Fatalf("group = %v, want register", items[1]["group"])
@@ -286,13 +289,13 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 	}
 }
 
-func TestSettingsPatchSiteTitleReadsBackPublicly(t *testing.T) {
+func TestSettingsPatchSiteReadsBackPublicly(t *testing.T) {
 	db := testDB(t)
 	resetGroups(t, db, "register", "site")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
-	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/site", map[string]any{"title": "我的博客"})
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/site", map[string]any{"title": "我的博客", "block_search_engines": true})
 	expectStatus(t, resp, http.StatusOK)
 	group, values := decodeGroup(t, resp)
 	if group != "site" {
@@ -300,6 +303,9 @@ func TestSettingsPatchSiteTitleReadsBackPublicly(t *testing.T) {
 	}
 	if values["title"] != "我的博客" {
 		t.Fatalf("site.title = %v, want the written title", values["title"])
+	}
+	if values["block_search_engines"] != true {
+		t.Fatalf("site.block_search_engines = %v, want the written true", values["block_search_engines"])
 	}
 	if values["subtitle"] != "" {
 		t.Fatalf("site.subtitle = %v, want the untouched empty default", values["subtitle"])
@@ -312,8 +318,8 @@ func TestSettingsPatchSiteTitleReadsBackPublicly(t *testing.T) {
 		t.Fatalf("public items = %v, want site first then register", items)
 	}
 	siteValues, ok := items[0]["values"].(map[string]any)
-	if !ok || siteValues["title"] != "我的博客" {
-		t.Fatalf("public site values = %v, want the written title", items[0]["values"])
+	if !ok || siteValues["title"] != "我的博客" || siteValues["block_search_engines"] != true {
+		t.Fatalf("public site values = %v, want the written title and bool", items[0]["values"])
 	}
 }
 

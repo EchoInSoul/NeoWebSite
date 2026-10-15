@@ -14,6 +14,7 @@ var builtinRegistry = []Group{
 			{Name: "description", Type: FieldTypeString, Default: "", Public: true},
 			{Name: "keywords", Type: FieldTypeString, Default: "", Public: true},
 			{Name: "url", Type: FieldTypeString, Default: "", Public: true},
+			{Name: "block_search_engines", Type: FieldTypeBool, Default: false, Public: true},
 		},
 	},
 	{

@@ -77,8 +77,8 @@ func TestBuiltinRegistryShape(t *testing.T) {
 	if !ok {
 		t.Fatal("builtin registry missing the site group")
 	}
-	if len(siteItems) != 5 {
-		t.Fatalf("site items = %d, want 5", len(siteItems))
+	if len(siteItems) != 6 {
+		t.Fatalf("site items = %d, want 6", len(siteItems))
 	}
 	for _, name := range []string{"title", "subtitle", "description", "keywords", "url"} {
 		def, ok := siteItems[name]
@@ -92,6 +92,9 @@ func TestBuiltinRegistryShape(t *testing.T) {
 			t.Fatalf("site.%s must be Public, otherwise the frontend cannot read it", name)
 		}
 	}
+	assertDefinitions(t, siteItems, []wantItem{
+		{name: "block_search_engines", typ: FieldTypeBool, def: false, public: true},
+	})
 
 	if len(reg.groups["register"]) != 5 {
 		t.Fatalf("register items = %d, want 5", len(reg.groups["register"]))
@@ -136,6 +139,7 @@ func TestBuiltinPublicAllowlist(t *testing.T) {
 	sort.Strings(public)
 	want := []string{
 		"register.enabled",
+		"site.block_search_engines",
 		"site.description",
 		"site.keywords",
 		"site.subtitle",
