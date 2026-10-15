@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-10-15 · 注册与认证设置组（register 扩充 + auth 新增；纯数据）（0.20.0）
+
+**版本**：后端 0.19.0 → **0.20.0**（minor）。零迁移、零新接口、零新依赖、前端零改动——生产代码改动只有设置清单：`register` 组加 4 项、新建 `auth` 组 9 项。spec：`docs/superpowers/specs/2026-10-15-neoblog-auth-settings-design.md`；实施计划：`docs/superpowers/plans/2026-10-15-neoblog-auth-settings.md`。
+
+**动机**：用户点名加一批「注册与认证」字段，口径是**只填字段、不接实现**——值能存能读，但不接邮件、不让会话真过期、不验验证码。字段与 D 盘 HaoBlog「认证设置」页逐项对应；分组与粒度按用户裁定：拆 `register` + `auth` 两组、沿用 `register/enabled` 做注册总闸、密码要求拆长度 + 复杂度、会话有效期按天默认 7。
+
+**口径**：
+
+- `register` 组五项：`enabled`（总闸，公开）+ `default_group`（默认 `"user"`）、`email_domain_control_enabled`、`allowed_email_domains`（英文逗号分隔）、`email_verification_enabled`。
+- `auth` 组九项：`password_requirements_enabled`、`password_min_length`（默认 `8`）、`password_complexity`、`session_max_age_enabled`、`session_max_age_days`（默认 `7`，单位天）、`totp_enabled`、`password_reset_enabled`、`captcha_enabled`、`captcha_provider`。
+- 新增 13 项**全部非公开**：公开端点负载零变化（仍 `site` 五项 + `register.enabled`）。
+- 与 D 盘的三处口径差：`password_requirements_enabled` 默认 false（D 为 true）；`session_max_age_days` 存天（D 存小时 168）；`captcha_provider` 默认 `""`（D 为 selfhosted）。
+- 不做校验（枚举 / 范围 / 长度）；不加 Turnstile 密钥两项（用户清单未含；secret 类型机制也没有）。
+
+**测试与变异自检**：形状断言扩两组成员（名字 / 类型 / 默认值 / 非公开逐项）+ 两条 admin 用例（`register` 默认读、`auth` 默认读 + 写回）。变异自检三条：
+
+| # | 变异 | 实测红 |
+| --- | --- | --- |
+| ① | `session_max_age_days` 默认改 30 | {形状（default = 30, want 7）、auth 往返（= 30, want 7）} |
+| ② | `captcha_enabled` 误标 `Public` | {白名单（7 项 vs 6）、形状（public = true, want false）、匿名公开读（3 组 vs 2）、站点标题公开读（3 组 vs 2）——四条全红} |
+| ③ | `default_group` 挪去 `auth` | {形状（register items = 4）、register 默认读（4 项）} |
+
+**已知缺口**：13 项全无消费方（实现接线是后续轮）；`default_group` / `captcha_provider` 无取值约束；`password_min_length` 无范围校验；控制台界面未做。
+
+**提交状态**：本轮按批入库（① 代码+测试 → ② spec/计划 → ③ README 与 DEVLOG → ④ 版本进位，共 4 个提交，均未推送）。
+
+---
+
 ## 2026-10-15 · 站点设置组 site（0.19.0）
 
 **版本**：后端 0.18.0 → **0.19.0**（minor）。零迁移、零新接口、零新依赖、前端零改动——唯一生产代码改动是设置清单加一个组。spec：`docs/superpowers/specs/2026-10-15-neoblog-site-settings-design.md`；实施计划：`docs/superpowers/plans/2026-10-15-neoblog-site-settings.md`。
