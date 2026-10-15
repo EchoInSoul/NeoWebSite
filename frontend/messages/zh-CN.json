@@ -45,6 +45,8 @@
     "passwordMinLength": "密码最短长度",
     "passwordComplexity": "密码复杂度",
     "siteGroup": "站点",
+    "iconGroup": "图标",
+    "seoGroup": "SEO",
     "siteSettings": "站点设置",
     "siteTitle": "站点标题",
     "siteSubtitle": "站点副标题",

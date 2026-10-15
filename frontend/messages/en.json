@@ -45,6 +45,8 @@
     "passwordMinLength": "Minimum password length",
     "passwordComplexity": "Password complexity",
     "siteGroup": "Site",
+    "iconGroup": "Icon",
+    "seoGroup": "SEO",
     "siteSettings": "Site settings",
     "siteTitle": "Site title",
     "siteSubtitle": "Site subtitle",
