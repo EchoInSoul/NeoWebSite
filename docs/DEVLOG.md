@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-10-15 · 控制台「常规」设置页接后端（site 组六键，纯前端）
+
+**范围**：纯前端，后端零改动，零新依赖。spec：`docs/superpowers/specs/2026-10-15-neoblog-settings-general-wiring-design.md`；计划：`docs/superpowers/plans/2026-10-15-neoblog-settings-general-wiring.md`。
+
+**动机**：常规页（`/console/settings/general`）自 f512409 起是纯 UI——六行设置全是本地 state、初值空串，「屏蔽搜索引擎」开关 disabled；后端 `site` 组六键齐备（0.19.0 五项 + 0.20.1 `block_search_engines`）但页面读写都没接。本轮把它接到"读到真值、改完能存、存完是真值"。
+
+**本轮口径（D1–D9 摘要）**：
+
+- **读**：服务端直读（`lib/admin-settings.ts`：读 cookie → 带 cookie 转发 `GET /api/v1/admin/settings/site` → 形状校验，`cache: "no-store"`），值作 props 下传；不做客户端 `useEffect` 拉取。
+- **写**：右下角悬浮保存（`ConsoleFloatingSaveButton`，Ctrl/Cmd+S 已内置）＋ 脏值比对，**只 PATCH 改动过的键**（空串变化、开关双向都算变化）；成功后以响应 values 重置基线 + `router.refresh()`。
+- **读失败三态**：403 →「无权查看设置」；401 / 5xx / 断网 / 形状坏 →「设置读取失败」；**两种都不渲染表单**（不变量：读失败路径不存在可保存的表单，杜绝"空基线保存"把真实配置清空）。
+- 纯形状独立成 `lib/site-settings.ts`（零 import，服务端读与客户端存共用同一套解析；键名映射 `blockSearchEngines → block_search_engines` 单点）；`block_search_engines` 开关解禁；Logo / 图标维持 disabled（无键、无上传接口）；不校验、不 trim，空串是合法值。
+
+**验证（离线，本机）**：
+
+- 纯形状模块走"编译成 JS + node 断言"（脚本在台账工作区、不入库）：**RED**（模块不存在，`TS6053`）→ **GREEN**（`site-settings checks: PASS`；断言覆盖解析失败面、多余键忽略、空串变化、布尔双向、键名映射）。
+- 变异自检两条：① 让"空串变化"被跳过 → 红（`{}` vs `{ title: '' }`）；② 键名映射改 `blockSearchEngines` → 红（`{blockSearchEngines:true}` vs `{block_search_engines:true}`）；均已还原复绿。
+- 静态门禁：`tsc --noEmit` ✓、`eslint` **0 error**（剩 2 条 `sonner.tsx` 存量 warning，非本轮引入）、`prettier --check` ✓；取证 grep：表单内 `useState` 0 处、`ConsoleFloatingSaveButton` 2 处（import + 使用）、蛇形键名只出现在 `lib/site-settings.ts`。
+- **运行期未验**（浏览器 / 接口一律不铺，用户口径）：读路径与保存闭环交用户实机验收。
+
+**过程发现（值得后续点名）**：`frontend/.scratch/` 只被 git 忽略，**仍被 `npm run lint` 与 `npm run format:check` 扫描**——断言脚本放进去直接让门禁红（`require()` 撞 `@typescript-eslint/no-require-imports`），本轮把脚本挪到台账工作区 `.superpowers/sdd/…`（在 `frontend/` 之外，eslint / prettier 都扫不到）。该目录原只靠本机 `.git/info/exclude` 忽略（不随仓库分发），随本轮补进**新建的仓库根 `.gitignore`**，新克隆同样忽略。要不要给 `.scratch` 补 eslint / prettier ignore，未做、待点名。
+
+**已知缺口**：
+
+- **读路径只能用户实机诊断**：403 →「无权查看设置」= cookie 转发通；「设置读取失败」= 转发 / 网络 / 解析坏了。
+- **happy path 的 owner 账号**：实现时开发库没有 owner（冒烟账号是普通用户）→ 默认只验 403 路径；同日按用户点名将其本人账号 `366247714@qq.com` 提权为「所有者」（照 README 的手工指定口径，固定 UUID `…0001`），完整闭环改为他本人实机验；403 路径仍可用 `gate-check@example.com` 验。
+- **未保存离开无守卫**（无 `beforeunload` / 路由拦截，与个人资料页一致，登记为债务）；**多标签页后写覆盖**（无版本号 / ETag，部分更新只在改过的键之间互相盖，不做乐观锁）。
+- **无测试运行器**（沿用既有缺口，spec §5 B5）：前端防回归 = 静态门禁 + 一次性离线断言 + 用户实机验收；**不校验长度 / 格式**（对齐后端 site 组 D7）。
+
+**提交状态**：本轮按批入库（① `lib/site-settings.ts` 纯形状模块 → ② 服务端读取 + 受控表单 + 保存 hook + 两份 messages 的接线提交（page 与表单 / hook 互相引用，拆开会留下编译不过的中间提交）→ ③ spec / 计划两份文档 → ④ 本节 + 根 `.gitignore`，共 4 个提交，均未推送）。
+
+---
+
 ## 2026-10-15 · 站点设置组 site 扩充：屏蔽搜索引擎（0.20.1）
 
 **版本**：后端 0.20.0 → **0.20.1**（patch）。零迁移、零新接口、零新依赖、前端零改动——生产代码改动只有设置清单 `site` 组加一项。用户点名「先补后端键」、按「直接开始修改」口径执行，**无 spec / 计划文档**；版本按用户裁定的**小进位**（一个布尔设置不动 minor）。
