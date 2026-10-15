@@ -31,6 +31,7 @@ func TestRegistryMatchesSpec(t *testing.T) {
 		{"weak_password", ErrWeakPassword, TypeInvalidRequest, "weak_password", http.StatusBadRequest, nil},
 		{"password_unchanged", ErrPasswordUnchanged, TypeInvalidRequest, "password_unchanged", http.StatusBadRequest, strPtr("new_password")},
 		{"invalid_permission", ErrInvalidPermission, TypeInvalidRequest, "invalid_permission", http.StatusBadRequest, nil},
+		{"email_domain_not_allowed", ErrEmailDomainNotAllowed, TypeInvalidRequest, "email_domain_not_allowed", http.StatusBadRequest, strPtr("email")},
 		{"invalid_credentials", ErrInvalidCredentials, TypeAuthentication, "invalid_credentials", http.StatusUnauthorized, nil},
 		{"unauthorized", ErrUnauthorized, TypeAuthentication, "unauthorized", http.StatusUnauthorized, nil},
 		{"forbidden", ErrForbidden, TypePermission, "forbidden", http.StatusForbidden, nil},
@@ -46,6 +47,7 @@ func TestRegistryMatchesSpec(t *testing.T) {
 		{"group_name_taken", ErrGroupNameTaken, TypeConflict, "group_name_taken", http.StatusConflict, strPtr("name")},
 		{"group_not_empty", ErrGroupNotEmpty, TypeConflict, "group_not_empty", http.StatusConflict, nil},
 		{"last_owner", ErrLastOwner, TypeConflict, "last_owner", http.StatusConflict, nil},
+		{"setting_conflict", ErrSettingConflict, TypeConflict, "setting_conflict", http.StatusConflict, nil},
 		{"mail_delivery_failed", ErrMailDeliveryFailed, TypeServer, "mail_delivery_failed", http.StatusInternalServerError, nil},
 		{"service_unavailable", ErrServiceUnavailable, TypeServer, "service_unavailable", http.StatusServiceUnavailable, nil},
 		{"internal_error", ErrInternal, TypeServer, "internal_error", http.StatusInternalServerError, nil},
@@ -248,20 +250,20 @@ func TestDatabaseOutageMapsToServiceUnavailable(t *testing.T) {
 
 func TestRegistryIntegrity(t *testing.T) {
 	all := []*Error{
-		ErrInvalidRequest, ErrWeakPassword, ErrPasswordUnchanged, ErrInvalidPermission,
+		ErrInvalidRequest, ErrWeakPassword, ErrPasswordUnchanged, ErrInvalidPermission, ErrEmailDomainNotAllowed,
 		ErrMethodNotAllowed,
 		ErrInvalidCredentials, ErrUnauthorized, ErrTwoFactorRequired, ErrTwoFactorInvalidCode,
 		ErrTwoFactorLocked, ErrForbidden, ErrGrantForbidden,
 		ErrOwnerProtected, ErrCannotModifySelf, ErrRegistrationClosed, ErrNotFound, ErrPresetGroupLocked,
 		ErrEmailTaken, ErrNicknameTaken, ErrAlreadyTaken, ErrGroupNameTaken,
-		ErrGroupNotEmpty, ErrLastOwner, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
+		ErrGroupNotEmpty, ErrLastOwner, ErrSettingConflict, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
 		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrServiceUnavailable, ErrInternal,
 	}
-	if len(all) != 29 {
-		t.Fatalf("sentinel count = %d, want 29", len(all))
+	if len(all) != 31 {
+		t.Fatalf("sentinel count = %d, want 31", len(all))
 	}
-	if len(statusByCode) != 29 {
-		t.Fatalf("statusByCode entries = %d, want 29", len(statusByCode))
+	if len(statusByCode) != 31 {
+		t.Fatalf("statusByCode entries = %d, want 31", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,

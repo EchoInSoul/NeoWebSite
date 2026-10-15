@@ -38,6 +38,7 @@ var (
 	ErrWeakPassword            = &Error{Type: TypeInvalidRequest, Code: "weak_password"}
 	ErrPasswordUnchanged       = &Error{Type: TypeInvalidRequest, Code: "password_unchanged", Param: strPtr("new_password")}
 	ErrInvalidPermission       = &Error{Type: TypeInvalidRequest, Code: "invalid_permission"}
+	ErrEmailDomainNotAllowed   = &Error{Type: TypeInvalidRequest, Code: "email_domain_not_allowed", Param: strPtr("email")}
 	ErrMethodNotAllowed        = &Error{Type: TypeInvalidRequest, Code: "method_not_allowed"}
 	ErrInvalidCredentials      = &Error{Type: TypeAuthentication, Code: "invalid_credentials"}
 	ErrUnauthorized            = &Error{Type: TypeAuthentication, Code: "unauthorized"}
@@ -57,6 +58,7 @@ var (
 	ErrGroupNameTaken          = &Error{Type: TypeConflict, Code: "group_name_taken", Param: strPtr("name")}
 	ErrGroupNotEmpty           = &Error{Type: TypeConflict, Code: "group_not_empty"}
 	ErrLastOwner               = &Error{Type: TypeConflict, Code: "last_owner"}
+	ErrSettingConflict         = &Error{Type: TypeConflict, Code: "setting_conflict"}
 	ErrTwoFactorAlreadyEnabled = &Error{Type: TypeConflict, Code: "two_factor_already_enabled"}
 	ErrTwoFactorNotSetup       = &Error{Type: TypeConflict, Code: "two_factor_not_setup"}
 	ErrTwoFactorNotEnabled     = &Error{Type: TypeConflict, Code: "two_factor_not_enabled"}
@@ -70,6 +72,7 @@ var statusByCode = map[string]int{
 	"weak_password":              http.StatusBadRequest,
 	"password_unchanged":         http.StatusBadRequest,
 	"invalid_permission":         http.StatusBadRequest,
+	"email_domain_not_allowed":   http.StatusBadRequest,
 	"method_not_allowed":         http.StatusMethodNotAllowed,
 	"invalid_credentials":        http.StatusUnauthorized,
 	"unauthorized":               http.StatusUnauthorized,
@@ -89,6 +92,7 @@ var statusByCode = map[string]int{
 	"group_name_taken":           http.StatusConflict,
 	"group_not_empty":            http.StatusConflict,
 	"last_owner":                 http.StatusConflict,
+	"setting_conflict":           http.StatusConflict,
 	"two_factor_already_enabled": http.StatusConflict,
 	"two_factor_not_setup":       http.StatusConflict,
 	"two_factor_not_enabled":     http.StatusConflict,
