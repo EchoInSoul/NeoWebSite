@@ -122,7 +122,7 @@ export default async function robots(): Promise<MetadataRoute.Robots>
 - **B2 全部未配置时**：标题为空、无 description / keywords / OG——不兜底（用户点名）。浏览器标签会显示 URL，搜索结果摘要由搜索引擎自取；这是有意行为，不是缺陷。
 - **B3 拼装规则单点**：空段丢弃、`" - "` 连接只在 `composeSiteTitle` 一处；离线断言 + 变异自检钉住（不产生悬空分隔符）。
 - **B4 robots.txt 缓存的 API 口径**：Next 16 + `cacheComponents: true` 下 `revalidate` / fetch 缓存的具体组合以实现时 `next build` 验证为准；验收 = 改开关 ≤60 秒生效、非每请求取数。
-- **B5 后台标题与侧栏是「同键不同处」**：personalInfo / sessions / register 三页与侧栏共用同一文案键（改名自动同步）；general 页因标签名（站点设置）与侧栏名（常规）不同，是两个键——将来改名要改两处，登记。
+- **B5 四页的「标签 vs h1」谁跟谁同键不一致**：register 页的标签与 h1 共用 `settings.register`（改名自动同步）；profile / session / general 三页则是两处键——标签走侧栏键（`sidebar.personalInfo` / `sidebar.sessions` / 新键 `settings.siteSettings`），h1 各走 `uc.personalInfo` / `sessions.title` / `settings.general`——将来改名记得改两处。
 - **B6 后台页面会继承站点级 description / keywords / OG**（根 metadata 合并规则使然）：无实际影响（后台不进搜索引擎），不额外屏蔽。
 - **B7 `/console` 的 robots.txt disallow 是硬编码**：没有设置项控制；将来若换后台路由前缀要同步改。
 - **B8 无测试运行器**（沿用既有缺口）：防回归 = `tsc` / `eslint` / `prettier --check` + 离线纯函数断言（`.superpowers/sdd/…`，不入库）+ `next build`（验证路由配置）+ 用户实机验收。

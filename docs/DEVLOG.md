@@ -22,11 +22,11 @@
 
 **验证（离线，本机）**：纯模块离线断言 RED（模块不存在，`TS6053`）→ GREEN（`site-metadata checks: PASS`）；变异自检两条：① 标题朴素直拼 → 红（`'A - '` 悬空分隔符）；② 关键词裸 `split(",")` → 红（`' blog '` / 空串未清）；均已还原复绿。`tsc` / `eslint`（0 error，2 条 `sonner.tsx` 存量 warning）/ `prettier --check` 与本轮每次 **`next build`** 全程绿（build 是本轮缓存与路由配置的直接证据）。**运行期未验**——标签 / meta / robots 两态交用户实机。
 
-**评审后加固（当晚）**：独立代码评审（requesting-code-review，只读子代理）结论 Critical / Important 零、三条 Minor——① `siteBaseUrl` 补**协议白名单**（仅 http / https；离线断言先红（`javascript:alert(1)` 原实现会放行）后绿，已修）；② fetch 显式超时（一行）、③ spec §5 B5 措辞（纯文档）两处按用户口径**等会做**，未动。
+**评审后加固（当晚）**：独立代码评审（requesting-code-review，只读子代理）结论 Critical / Important 零、三条 Minor，**三条均已落地**——① `siteBaseUrl` 补**协议白名单**（仅 http / https；离线断言先红（`javascript:alert(1)` 原实现会放行）后绿）；② 公开设置读取补 **5 秒超时**（`AbortSignal.timeout(5000)`；离线检查先红（模拟"卡死后端"8 秒不返回）后绿（5014ms fail-open 返回空设置））；③ spec §5 B5 措辞按实际更正（register 页标签与 h1 同键、其余三页各持两处键）。
 
 **已知缺口**：① 注册闸随缓存 ≤60 秒延迟（用户接受）；② 全空配置 = 无标题无 description（不兜底，有意）；③ `settings.siteSettings`（标签）与 `settings.general`（侧栏 / h1）是两个键，将来改名要改两处；④ `/console` 的 disallow 硬编码在 `robots.ts`，换后台前缀要同步改；⑤ 无测试运行器（离线断言不入库）；⑥ 后台页面会继承站点级 description / OG（无实际影响）。
 
-**提交状态**：改动未提交，留在工作区待审（用户口径：先审后提）。建议分批：① `lib/site-metadata.ts` → ② `lib/public-settings.ts` 缓存 → ③ 根 layout → ④ `app/robots.ts` → ⑤ 控制台四页 + 两份 messages → ⑥ 本节 + 两份 spec / plan 文档。
+**提交状态**：本轮按批入库（① `lib/site-metadata.ts` → ② `lib/public-settings.ts` 缓存 → ③ 根 layout → ④ `app/robots.ts` → ⑤ 控制台四页 + 两份 messages → ⑥ 本节 + 两份 spec / plan 文档，共 6 个提交）；**评审后加固三条随后另成一小批**——均未推送。
 
 ---
 
