@@ -4,7 +4,33 @@
 
 ---
 
-## 2026-10-15 · 注册与认证设置组（register 扩充 + auth 新增；纯数据）（0.20.0）
+## 2026-10-15 · 站点设置组 site 扩充：屏蔽搜索引擎（0.20.1）
+
+**版本**：后端 0.20.0 → **0.20.1**（patch）。零迁移、零新接口、零新依赖、前端零改动——生产代码改动只有设置清单 `site` 组加一项。用户点名「先补后端键」、按「直接开始修改」口径执行，**无 spec / 计划文档**；版本按用户裁定的**小进位**（一个布尔设置不动 minor）。
+
+**动机**：前端控制台「常规」页（`/console/settings/general`，纯 UI 轮 f512409）有「屏蔽搜索引擎」开关行，但后端 `site` 组只有五项文字键、没有对应键，接不上；这一项是前端设置页接入后端键值的前置。口径对齐 D 盘 HaoBlog 的同名设置 `site.blockSearchEngines`（boolean、默认 false、`isPublic: true`——它的前台用它渲染 robots 元数据，见 `lib/theme/robots.ts`）。
+
+**口径**：
+
+- `site` 组加 `block_search_engines`：开关、默认 `false`、标 `Public: true`（前台要匿名读它决定 robots / meta，理由同 `register.enabled` 必须公开）。
+- 键名用蛇形 `block_search_engines`：本仓项名规则 `^[a-z][a-z0-9_]*$` 不收大写，不能照抄 D 盘的 camelCase。
+- `site` 组由此从全文字变成混合类型（五个 string + 一个 bool）；公开项集合由 6 项变 7 项（`GET /public/settings` 的 site 负载多一个键）。
+
+**测试同步**：形状断言 site 五 → 六项（新项单独走 `assertDefinitions`：类型 / 默认值 / 公开性）；公开白名单加 `site.block_search_engines`；匿名公开读用例断言六键（含新键默认 `false`）；「管理写 → 公开读」用例扩成 `title` + `block_search_engines` 双键同 patch 并改名 `TestSettingsPatchSiteReadsBackPublicly`（原名 `…TitleReadsBack…`；顺带覆盖 site 组的 bool 写入路径）。三条变异自检（逐条把代码改坏跑 settings 包确认红后还原）：
+
+| # | 变异 | 实测红 |
+| --- | --- | --- |
+| ① | 新项默认值 `false` → `true` | {形状（default = true, want false）、匿名公开读（= true, want the false default）} |
+| ② | 漏标 `Public` | {形状（public = false, want true）、公开白名单（少一项）、匿名公开读（五个键 vs 六个）、管理写公开读（公开负载里没有新键）——四条全红} |
+| ③ | 类型改 `FieldTypeString` | {形状（type = 1, want 3）、匿名公开读（空串 vs false）、管理写（PATCH 400 类型不符）} |
+
+**文档同步**：README 三处（模块对照表行、设置章节「当前清单项」、公开负载节选注记）。
+
+**已知缺口**：前端控制台「常规」页与前台 robots 渲染均未接（本轮零前端改动）；后端零消费方。
+
+**提交状态**：本轮按批入库（① 清单 + 测试 → ② README 与 DEVLOG → ③ 版本进位，共 3 个提交，均未推送）。
+
+---
 
 **版本**：后端 0.19.0 → **0.20.0**（minor）。零迁移、零新接口、零新依赖、前端零改动——生产代码改动只有设置清单：`register` 组加 4 项、新建 `auth` 组 9 项。spec：`docs/superpowers/specs/2026-10-15-neoblog-auth-settings-design.md`；实施计划：`docs/superpowers/plans/2026-10-15-neoblog-auth-settings.md`。
 
