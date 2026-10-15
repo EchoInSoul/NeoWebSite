@@ -1,6 +1,15 @@
+import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 
 import { RegisterSettingsForm } from "./register-settings-form";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("settings");
+
+  return {
+    title: t("register"),
+  };
+}
 
 export default async function SettingsRegisterPage() {
   const t = await getTranslations("settings");

@@ -1,8 +1,17 @@
+import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 
 import { getCurrentUserSessions } from "@/lib/user-sessions-server";
 
 import { SessionsPanel } from "./sessions-panel";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("sidebar");
+
+  return {
+    title: t("sessions"),
+  };
+}
 
 export default async function SessionsPage() {
   const t = await getTranslations("sessions");

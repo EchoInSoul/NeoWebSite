@@ -1,7 +1,16 @@
+import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 
 import { getAuthenticatedUser } from "@/lib/auth-session";
 import { ProfileForm } from "./profile-form";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("sidebar");
+
+  return {
+    title: t("personalInfo"),
+  };
+}
 
 export default async function PersonalInfoPage() {
   const t = await getTranslations("uc");

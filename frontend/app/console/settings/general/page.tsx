@@ -1,8 +1,17 @@
+import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 
 import { getSiteSettings } from "@/lib/admin-settings";
 
 import { SiteSettingsForm } from "./site-settings-form";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("settings");
+
+  return {
+    title: t("siteSettings"),
+  };
+}
 
 export default async function SettingsGeneralPage() {
   const t = await getTranslations("settings");
