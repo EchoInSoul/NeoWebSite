@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   CircleUserRound,
   ExternalLink,
@@ -62,6 +62,9 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
   const tCommon = useTranslations("common");
   const locale = useLocale();
   const router = useRouter();
+  const pathname = usePathname();
+  const isInUcPanel =
+    pathname === "/console/uc" || pathname.startsWith("/console/uc/");
   const [isSwitchingLocale, startLocaleSwitch] = useTransition();
   const { themeMode, setThemeMode } = useThemeMode();
   const { isSigningOut, signOut } = useSignout();
@@ -107,10 +110,12 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
             <span>{t("visitSite")}</span>
           </DropdownMenuItem>
 
-          <DropdownMenuItem render={<Link href="/console/uc" />}>
-            <CircleUserRound />
-            <span>{t("profile")}</span>
-          </DropdownMenuItem>
+          {!isInUcPanel ? (
+            <DropdownMenuItem render={<Link href="/console/uc" />}>
+              <CircleUserRound />
+              <span>{t("profile")}</span>
+            </DropdownMenuItem>
+          ) : null}
 
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
