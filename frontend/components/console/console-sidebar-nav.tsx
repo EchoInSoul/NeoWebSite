@@ -10,6 +10,7 @@ import {
   Settings,
   SlidersHorizontal,
   UserRoundPlus,
+  Users,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -33,6 +34,7 @@ const PANEL_PREFIXES = {
 
 const SETTINGS_GENERAL_HREF = `${PANEL_PREFIXES.settings}/general`;
 const SETTINGS_REGISTER_HREF = `${PANEL_PREFIXES.settings}/register`;
+const SETTINGS_GROUPS_HREF = `${PANEL_PREFIXES.settings}/groups`;
 
 type PanelKey = "main" | keyof typeof PANEL_PREFIXES;
 
@@ -122,6 +124,12 @@ export function ConsoleSidebarNav() {
           href: SETTINGS_REGISTER_HREF,
           label: ts("register"),
           icon: <UserRoundPlus />,
+          className: "mb-1",
+        },
+        {
+          href: SETTINGS_GROUPS_HREF,
+          label: ts("groups"),
+          icon: <Users />,
         },
       ],
     },
