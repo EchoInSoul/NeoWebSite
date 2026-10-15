@@ -9,6 +9,8 @@ import (
 const (
 	PermissionUsersView    = "system.users.view"
 	PermissionUsersEdit    = "system.users.edit"
+	PermissionRegisterView = "system.register.view"
+	PermissionRegisterEdit = "system.register.edit"
 	PermissionGroupsView   = "system.groups.view"
 	PermissionGroupsEdit   = "system.groups.edit"
 	PermissionSettingsView = "system.settings.view"
@@ -45,10 +47,12 @@ type PresetGroup struct {
 var catalog = []Permission{
 	{Key: PermissionUsersView, Name: "查看用户"},
 	{Key: PermissionUsersEdit, Name: "管理用户"},
-	{Key: PermissionGroupsView, Name: "查看用户组"},
-	{Key: PermissionGroupsEdit, Name: "管理用户组"},
 	{Key: PermissionSettingsView, Name: "查看设置"},
 	{Key: PermissionSettingsEdit, Name: "管理设置"},
+	{Key: PermissionRegisterView, Name: "查看用户注册"},
+	{Key: PermissionRegisterEdit, Name: "管理用户注册"},
+	{Key: PermissionGroupsView, Name: "查看用户组"},
+	{Key: PermissionGroupsEdit, Name: "管理用户组"},
 }
 
 var presetGroups = []PresetGroup{

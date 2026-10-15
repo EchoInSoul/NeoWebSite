@@ -30,8 +30,19 @@ func newController(service *Service) *controller {
 }
 
 func (c *controller) registerProtected(r *gin.RouterGroup) {
-	r.GET("/admin/settings/:group", guard.RequirePermission(rbac.PermissionSettingsView), c.getGroup)
-	r.PATCH("/admin/settings/:group", guard.RequirePermission(rbac.PermissionSettingsEdit), c.patchGroup)
+	r.GET("/admin/settings/:group", requireGroupPermission(rbac.PermissionSettingsView, rbac.PermissionRegisterView), c.getGroup)
+	r.PATCH("/admin/settings/:group", requireGroupPermission(rbac.PermissionSettingsEdit, rbac.PermissionRegisterEdit), c.patchGroup)
+}
+
+func requireGroupPermission(settingsPermission, registerPermission string) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		permission := settingsPermission
+		switch ctx.Param("group") {
+		case "register", "auth":
+			permission = registerPermission
+		}
+		guard.RequirePermission(permission)(ctx)
+	}
 }
 
 func (c *controller) register(r *gin.RouterGroup) {

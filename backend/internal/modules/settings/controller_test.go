@@ -195,6 +195,29 @@ func createUserInGroup(t *testing.T, db *database.Database, groupID uuid.UUID) u
 	return created.ID
 }
 
+func createGroupWithPermissions(t *testing.T, db *database.Database, label string, permissions []string) uuid.UUID {
+	t.Helper()
+
+	ctx := context.Background()
+	tag := fmt.Sprintf("%s-%d-%d", label, os.Getpid(), time.Now().UnixNano())
+	created, err := db.Client.Group.Create().SetName(tag).Save(ctx)
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Client.Group.DeleteOneID(created.ID).Exec(context.Background())
+	})
+	for _, permission := range permissions {
+		if _, err := db.Client.GroupPermission.Create().
+			SetGroupID(created.ID).
+			SetPermission(permission).
+			Save(ctx); err != nil {
+			t.Fatalf("create group permission: %v", err)
+		}
+	}
+	return created.ID
+}
+
 func TestSettingsGetAsOwner(t *testing.T) {
 	db := testDB(t)
 	resetGroups(t, db, "register")
@@ -248,6 +271,70 @@ func TestSettingsGetForbiddenForPlainUser(t *testing.T) {
 	if code := decodeErrorCode(t, resp); code != "forbidden" {
 		t.Fatalf("code = %q, want forbidden", code)
 	}
+}
+
+func TestSettingsGroupPermissionsSplitByGroup(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "register", "site", "auth")
+	ts := newSettingsTestApp(t, db)
+
+	registerGroupID := createGroupWithPermissions(t, db, "reg", []string{rbac.PermissionRegisterView, rbac.PermissionRegisterEdit})
+	settingsGroupID := createGroupWithPermissions(t, db, "nav", []string{rbac.PermissionSettingsView, rbac.PermissionSettingsEdit})
+
+	registerUser := seedClient(t, ts, createUserInGroup(t, db, registerGroupID))
+	settingsUser := seedClient(t, ts, createUserInGroup(t, db, settingsGroupID))
+
+	resp := doJSON(t, registerUser, http.MethodGet, ts.URL+"/api/v1/admin/settings/register", nil)
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	resp = doJSON(t, registerUser, http.MethodGet, ts.URL+"/api/v1/admin/settings/auth", nil)
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	resp = doJSON(t, registerUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": false})
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	resp = doJSON(t, registerUser, http.MethodGet, ts.URL+"/api/v1/admin/settings/site", nil)
+	expectStatus(t, resp, http.StatusForbidden)
+	if code := decodeErrorCode(t, resp); code != "forbidden" {
+		t.Fatalf("site as register user: code = %q, want forbidden", code)
+	}
+
+	resp = doJSON(t, settingsUser, http.MethodGet, ts.URL+"/api/v1/admin/settings/site", nil)
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	resp = doJSON(t, settingsUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/site", map[string]any{"title": "拆分测试"})
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	resp = doJSON(t, settingsUser, http.MethodGet, ts.URL+"/api/v1/admin/settings/register", nil)
+	expectStatus(t, resp, http.StatusForbidden)
+	if code := decodeErrorCode(t, resp); code != "forbidden" {
+		t.Fatalf("register as settings user: code = %q, want forbidden", code)
+	}
+
+	resp = doJSON(t, settingsUser, http.MethodGet, ts.URL+"/api/v1/admin/settings/auth", nil)
+	expectStatus(t, resp, http.StatusForbidden)
+	resp.Body.Close()
+
+	resp = doJSON(t, settingsUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": false})
+	expectStatus(t, resp, http.StatusForbidden)
+	resp.Body.Close()
+
+	resp = doJSON(t, registerUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"password_min_length": 10})
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	resp = doJSON(t, registerUser, http.MethodGet, ts.URL+"/api/v1/admin/settings/nope", nil)
+	expectStatus(t, resp, http.StatusForbidden)
+	resp.Body.Close()
+
+	resp = doJSON(t, settingsUser, http.MethodGet, ts.URL+"/api/v1/admin/settings/nope", nil)
+	expectStatus(t, resp, http.StatusNotFound)
+	resp.Body.Close()
 }
 
 func TestSettingsPublicGetAnonymously(t *testing.T) {
