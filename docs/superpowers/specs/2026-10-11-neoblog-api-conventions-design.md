@@ -392,7 +392,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 
 ### 7.3 code 词汇表（收编现有 token；此后只增不改义）
 
-19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；0.12.0 起新增 `registration_closed`（注册开关关闭，见设置 spec 与本轮 spec）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`，设置端点 `PATCH` 的项名与类型错误覆盖为出错项名：
+19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；0.12.0 起新增 `registration_closed`（注册开关关闭，见设置 spec 与本轮 spec）；0.20.3 起新增 `email_domain_not_allowed`（注册邮箱域名白名单拒绝，400 / `invalid_request_error`，param 默认 `email`）与 `setting_conflict`（设置写前组合校验不满足，409 / `conflict_error`，param 由设置端点覆盖为判定项名）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`，设置端点 `PATCH` 的项名与类型错误覆盖为出错项名：
 
 | code | HTTP | type | 默认 param | 场景 | 建议默认 message（注册表基线，可润色） |
 | --- | --- | --- | --- | --- | --- |
@@ -400,6 +400,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `weak_password` | 400 | `invalid_request_error` | 按端点（`password` / `new_password`） | 密码强度不足 | 密码强度不足 |
 | `password_unchanged` | 400 | `invalid_request_error` | `new_password` | 新旧密码相同 | 新密码不能与当前密码相同 |
 | `invalid_permission` | 400 | `invalid_request_error` | `permissions` / `extra_permissions` | 权限 key 不在目录 | 包含未知的权限项 |
+| `email_domain_not_allowed` | 400 | `invalid_request_error` | `email` | 域名控制开启且清单条目非空时，注册邮箱域名不在清单里（0.20.3 新增） | 该邮箱域名不允许注册 |
 | `method_not_allowed` | 405 | `invalid_request_error` | null | 路径存在但该路径未注册此方法（响应带 `Allow`；路径不存在仍用 `not_found`） | 请求方法不被支持 |
 | `invalid_credentials` | 401 | `authentication_error` | null | 登录凭证错误；改密的当前密码确认、2FA disable 与 recovery-codes 的密码确认也用它（`current_password_mismatch` 拆分按 §0 v1.3 暂不实施，见下） | 账号或密码不正确 |
 | `current_password_mismatch` | 400 | `invalid_request_error` | `current_password` | 改密时当前密码不匹配（用户已认证，仅请求值错误） | 当前密码不正确 |
@@ -420,6 +421,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `group_name_taken` | 409 | `conflict_error` | `name` | 组名重复 | 该组名已被使用 |
 | `group_not_empty` | 409 | `conflict_error` | null | 删有成员的自建组 | 组内仍有成员，无法删除 |
 | `last_owner` | 409 | `conflict_error` | null | 移出最后一个 owner | 至少需要保留一名所有者 |
+| `setting_conflict` | 409 | `conflict_error` | 设置端点覆盖为判定项名 | 设置写入后的最终组合不满足组级约束：开域名控制必须清单非空；`password_min_length` 取 8–64（0.20.3 新增）；param=判定项，未必是要改的那一项——域名规则下要补的是 `allowed_email_domains` | 该设置项与其他设置冲突 |
 | `two_factor_already_enabled` | 409 | `conflict_error` | null | 已启用还 setup / enable（必须先 disable） | 两步验证已启用 |
 | `two_factor_not_setup` | 409 | `conflict_error` | null | 没有 secret 就 enable / disable | 尚未生成两步验证密钥 |
 | `two_factor_not_enabled` | 409 | `conflict_error` | null | 未启用就再生成恢复码 | 两步验证尚未启用 |

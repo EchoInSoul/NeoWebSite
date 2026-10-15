@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.21.0
+当前版本：0.20.3
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -25,7 +25,7 @@
 | `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录（含 2FA 分叉）/ 登出 / 当前用户（`GET /users/me` 读、`PATCH /users/me` 改）/ 改密 / 两步验证；`Register`（公开）与 `RegisterProtected`（受保护）；`totp.go` + `secretbox.go` 承载 TOTP 窗匹配与 secret 加密 |
 | `internal/modules/access/*` | `access.module.ts` 等 | 用户组与权限：组 CRUD、用户管理接口、生效权限解析；全部挂在权限守卫下 |
 | `internal/modules/mail/*` | `@nestjs-modules/mailer`（对照位） | 邮件能力 + 管理端发信接口：`Mailer` 接口（Send / SendSync / Close）+ SMTP / 日志双实现 + `templates/` 模板；异步 `Send` 走后台队列重试，同步 `SendSync` 单次尝试（管理端即时反馈用）；`POST /admin/mail/messages` 挂守卫链 + 预设组守卫；`SMTP_HOST` 为空时降级为日志 |
-| `internal/modules/settings/*` | `@nestjs/config` + `config.controller.ts`（对照位） | 有路由模块：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；对外入口 `New(db) (*Module, error)`，能力挂 `m.Service`；管理侧 `GET / PATCH /admin/settings/:group`（按组挂权限点：`site` → `system.settings.view` / `.edit`，`register` / `auth` → `system.register.view` / `.edit`），公开侧 `GET /public/settings`（无鉴权，只出清单里标了 `Public` 的项）；响应统一为 `{group, values}` 记录、集合套 `items`；当前清单项 `site` 组六项（全公开）、`register` 组五项（注册总闸 `enabled` 公开 + 注册策略四项）与 `auth` 组九项（密码 / 会话 / 两步验证 / 人机验证，均非公开），加设置见「设置」章节配方 |
+| `internal/modules/settings/*` | `@nestjs/config` + `config.controller.ts`（对照位） | 有路由模块：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；对外入口 `New(db) (*Module, error)`，能力挂 `m.Service`；管理侧 `GET / PATCH /admin/settings/:group`（按组挂权限点：`site` → `system.settings.view` / `.edit`，`register` / `auth` → `system.register.view` / `.edit`），公开侧 `GET /public/settings`（无鉴权，只出清单里标了 `Public` 的项）；响应统一为 `{group, values}` 记录、集合套 `items`；当前清单项 `site` 组六项（全公开）、`register` 组五项（`enabled` 公开；`email_domain_control_enabled` / `allowed_email_domains` 已有消费方）与 `auth` 组九项（`password_requirements_enabled` / `password_min_length` 已有消费方，其余非公开），加设置见「设置」章节配方 |
 | `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）+ `RequirePresetGroup`（预设组白名单，owner / admin 这类不入权限目录的服务器级操作用）；常量 `auth.user_id` / `auth.identity` |
 | `internal/common/rbac` | `src/common`（权限目录） | 权限点目录与预设组常量（固定 UUID）；纯 Go，不依赖 gin / DB |
 | `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
@@ -276,9 +276,9 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 | `PATCH /api/v1/admin/settings/:group` | 同上两把钥匙的 `edit` 档（`system.settings.edit` / `system.register.edit`，隐含 `view`） | 更新后的组记录 |
 | `GET /api/v1/public/settings` | **无鉴权** | `{items: […]}`，只含**至少有一项标了 `Public` 的组**，且每组只出公开项 |
 
-管理侧未知组 404；请求体非法、项名不在清单、值类型不符 → 400（带 `param` = 项名）。owner / admin 由权限目录运行时全量授予全部权限点，无需数据迁移；自建组需显式授。公开侧按组点查**刻意不提供**——前台要读公开设置就一次取全，避免每加一项就多一个 fetcher。
+管理侧未知组 404；请求体非法、项名不在清单、值类型不符 → 400（带 `param` = 项名）；组合约束不满足（开域名控制必须清单非空、`password_min_length` 取 8–64）→ 409 `setting_conflict`（`param` = 判定项名，未必是要改的那一项）。owner / admin 由权限目录运行时全量授予全部权限点，无需数据迁移；自建组需显式授。公开侧按组点查**刻意不提供**——前台要读公开设置就一次取全，避免每加一项就多一个 fetcher。
 
-**当前清单项**：① `site` 组六项——`title` / `subtitle` / `description` / `keywords` / `url`（均为文字、默认空串）与 `block_search_engines`（开关、默认 `false`）；六项全部标 `Public`（供前台读站名、SEO 与 robots 元数据；`keywords` 存英文逗号分隔的单个字符串；后端暂无消费方）；② `register` 组五项——`enabled`（开关，默认 `true`，已标 `Public`）是注册总闸：`auth.Service.Register` 的第一句读它，为 `false` 时注册返回 403 `registration_closed`，登录与 `auth.CreateAdminUser` 不受它影响；另四项注册策略（`default_group` 默认 `"user"`、`email_domain_control_enabled`、`allowed_email_domains`、`email_verification_enabled`）均非公开、纯数据、暂无消费方；③ `auth` 组九项——`password_requirements_enabled`、`password_min_length`（默认 `8`）、`password_complexity`、`session_max_age_enabled`、`session_max_age_days`（默认 `7`，单位天）、`totp_enabled`、`password_reset_enabled`、`captcha_enabled`、`captcha_provider`，均非公开、纯数据、暂无消费方。前端 `lib/public-settings.ts` 读聚合端点，`/signup` 在关闭时直接 404、登录页隐掉注册入口；**读不到该端点时按 fail-open 处理**（照常出页面），与「后端连不上照常出页 + toast」的既有口径一致。关掉注册的实际操作（暂无界面）：
+**当前清单项**：① `site` 组六项——`title` / `subtitle` / `description` / `keywords` / `url`（均为文字、默认空串）与 `block_search_engines`（开关、默认 `false`）；六项全部标 `Public`（供前台读站名、SEO 与 robots 元数据；`keywords` 存英文逗号分隔的单个字符串；后端暂无消费方）；② `register` 组五项——`enabled`（开关，默认 `true`，已标 `Public`）是注册总闸：`auth.Service.Register` 的第一句读它，为 `false` 时注册返回 403 `registration_closed`，登录与 `auth.CreateAdminUser` 不受它影响；`email_domain_control_enabled`（开关，默认 `false`）与 `allowed_email_domains`（文字，逗号分隔、中英文逗号都认）是注册邮箱域名白名单：开关开启且清单条目非空时 `auth.Service.Register` 拒绝域名不在清单里的邮箱（400 `email_domain_not_allowed`；大小写不敏感、精确匹配域名、不放行子域），只拦公开注册，`CreateAdminUser` 与 `PATCH /users/me` 不受影响；开启时清单必须非空，`PATCH /admin/settings/register` 拒绝不一致的组合（409 `setting_conflict`）；`default_group`（默认 `"user"`）与 `email_verification_enabled` 仍非公开、纯数据、暂无消费方；③ `auth` 组九项——`password_requirements_enabled`（开关，默认 `false`）与 `password_min_length`（默认 `8`，取值 8–64）是密码策略：开启后 `POST /users` 与 `POST /users/me/password` 按 `password_min_length` 校验（关闭时沿用写死的 8；字母+数字与 ≤72 字节恒生效），`PATCH /admin/settings/auth` 拒绝 8–64 之外的写入（409 `setting_conflict`）；`password_complexity`、`session_max_age_enabled`、`session_max_age_days`（默认 `7`，单位天）、`totp_enabled`、`password_reset_enabled`、`captcha_enabled`、`captcha_provider` 均非公开、纯数据、暂无消费方。前端 `lib/public-settings.ts` 读聚合端点，`/signup` 在关闭时直接 404、登录页隐掉注册入口；**读不到该端点时按 fail-open 处理**（照常出页面），与「后端连不上照常出页 + toast」的既有口径一致。关掉注册的实际操作（暂无界面）：
 
 ```
 GET   /api/v1/public/settings                →  {"items":[{"group":"register","values":{"enabled":false}}]}
@@ -311,6 +311,22 @@ var builtinRegistry = []Group{
 ```
 
 它会自动出现在 `GET /api/v1/public/settings` 里，**后端不需要加端点、不需要加 service 方法**。前端只动两处：`lib/public-settings.ts` 里加一个纯选择器（照 `isSignupOpen` 的写法，读 `settings.<组>[.<项>] ?? 默认`），页面消费它。守卫测试 `TestBuiltinPublicAllowlist` 钉住「公开项集合 == 期望清单」，把敏感项误标成 `Public` 会让它先红。
+
+**怎么加一条组级保存校验**（保存时拦住组合非法的写入）：给 `Group` 字面量同时加 `ValidateOn`（管辖项：只有改动这些项的 `PATCH` 才触发校验）与 `Validate`（拿到「存量 ⊕ 本次写入」的合并最终态；不合规返回 `*ItemError{Item: 判定项名, Err: apierror.ErrSettingConflict}`）：
+
+```go
+{
+	Name:       "demo",
+	ValidateOn: []string{"enabled", "list"},
+	Validate:   validateDemoGroup,
+	Items: []Definition{
+		{Name: "enabled", Type: FieldTypeBool, Default: false},
+		{Name: "list", Type: FieldTypeString, Default: ""},
+	},
+}
+```
+
+两者必须成对（只写 `Validate` 构造即报错，管辖项不存在也报错）。校验只覆盖 `PATCH /admin/settings/:group`（唯一 HTTP 写路径）；`Set*` / `SetGroup` / `ResetItem` 直写不校验（测试与探针通道）。冲突回 409 `setting_conflict`，`param` 指向**判定项**（未必是要改的那一项）；未触碰管辖项的写入不读合并态、零开销。
 
 ## 运行
 
