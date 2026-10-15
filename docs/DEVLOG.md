@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-10-15 · 站点设置接入前台（元数据 / robots）+ 控制台页面标题（纯前端）
+
+**范围**：纯前端，后端零改动，零新依赖。spec：`docs/superpowers/specs/2026-10-15-neoblog-site-metadata-design.md`；计划：`docs/superpowers/plans/2026-10-15-neoblog-site-metadata.md`。
+
+**动机**：site 六键与「常规」页的读写都做完了，但值在项目里**零消费方**——根 `layout.tsx` 的 metadata 至今是 create-next-app 脚手架文字（"Create Next App"），`/console` 除首页外没标题（标签吃根默认），`block_search_engines` / `site.url` 无人读。本轮把六键接进真实位置，并补齐控制台页面标题。
+
+**本轮口径（D1–D9 摘要，逐条为 2026-10-15 讨论轮拍板）**：
+
+- **公开设置读取链**（`lib/public-settings.ts`）从每请求 `no-store` 改 **60 秒缓存**（`next: { revalidate: 60 }`）；连带注册闸（登录 / 注册页）≤60 秒生效——用户拍板接受该延迟。
+- **根 `layout.tsx`** 改 `generateMetadata()`：默认标题 = **`站名 - 副标题`**（非空才拼、不产生悬空分隔符；**不兜底**）；`description` / `keywords` 配了才输出；OG 只出 `og:title` / `og:description` / `og:site_name` 三个文字字段（无 `og:image`）；`metadataBase` 仅 URL 合法时设；`robots: { index: false }` 仅开关开着时。**子页面标题保持原样、不加任何后缀**。
+- 新增 **`app/robots.ts`**：开关开 = 全站 `Disallow: /`；关 = 放行 + **`/console` 永久 disallow**。
+- **控制台四页补标题**（跟导航走、无「\| 网站后台」后缀）：个人信息 / 登录会话 / **站点设置**（新键 `settings.siteSettings`，界面文字仍叫「常规」）/ 用户注册。
+- 纯形状独立成**零 import 的 `lib/site-metadata.ts`**（参数收 `unknown`；选择器 / 标题拼装 / URL 校验单点）。
+
+**实现发现（重要）**：`cacheComponents: true` 下**路由级 `export const revalidate` 被构建拒绝**（`Route segment config "revalidate" is not compatible with nextConfig.cacheComponents`）——按计划预案删掉该行，缓存落在读取层 fetch 的 `next: { revalidate: 60 }`；构建表实测 **`○ /robots.txt` + `Revalidate 1m`（ISR 静态 + 60 秒再生）**，`/signin` / `/signup` 等动态页也带 `1m`（数据缓存反射）。行为口径成立：≤60 秒生效、非每请求。
+
+**验证（离线，本机）**：纯模块离线断言 RED（模块不存在，`TS6053`）→ GREEN（`site-metadata checks: PASS`）；变异自检两条：① 标题朴素直拼 → 红（`'A - '` 悬空分隔符）；② 关键词裸 `split(",")` → 红（`' blog '` / 空串未清）；均已还原复绿。`tsc` / `eslint`（0 error，2 条 `sonner.tsx` 存量 warning）/ `prettier --check` 与本轮每次 **`next build`** 全程绿（build 是本轮缓存与路由配置的直接证据）。**运行期未验**——标签 / meta / robots 两态交用户实机。
+
+**评审后加固（当晚）**：独立代码评审（requesting-code-review，只读子代理）结论 Critical / Important 零、三条 Minor——① `siteBaseUrl` 补**协议白名单**（仅 http / https；离线断言先红（`javascript:alert(1)` 原实现会放行）后绿，已修）；② fetch 显式超时（一行）、③ spec §5 B5 措辞（纯文档）两处按用户口径**等会做**，未动。
+
+**已知缺口**：① 注册闸随缓存 ≤60 秒延迟（用户接受）；② 全空配置 = 无标题无 description（不兜底，有意）；③ `settings.siteSettings`（标签）与 `settings.general`（侧栏 / h1）是两个键，将来改名要改两处；④ `/console` 的 disallow 硬编码在 `robots.ts`，换后台前缀要同步改；⑤ 无测试运行器（离线断言不入库）；⑥ 后台页面会继承站点级 description / OG（无实际影响）。
+
+**提交状态**：改动未提交，留在工作区待审（用户口径：先审后提）。建议分批：① `lib/site-metadata.ts` → ② `lib/public-settings.ts` 缓存 → ③ 根 layout → ④ `app/robots.ts` → ⑤ 控制台四页 + 两份 messages → ⑥ 本节 + 两份 spec / plan 文档。
+
+---
+
 ## 2026-10-15 · 控制台「常规」设置页接后端（site 组六键，纯前端）
 
 **范围**：纯前端，后端零改动，零新依赖。spec：`docs/superpowers/specs/2026-10-15-neoblog-settings-general-wiring-design.md`；计划：`docs/superpowers/plans/2026-10-15-neoblog-settings-general-wiring.md`。
