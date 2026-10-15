@@ -46,7 +46,9 @@ export async function generateMetadata(): Promise<Metadata> {
     ...(description === "" ? {} : { description }),
     ...(keywords.length === 0 ? {} : { keywords }),
     ...(baseUrl === null ? {} : { metadataBase: baseUrl }),
-    ...(blocksSearchEngines(settings) ? { robots: { index: false } } : {}),
+    ...(blocksSearchEngines(settings)
+      ? { robots: { index: false, follow: false } }
+      : {}),
     ...(Object.keys(openGraph).length === 0 ? {} : { openGraph }),
   };
 }
