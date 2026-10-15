@@ -60,8 +60,16 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 	if !validEmail(email) || !validNickname(nickname) {
 		return User{}, apierror.ErrInvalidRequest
 	}
-	if !validPassword(password) {
+	minLength, err := s.passwordMinLength(ctx)
+	if err != nil {
+		return User{}, err
+	}
+	if !validPassword(password, minLength) {
 		return User{}, apierror.ErrWeakPassword
+	}
+
+	if err := s.ensureRegistrationDomain(ctx, email); err != nil {
+		return User{}, err
 	}
 
 	if _, err := s.repo.findUserByIdentifier(ctx, email); err == nil {
@@ -142,7 +150,11 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 		return err
 	}
 
-	if !validPassword(newPassword) {
+	minLength, err := s.passwordMinLength(ctx)
+	if err != nil {
+		return err
+	}
+	if !validPassword(newPassword, minLength) {
 		return apierror.ErrWeakPassword
 	}
 
@@ -511,4 +523,41 @@ func (s *Service) failSecondFactor(ctx context.Context) error {
 
 	s.sessions.Put(ctx, pendingAttemptsKey, attempts)
 	return apierror.ErrTwoFactorInvalidCode
+}
+
+func (s *Service) passwordMinLength(ctx context.Context) (int, error) {
+	requirementsEnabled, err := s.settings.GetBool(ctx, "auth", "password_requirements_enabled")
+	if err != nil {
+		return 0, err
+	}
+	configured := int64(0)
+	if requirementsEnabled {
+		configured, err = s.settings.GetNumber(ctx, "auth", "password_min_length")
+		if err != nil {
+			return 0, err
+		}
+	}
+	return effectivePasswordMinLength(requirementsEnabled, configured), nil
+}
+
+func (s *Service) ensureRegistrationDomain(ctx context.Context, email string) error {
+	controlEnabled, err := s.settings.GetBool(ctx, "register", "email_domain_control_enabled")
+	if err != nil {
+		return err
+	}
+	if !controlEnabled {
+		return nil
+	}
+	raw, err := s.settings.GetString(ctx, "register", "allowed_email_domains")
+	if err != nil {
+		return err
+	}
+	allowed := settings.SplitListValue(raw)
+	if len(allowed) == 0 {
+		return nil
+	}
+	if emailDomainAllowed(email, allowed) {
+		return nil
+	}
+	return apierror.ErrEmailDomainNotAllowed
 }

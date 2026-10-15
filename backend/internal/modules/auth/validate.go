@@ -42,8 +42,13 @@ func validBio(bio string) bool {
 	return utf8.RuneCountInString(bio) <= 1000
 }
 
-func validPassword(password string) bool {
-	if utf8.RuneCountInString(password) < 8 || len(password) > maxPasswordBytes {
+const (
+	passwordBaselineMinLength = 8
+	passwordMinLengthMax      = 64
+)
+
+func validPassword(password string, minLength int) bool {
+	if utf8.RuneCountInString(password) < minLength || len(password) > maxPasswordBytes {
 		return false
 	}
 	var hasLetter, hasDigit bool
@@ -56,4 +61,31 @@ func validPassword(password string) bool {
 		}
 	}
 	return hasLetter && hasDigit
+}
+
+func effectivePasswordMinLength(requirementsEnabled bool, configured int64) int {
+	if !requirementsEnabled {
+		return passwordBaselineMinLength
+	}
+	if configured < passwordBaselineMinLength {
+		return passwordBaselineMinLength
+	}
+	if configured > passwordMinLengthMax {
+		return passwordMinLengthMax
+	}
+	return int(configured)
+}
+
+func emailDomainAllowed(email string, allowed []string) bool {
+	at := strings.LastIndexByte(email, '@')
+	if at < 0 {
+		return false
+	}
+	domain := email[at+1:]
+	for _, entry := range allowed {
+		if strings.EqualFold(entry, domain) {
+			return true
+		}
+	}
+	return false
 }
