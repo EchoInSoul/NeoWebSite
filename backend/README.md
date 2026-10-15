@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.17.0
+当前版本：0.18.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -140,7 +140,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 应用启动绝不自动迁移；`ATLAS_DEV_URL` 缺省指向空的 `neoblog_atlas_dev`（脚本内默认值）。迁移文件里含数据（预设组 seed）或手工改造过 SQL 时，必须重算校验和：`atlas migrate hash --dir "file://migrations"` 再 `atlas migrate validate`（用户组与权限迁移是第一个带 seed 的）。工具链细节与已验证事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节。
 
-当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）→ `totp_last_counter`（`users` 加一列可空 bigint：TOTP 已认领的窗号，用于重放防护，纯 DDL 零数据）→ `totp_setup_at`（`users` 加一列可空 timestamptz：当前待验证密钥的生成时刻，setup 复用窗口用，纯 DDL 零数据）。
+当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）→ `totp_last_counter`（`users` 加一列可空 bigint：TOTP 已认领的窗号，用于重放防护，纯 DDL 零数据）→ `totp_setup_at`（`users` 加一列可空 timestamptz：当前待验证密钥的生成时刻，setup 复用窗口用，纯 DDL 零数据）→ `user_bio`（`users` 加一列可空 varchar：用户简介，纯 DDL 零数据）。
 
 ## 测试
 
@@ -165,11 +165,11 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 
 | 方法 路径 | 认证 | 说明 |
 | --- | --- | --- |
-| `POST /api/v1/users` | 公开 | body `{"email","nickname","password"}` → 201 `{"email","nickname"}` + 会话 cookie（注册即登录）；400 `invalid_request` / `weak_password`；409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底） |
+| `POST /api/v1/users` | 公开 | body `{"email","nickname","password"}` → 201 `{"email","nickname","bio"}` + 会话 cookie（注册即登录，新用户 `bio` 为 `null`）；400 `invalid_request` / `weak_password`；409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底） |
 | `POST /api/v1/sessions` | 公开 | body `{"identifier":"邮箱或昵称","password":"..."}` → 200 + 会话 cookie；401 `invalid_credentials`；400 `invalid_request`；**已启用 2FA 的账号密码正确也不算登录完成**：换发会话后返回 401 `two_factor_required`，会话转入「待二段」状态 |
 | `DELETE /api/v1/sessions/current` | 需登录 | 销毁当前会话，返回 200 `{}` |
-| `GET /api/v1/users/me` | 需登录 | 返回 `{"email","nickname","group":{"id","system_key","name"},"permissions":["..."],"two_factor_enabled":bool}`（自建组 `system_key` 为 `null`，`permissions` 是展开后的生效权限）；未登录 401 `unauthorized` |
-| `PATCH /api/v1/users/me` | 需登录 | body `{"nickname"?,"email"?}`（**字段可选、部分更新，两个都不给 400**）→ 200 `{"email","nickname"}`（更新后的值）；昵称 / 邮箱规则同注册，不符 400 `invalid_request`（`param` 指向出问题的字段）；撞名 409 `nickname_taken` / `email_taken`（并发竞态兜底 409 `already_taken`）；**提交与当前相同的值不算撞名**（自己排除在外）；**不要求当前密码**；未登录 401 `unauthorized` |
+| `GET /api/v1/users/me` | 需登录 | 返回 `{"email","nickname","bio","group":{"id","system_key","name"},"permissions":["..."],"two_factor_enabled":bool}`（`bio` 未设置时为 `null`；自建组 `system_key` 为 `null`，`permissions` 是展开后的生效权限）；未登录 401 `unauthorized` |
+| `PATCH /api/v1/users/me` | 需登录 | body `{"nickname"?,"email"?,"bio"?}`（**字段可选、部分更新，三个都不给 400**）→ 200 `{"email","nickname","bio"}`（更新后的值）；昵称 / 邮箱规则同注册，简介 trim 后 ≤1000 字符（按 rune）、**提交空白值即清空（库中存 `NULL`，响应为 `null`）**，不符 400 `invalid_request`（`param` 指向出问题的字段）；撞名 409 `nickname_taken` / `email_taken`（并发竞态兜底 409 `already_taken`）；**提交与当前相同的值不算撞名**（自己排除在外）；**不要求当前密码**；未登录 401 `unauthorized` |
 | `GET /api/v1/users/me/sessions` | 需登录 | 返回 `{"items":[{"id","current","user_agent","ip","created_at","last_seen_at","expires_at"}]}`——只含自己的**活跃**会话（已吊销 / 已过期 / 待二段的都不出现）；`id` 是 `base64url(sha256(token))` 指纹，**原始 token 永不出服务端**；`current` 标记发起请求的这条；时间为 RFC3339 UTC；没有元数据的老会话字段为空串；未登录 401 `unauthorized` |
 | `DELETE /api/v1/users/me/sessions/:id` | 需登录 | 按指纹吊销单条（`id` 取自上一条列表）→ 200 `{"id","deleted":true}`；未知 / 他人的 `id` 一律 404 `not_found`（不泄露他人会话存在性）、同 id 二次删也是 404；**删当前这条等于登出**（响应清 cookie）；未登录 401 `unauthorized` |
 | `POST /api/v1/users/me/password` | 需登录 | body `{"current_password","new_password"}` → 200 `{}`；旧密码错 401 `invalid_credentials`；400 `weak_password` / `password_unchanged` / `invalid_request` |
@@ -184,8 +184,8 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 规则：
 
 - 注册**公开**、不验证邮箱（邮件基础设施见「邮件」章节，注册流程尚未接入；也没有找回密码）。
-- 邮箱：`net/mail` 可解析、≤254 字符、入库统一小写；昵称：trim 后 2–32 字符（按 rune）、不含空白（含全角空格）与 `@`；密码：≥8 字符（按 rune）、同时含 ASCII 字母与数字、≤72 字节（bcrypt 上限）。
-- 改自己的资料（`PATCH /users/me`）挂 `RequireAuth` + `LoadIdentity`、**不需要权限点**（改的是自己）；字段可选、只改给出的字段；昵称 / 邮箱沿用注册那套归一与校验、同一批错误码；**不校验当前密码**；会话只存 `userID`，因此改完无需重新登录，`/users/me` 与侧栏下次读取即是新值。
+- 邮箱：`net/mail` 可解析、≤254 字符、入库统一小写；昵称：trim 后 2–32 字符（按 rune）、不含空白（含全角空格）与 `@`；密码：≥8 字符（按 rune）、同时含 ASCII 字母与数字、≤72 字节（bcrypt 上限）；简介：trim 后 ≤1000 字符（按 rune）、允许换行、可为空。
+- 改自己的资料（`PATCH /users/me`）挂 `RequireAuth` + `LoadIdentity`、**不需要权限点**（改的是自己）；字段可选、只改给出的字段（缺省与 `null` 同义，都表示不修改）；昵称 / 邮箱 / 简介沿用注册那套归一与校验、同一批错误码；简介提交空串（或纯空白）即清空、库中存 `NULL`；**不校验当前密码**；会话只存 `userID`，因此改完无需重新登录，`/users/me` 与侧栏下次读取即是新值。
 - **更改密码保留当前设备、吊销该用户其他所有设备的会话**（用 scs 的 `IterableStore.All()` + `Codec` 按会话中的 `auth.user_id` 定位删除；失败即 500 且密码不落盘，可用旧密码重试）。
 - **会话管理（`GET` / `DELETE /users/me/sessions`）**：会话元数据以四个会话数据键随建立写入——`auth.user_agent` / `auth.ip` / `auth.created_at` / `auth.last_seen_at`（RFC3339 UTC 字符串），**零迁移**（仍存 scs 的 `sessions` 表，元数据在 gob 编码的 `data` 里）；三处建立点（注册、单段登录、2FA verify）统一走 `auth.establishSession`，进入「待二段」改走 `enterPendingSession`（清身份与元数据，因此待验会话不进任何人的列表）。最后活跃由 `guard.TrackSessionActivity` 维护：**距上次写入不足 5 分钟不写库**（`Put` 不移动 scs 的 deadline，因此不产生滑动续期，7 天上限仍从登录时刻起算）。IP 取 `X-Forwarded-For` 首跳 → `X-Real-IP` → `RemoteAddr`，**仅供展示、不可用作鉴权或限流依据**（UA / IP 分别截断 512 / 64 字节）。列表与吊销共用 `eachSession` 迭代器（全表扫 + 逐条解码后按 `auth.user_id` 过滤）；删当前会话走 `Destroy`（避免本请求的节流写把已删的行提交回写）。
 

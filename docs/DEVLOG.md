@@ -4,6 +4,49 @@
 
 ---
 
+## 2026-10-15 · 用户简介 user_bio（0.18.0）
+
+**版本**：后端 0.17.0 → **0.18.0**（minor）。一个迁移（`user_bio`，纯 DDL）、零新依赖；前端两处小改（回填 `bio`，见下）。
+
+**动机**：前端个人资料页早有「用户简介」输入框，保存时把 `bio` 一并发出，但后端 `users` 表没有这一列、`PATCH /users/me` 的请求结构体也只有 `nickname` / `email`——Go 反序列化**静默丢弃未知字段**，所以请求照样 200、页面照样弹「已保存」，实际什么都没存、刷新即空。用户 2026-10-15 核对后选择「后端补字段」（另一选项「前端撤掉输入框」未取）。
+
+**口径（四条，实现即按此落）**：
+
+- 存储：`users.bio` 可空 varchar（`field.String("bio").Optional().Nillable()`），「未设置」= `NULL`——对齐 API 规范 §5「标量可空字段输出 `null`」与 D 盘旧项目的 `String?` 形态。
+- 请求：`PATCH /users/me` 加可选字段 `bio`（`*string`）；缺省 / `null` = 不修改（沿用既有 PATCH 指针约定）；提交 `""` 或纯空白 = 清空（库中落 `NULL`）。「至少给一个字段」守卫同步扩到三个字段。
+- 归一与校验：trim（保留内部换行）、≤1000 字符按 rune（与 HaoBlog 的 `PROFILE_BIO_MAX_LENGTH` 同值）、越界 400 `invalid_request` + `param: "bio"`。
+- 响应：`UserResponse`（注册 / 登录 / verify / PATCH）与 `MeResponse`（`GET /users/me`）统一带 `bio`（未设置为 `null`）——用户对象保持单一形状。
+
+**实现要点**：
+
+- 迁移 `20261015003344_user_bio.sql`：`ALTER TABLE "public"."users" ADD COLUMN "bio" character varying NULL;`，两库已应用；`scripts/db-migrate-diff.sh` 的字面量随轮换为 `user_bio`。
+- 仓储三分支：`nil` 不动 / 空串 `ClearBio()` / 非空 `SetBio()`（`repository.go` 的 `updateProfile`）。
+- 前端接线（用户指出「前端没有接入上」后补，只动两个文件）：`lib/auth-session.ts` 的 `SessionUser` 加 `bio: string | null` 并解析（`undefined` 容忍 → 老后端返回里没这个键也不会让整站会话解析炸掉，落 `null`）；`hooks/use-profile-save.ts` 本地 state 改从 `profile?.bio` 取初值、保存后用响应里的 `bio` 回填（沿用「保存后回填后端归一值」的既有口径，顺带吃掉后端 trim）。不碰并行会话正在改的 `messages/*.json`，**因此本轮零新增文案键**。
+
+**测试与变异自检**：新增 `TestUpdateProfileBio`（初始 `null`、写读一致且 trim 与换行保留、只改简介不动身份字段、1000 / 1001 rune 边界、空白清空后 API 与库内**双核对 `NULL`**、只改昵称保留简介、空串显式清空）；`TestUpdateProfileEndToEnd` 的两个边界清单补 `{"bio": null}` 与 `{"bio": 42}`。变异自检六处（改坏 → 确认目标红 → 改回 → 全包绿）：
+
+| # | 变异 | 实测红 |
+| --- | --- | --- |
+| ① | `normalizeBio` 去掉 trim | {trim + 换行断言} |
+| ② | `validBio` 边界 `<=` 改 `<` | {1000 rune 边界} |
+| ③ | 仓储删清空分支（一律 `SetBio`） | {空白清空 → 落空串而非 `NULL`} |
+| ④ | `toUser` 不映射 `bio` | {写后回读} |
+| ⑤ | 校验错误丢 `param` | {1001 rune 的 `param` 断言} |
+| ⑥ | 「至少给一个字段」守卫忽略 `bio` | {纯 `bio` 的 PATCH} |
+
+**活体证据（临时实例 5733，`gate-check@example.com`）**：登录响应即带 `"bio":null` → PATCH 带首尾空格与换行 → 200 且 trim 生效 → 只改昵称 bio 保留 → 1001 字符 400 `param:"bio"` → `{"bio":""}` 清空回 `null` → 直连 `neoblog` 库确认为 `NULL`（账号复位原状）。临时实例已关闭。
+
+**已知缺口**：
+
+- **简介超长暂无专属错误文案**：`param: "bio"` 现在落进 `use-profile-save.ts` 的兜底分支，页面提示通用「保存失败，请稍后重试」。加专属键要动 `messages/*.json`，而那两个文件正被并行会话占用——等用户点名再补。
+- **前端侧未做运行期验收**（按既有口径，运行期 / 视觉验收由用户自己在浏览器里做）：`tsc --noEmit` 退出 0、`eslint` 对改动的两个文件 0 问题、`prettier --check` 通过；页面实际表现（填写 → 保存 → 刷新仍在）待用户验。
+- 简介除长度外无其他校验（无 Markdown / HTML 清洗）；纯文本存储，展示侧自行转义。
+- 全仓测试无 `-race`（本机无 cgo）；本轮无并发路径新增，与既有口径一致。
+
+**提交状态**：本轮改动已按批入库（`schema`+迁移 → 接口+测试 → 前端接线 → 本文档 → 版本进位，共 5 个提交，均未推送）。工作区里并行会话的侧栏设置页前端文件（`console-sidebar-nav.tsx`、两份 `messages`、`app/console/settings/`、`console-sidebar-section.tsx`）仍未提交，**不属于本轮**。
+
+---
+
 ## 2026-10-14 · 两步验证 setup 复用窗口（0.17.0）
 
 **版本**：后端 0.16.0 → **0.17.0**（minor）。一个迁移（`totp_setup_at`，纯 DDL）、零新依赖、前端零改动。设计 spec：`docs/superpowers/specs/2026-10-14-neoblog-2fa-setup-reuse-window-design.md`；实施计划：`docs/superpowers/plans/2026-10-14-neoblog-2fa-setup-reuse-window.md`（用户口语称「防抖」，实现语义是**复用窗口**）。
