@@ -2,9 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.（执行方式由用户点名，见文末；本计划已按本仓既有口径写明：**运行期验收归用户、提交等点名**。）
 
-**Goal:** 把 `/console/groups` 建成可用页面——**会话页同款表格视图**（工具栏：搜索 / 刷新 / 新建；表头：组名 / 成员数 / 权限点数 / 操作；行操作 **⋯ 下拉菜单**：编辑 / 删除）；预设组只读可看；错误按码给中文；入口按 `system.groups.view` 显隐。
+**Goal:** 把 `/console/settings/groups` 建成可用页面——**会话页同款表格视图**（工具栏：刷新 / 新建；表头：组名 / 成员数 / 权限点数 / 操作；行操作 **⋯ 下拉菜单**：编辑 / 删除）；预设组只读可看；错误按码给中文；入口按 `system.groups.view` 显隐。
 
-**Architecture:** 服务端直读（`lib/admin-groups.ts`，cookie 转发 + 形状校验）→ props 下传 → 客户端面板（`groups-panel.tsx`：`ConsoleListTable` + `ConsoleListToolbar` + `ConsoleListSearchInput` 三件套 + ⋯ 行菜单 + 弹窗 / 删除确认挂载）+ 钩子（`use-groups.ts`：列表状态、刷新、写操作）→ 弹窗（`group-dialog.tsx`：组名 + 动态权限矩阵 + 联动 + 脏拦截）。纯形状（解析 / 矩阵推导 / 联动 / 分区排序 / 错误映射）全部独立在 `lib/groups.ts`（零 import）。搜索 / 排序为前端本地能力。
+**口径修订（2026-10-16 实施时）**：本计划 v2 写于纯 HTML 演示定稿时，实际执行按用户随轮点名修订两处——① 页面落**设置子项** `/console/settings/groups`（非顶层；侧栏项在设置子面板、「常规」/「用户注册」之后，标签复用既有 `settings.groups`，`canViewGroups` 传参链同 Task 3）；② **搜索框删除**（Task 3 / Task 6 中搜索相关步骤与 `searchPlaceholder` 键不执行；工具栏无 `start` 槽；空态文案「暂无用户组」）。另：Task 1 的矩阵 / 联动 / 列三态 / 排序 / 标签映射随**纯 UI 批**（b5ad652）先行落地；接线轮补齐 Task 1 剩余（`parseAdminGroup` / `parseAdminGroups` / `parsePermissionCatalog` / `groupErrorKey`）并执行 Task 2–5 全链路。纯 UI 批 37 键 + 接线批 10 键 = 47 键（zh / en 同步）。执行记录见文末「执行结果」。
+
+**2026-10-16 追加（按页拆行批）**：权限矩阵按用户点名拆成四行（用户 / 常规 / 用户注册 / 用户组）——后端加 `system.register.view` / `.edit` 并把 `register` / `auth` 组接口换挂该钥匙（目录顺序调整为 users → settings → register → groups，0.21.0）；前端 `system.settings` 行标签「设置」→「常规」、新增「用户注册」行（i18n 48 键）、矩阵表头勾选框与列对齐修复；侧栏「常规」「用户注册」按各自 view 权限显隐（三者全无时 main 面板「设置」入口也隐藏）；设置子面板拆三个分组（设置 / 注册与登录 / 权限组）带组间留白、空组不渲染。**再追加（同日，矩阵分组批）**：弹窗矩阵照侧栏分三组加小标题 + 组间留白、**「用户」行暂隐藏**（用户页未建）、列表「权限点数」只计可见资源；分组表在 `lib/groups.ts` 的 `MATRIX_GROUPS`，与目录顺序解耦，离线断言与变异自检同步。**三追加**：删预设组只读提示文案两键（`readOnlyPreset` / `readOnlyPrivileged` 退役，48 → 46 键）。详见 DEVLOG 同日条目。
+
+**Architecture:** 服务端直读（`lib/admin-groups.ts`，cookie 转发 + 形状校验）→ props 下传 → 客户端面板（`groups-panel.tsx`：`ConsoleListTable` + `ConsoleListToolbar`（无搜索槽）+ ⋯ 行菜单 + 弹窗 / 删除确认挂载）+ 钩子（`use-groups.ts`：列表状态、刷新、写操作）→ 弹窗（`group-dialog.tsx`：组名 + 动态权限矩阵 + 联动 + 脏拦截）。纯形状（解析 / 矩阵推导 / 联动 / 分区排序 / 错误映射）全部独立在 `lib/groups.ts`（零 import）。排序为前端本地能力。
 
 **Tech Stack:** Next.js 16.4.0（App Router）、React 19.3.0、next-intl、sonner、Base UI（`ui/dialog` / `ui/alert-dialog` / `ui/checkbox`）、既有 `ui/item` 原语、`Card size="none"`、`lib/api.ts`。
 
@@ -18,7 +22,7 @@
 - 工作区现状（写本计划时实读）：并行轮「设置页接后端」已入库（20b302f / d93127d / 96414b0 / 8e46911，HEAD = 8e46911），工作区干净，本轮从干净基线起步。暂存仍按本计划的文件清单分批，**严禁裸 `git add -A`**。
 - 权限键逐字 6 个：`system.users.view|edit`、`system.groups.view|edit`、`system.settings.view|edit`；**前端零硬编码清单**（资源 / 动作全部从 `GET /admin/permissions` 推导）；唯一硬编码的一条规则是 `edit⇒view` 蕴含（对齐后端 `rbac.impliedActions`）。
 - 列表组件**只组合、不改源码**：`ConsoleListTable` / `ConsoleListToolbar` / `ConsoleListSearchInput`（对齐 `sessions-panel.tsx` 用法）；行操作菜单用 `ui/dropdown-menu`（`DropdownMenuTrigger` 的 `render=` 用法对齐 `console-user-menu.tsx`）。
-- 搜索（按组名）与排序（成员数 / 权限点数）为**前端本地**：不进接口参数；「刷新」= 客户端重读 `GET /api/v1/admin/groups`（对齐 `refreshSessions`）。
+- 搜索（按组名，**2026-10-16 已按用户点名移除**）与排序（成员数 / 权限点数）为**前端本地**：不进接口参数；「刷新」= 客户端重读 `GET /api/v1/admin/groups`（对齐 `refreshSessions`）。
 - 错误文案按 code 映射（`lib/groups.ts` 单点）；**一个码都不许落通用文案**（`grant_forbidden` 必须在列——D 盘就漏了它）。
 - 组名不做前端校验 / trim（后端负责），只做 `maxLength=64` 输入截断；预设判定一律认 `system_key` / `is_preset`，**绝不按组名判断**。
 - 展示计数用后端已展开的 `permissions`（**前端不重复展开**）；提交的是原始勾选集合。
@@ -51,14 +55,14 @@ spec 隐含但无自动测试兜底、最可能咬人的九条，逐条在对应
 | `frontend/lib/groups.ts` | Create | 纯形状（零 import）：类型 / 解析 / 矩阵推导 / 联动 / 排序 / 错误映射 |
 | `frontend/lib/auth-session.ts` | Modify | `SessionUser.permissions` 解析 |
 | `frontend/lib/admin-groups.ts` | Create | 服务端读：`getAdminGroups` / `getPermissionCatalog` |
-| `frontend/app/console/groups/page.tsx` | Create | 服务端壳：h1 + 读两接口 + 两分支 + `canEdit` |
-| `frontend/app/console/groups/groups-panel.tsx` | Create | 客户端：表格视图（T3 只读）→ T4 加工具栏新建 + ⋯ 菜单（编辑）→ T5 加菜单删除项 |
-| `frontend/app/console/groups/group-dialog.tsx` | Create | 客户端弹窗：组名 + 矩阵 + 联动 + 只读态 + 脏拦截（T4） |
+| `frontend/app/console/settings/groups/page.tsx` | Create | 服务端壳：h1 + 读两接口 + 两分支 + `canEdit` |
+| `frontend/app/console/settings/groups/groups-panel.tsx` | Create | 客户端：表格视图（T3 只读）→ T4 加工具栏新建 + ⋯ 菜单（编辑）→ T5 加菜单删除项 |
+| `frontend/app/console/settings/groups/group-dialog.tsx` | Create | 客户端弹窗：组名 + 矩阵 + 联动 + 只读态 + 脏拦截（T4） |
 | `frontend/hooks/use-groups.ts` | Create | 客户端状态：列表 + 刷新（T3 建）→ T4 加 create/update → T5 加 delete |
-| `frontend/components/console/console-sidebar-nav.tsx` | Modify | main 面板加「用户组」项（活跃态 + `canViewGroups` 显隐） |
+| `frontend/components/console/console-sidebar-nav.tsx` | Modify | 设置子面板加「用户组」项（活跃态 + `canViewGroups` 显隐） |
 | `frontend/components/console/console-sidebar.tsx` | Modify | 透传 `canViewGroups` |
 | `frontend/app/console/layout.tsx` | Modify | 计算 `canViewGroups` 下传 |
-| `frontend/messages/zh-CN.json` / `en.json` | Modify | `sidebar.groups`（T3）+ `groups` 命名空间（T3 / T4 / T5 分三批加键） |
+| `frontend/messages/zh-CN.json` / `en.json` | Modify | `settings.groups` 复用（侧栏标签）+ `groups` 命名空间（纯 UI 批 37 键 + 接线批 10 键） |
 | `docs/DEVLOG.md` | Modify | 顶部倒序登记（T6） |
 
 Task 3 结束时的中间态是自洽的：页面能看表格（含预设与自建组、数字列、搜索 / 排序 / 刷新），但还不能操作；T4 打通新建 / 编辑与 ⋯ 菜单；T5 打通删除。
@@ -398,8 +402,8 @@ git commit -m "feat(frontend): SessionUser 解析权限集 + 用户组服务端�
 - Modify: `frontend/app/console/layout.tsx`（计算 `canViewGroups` + 传参）
 - Modify: `frontend/components/console/console-sidebar.tsx`（透传）
 - Modify: `frontend/components/console/console-sidebar-nav.tsx`（新增「用户组」项）
-- Create: `frontend/app/console/groups/page.tsx`
-- Create: `frontend/app/console/groups/groups-panel.tsx`（本任务先只读：表格 + 工具栏）
+- Create: `frontend/app/console/settings/groups/page.tsx`
+- Create: `frontend/app/console/settings/groups/groups-panel.tsx`（本任务先只读：表格 + 工具栏）
 - Create: `frontend/hooks/use-groups.ts`（本任务先只有 `refreshGroups`）
 
 **Interfaces:**
@@ -440,7 +444,7 @@ en 直译（本批无 ICU 复数）。刷新按钮文案用既有 `common.refres
 1. `layout.tsx`：`ConsoleShell` 签名加 `canViewGroups?: boolean`（默认 `false`）→ `<ConsoleSidebar displayName={displayName} canViewGroups={canViewGroups} />`；主分支计算 `const canViewGroups = user.permissions.includes("system.groups.view");` 并传入；异常兜底分支不传（默认 false）。
 2. `console-sidebar.tsx`：签名加 `canViewGroups = false`，透传给 `<ConsoleSidebarNav canViewGroups={canViewGroups} />`。
 3. `console-sidebar-nav.tsx`：
-   - 顶部加 `const GROUPS_HREF = "/console/groups";`，`lucide-react` import 加 `UsersRound`；签名改 `export function ConsoleSidebarNav({ canViewGroups = false }: { canViewGroups?: boolean })`。
+   - 顶部加 `const GROUPS_HREF = "/console/settings/groups";`，`lucide-react` import 加 `UsersRound`；签名改 `export function ConsoleSidebarNav({ canViewGroups = false }: { canViewGroups?: boolean })`。
    - main 分支：在现有「设置」`SidebarMenuItem` **上方**新增（`canViewGroups` 为假时不渲染）：
      ```tsx
      {canViewGroups ? (
@@ -560,12 +564,12 @@ Expected: `true`
 - [ ] **Step 7: 静态校验**
 
 Run: `cd frontend && npx tsc --noEmit && npm run lint && npm run format:check`
-Expected: 全绿。此刻 `/console/groups` 可看表格（3 预设 + 自建组、数字列、搜索 / 排序 / 刷新可用），无「新建」与操作列。
+Expected: 全绿。此刻 `/console/settings/groups` 可看表格（3 预设 + 自建组、数字列、搜索 / 排序 / 刷新可用），无「新建」与操作列。
 
 - [ ] **Step 8: Commit（建议边界③，等用户点名）**
 
 ```bash
-git add frontend/messages/zh-CN.json frontend/messages/en.json frontend/app/console/layout.tsx frontend/components/console/console-sidebar.tsx frontend/components/console/console-sidebar-nav.tsx frontend/app/console/groups/page.tsx frontend/app/console/groups/groups-panel.tsx frontend/hooks/use-groups.ts
+git add frontend/messages/zh-CN.json frontend/messages/en.json frontend/app/console/layout.tsx frontend/components/console/console-sidebar.tsx frontend/components/console/console-sidebar-nav.tsx frontend/app/console/settings/groups/page.tsx frontend/app/console/settings/groups/groups-panel.tsx frontend/hooks/use-groups.ts
 git commit -m "feat(frontend): 控制台用户组页——侧栏入口与表格视图（搜索/排序/刷新）"
 ```
 
@@ -575,9 +579,9 @@ git commit -m "feat(frontend): 控制台用户组页——侧栏入口与表格�
 
 **Files:**
 - Modify: `frontend/hooks/use-groups.ts`（已建，本任务扩 create/update）
-- Create: `frontend/app/console/groups/group-dialog.tsx`
-- Modify: `frontend/app/console/groups/groups-panel.tsx`（工具栏 `end` 加「新建」+ 行 ⋯ 菜单（编辑项）+ 弹窗挂载）
-- Modify: `frontend/app/console/groups/page.tsx`（加目录读取 + `canEdit` + 矩阵下传）
+- Create: `frontend/app/console/settings/groups/group-dialog.tsx`
+- Modify: `frontend/app/console/settings/groups/groups-panel.tsx`（工具栏 `end` 加「新建」+ 行 ⋯ 菜单（编辑项）+ 弹窗挂载）
+- Modify: `frontend/app/console/settings/groups/page.tsx`（加目录读取 + `canEdit` + 矩阵下传）
 - Modify: `frontend/messages/zh-CN.json` / `frontend/messages/en.json`（`groups` 命名空间 +31 键）
 
 **Interfaces:**
@@ -726,14 +730,14 @@ Expected: 全绿。
 
 Run:
 ```bash
-cd frontend && grep -rn '"system\.' app/console/groups/ hooks/use-groups.ts; echo "exit=$?"
+cd frontend && grep -rn '"system\.' app/console/settings/groups/ hooks/use-groups.ts; echo "exit=$?"
 ```
 Expected: 无命中（`exit=1`）——权限键字符串只许出现在 `lib/groups.ts` 与 messages。
 
 - [ ] **Step 7: Commit（建议边界④，等用户点名）**
 
 ```bash
-git add frontend/hooks/use-groups.ts frontend/app/console/groups/group-dialog.tsx frontend/app/console/groups/groups-panel.tsx frontend/app/console/groups/page.tsx frontend/messages/zh-CN.json frontend/messages/en.json
+git add frontend/hooks/use-groups.ts frontend/app/console/settings/groups/group-dialog.tsx frontend/app/console/settings/groups/groups-panel.tsx frontend/app/console/settings/groups/page.tsx frontend/messages/zh-CN.json frontend/messages/en.json
 git commit -m "feat(frontend): 用户组页写路径——⋯ 行菜单与编辑弹窗（新建/编辑）"
 ```
 
@@ -743,7 +747,7 @@ git commit -m "feat(frontend): 用户组页写路径——⋯ 行菜单与编辑
 
 **Files:**
 - Modify: `frontend/hooks/use-groups.ts`（扩 delete 字段）
-- Modify: `frontend/app/console/groups/groups-panel.tsx`（⋯ 菜单加删除项 + AlertDialog）
+- Modify: `frontend/app/console/settings/groups/groups-panel.tsx`（⋯ 菜单加删除项 + AlertDialog）
 - Modify: `frontend/messages/zh-CN.json` / `frontend/messages/en.json`（+7 键）
 
 **Interfaces:**
@@ -802,12 +806,12 @@ cd frontend && node -e "const a=require('./messages/zh-CN.json'),b=require('./me
 ```
 Expected: `true`
 Run: `cd frontend && npx tsc --noEmit && npm run lint && npm run format:check`
-Expected: 全绿。至此 `/console/groups` 四条操作链（看 / 建 / 改 / 删）全部打通。
+Expected: 全绿。至此 `/console/settings/groups` 四条操作链（看 / 建 / 改 / 删）全部打通。
 
 - [ ] **Step 5: Commit（建议边界⑤，等用户点名）**
 
 ```bash
-git add frontend/hooks/use-groups.ts frontend/app/console/groups/groups-panel.tsx frontend/messages/zh-CN.json frontend/messages/en.json
+git add frontend/hooks/use-groups.ts frontend/app/console/settings/groups/groups-panel.tsx frontend/messages/zh-CN.json frontend/messages/en.json
 git commit -m "feat(frontend): 用户组页删除路径——⋯ 菜单删除项与二次确认"
 ```
 
@@ -837,15 +841,15 @@ Expected: 本轮只新增 / 改动计划内 12 个文件（`.superpowers/` 下�
 
 正文里逐条给出"打开哪条 URL 看什么"：
 
-1. 管理员 / 所有者账号打开 `/console/groups` → **表格视图**：工具栏（搜索 / 新建 / 刷新）+ 表头（组名 / 成员数 / 权限点数 / 操作）；三预设组带「预设」徽章、行尾 ⋯ 按钮，数字列与库一致。
-2. 点「成员数」「权限点数」表头 → 排序生效 + 箭头切换（降 / 升）；搜索框输「运」→ 只剩匹配行；乱输 → 「没有匹配的用户组」（工具栏还在）；点刷新 → 列表重读。
+1. 管理员 / 所有者账号打开 `/console/settings/groups` → **表格视图**：工具栏（[新建用户组] [刷新]，无搜索框）+ 表头（组名 / 成员数 / 权限点数 / 操作）；三预设组带「预设」徽章、行尾 ⋯ 按钮，数字列与库一致。
+2. 点「成员数」「权限点数」表头 → 排序生效 + 箭头切换（降 / 升）；点刷新 → 列表重读。
 3. 点任意行 ⋯ → 菜单「编辑 / 删除」；预设组的菜单只有「编辑」；有成员的组删除项置灰（悬停提示）；点「编辑」→ 弹窗预填该组。
 4. 「新建用户组」→ 填名 + 勾权限（勾「编辑」看是否自动带上「查看」）→ 保存 → toast「用户组已创建」+ 表格出现新行；重开该组编辑弹窗，勾选与保存一致。
 5. 编辑自建组改名 / 改勾选 → 保存 → 行内即时更新；改动过再点 × → 弹「放弃未保存的修改？」。
 6. 预设组（所有者 / 普通用户）菜单点「编辑」→ 弹窗只读（输入与勾选全灰）+ 两档提示文案。
 7. 重名新建 → toast「这个组名已被使用」。
 8. 删一个空自建组 → 菜单「删除」→ 确认弹窗 → 行消失 + toast。
-9. 普通用户账号（冒烟账号 `gate-check@example.com`）→ 侧栏不见「用户组」入口；直连 `/console/groups` → 「无权查看用户组」；（可选）若手头有一个"有查看、无编辑"权限的账号 → 页面无「新建」、无操作列。
+9. 普通用户账号（冒烟账号 `gate-check@example.com`）→ 侧栏不见「用户组」入口；直连 `/console/settings/groups` → 「无权查看用户组」；（可选）若手头有一个"有查看、无编辑"权限的账号 → 页面无「新建」、无操作列。
 10. 亮 / 暗主题 + 中 / 英切换各看一遍文案。
 
 - [ ] **Step 4: Commit（建议边界⑥，等用户点名）**
@@ -859,4 +863,34 @@ git commit -m "docs(devlog): 登记控制台用户组页——联动规则与已
 
 ## 执行方式
 
-待用户点名：**Native**（本会话逐任务实现）或子代理驱动。两条既有约束不变：运行期验收归用户（执行者只跑静态校验与离线纯函数断言）；提交等用户点名（Commit 步骤里的分批边界照用，严禁裸 `git add -A`）。
+~~待用户点名：**Native**（本会话逐任务实现）或子代理驱动。~~ 2026-10-16 用户点名「开始执行，直接执行」→ **Native**（本会话逐任务实施）。两条既有约束不变：运行期验收归用户（执行者只跑静态校验与离线纯函数断言）；提交等用户点名（严禁裸 `git add -A`）——2026-10-16 已点名，按 backend / frontend / docs 三批入库。
+
+## 执行结果（2026-10-16 接线轮，Native）
+
+**落地文件：代码 11（9 改 + 2 新）+ 文档 3。**
+
+| 文件 | 动作 |
+| --- | --- |
+| `frontend/lib/groups.ts` | 改（+102 行：`parseAdminGroup` / `parseAdminGroups` / `parsePermissionCatalog` + `ERROR_KEYS` / `FALLBACK_KEYS` / `groupErrorKey`；矩阵 / 联动 / 排序等纯 UI 批已有） |
+| `frontend/lib/admin-groups.ts` | 新（`getAdminGroups` / `getPermissionCatalog`，三态 union，对齐 `admin-settings.ts`） |
+| `frontend/lib/auth-session.ts` | 改（`SessionUser.permissions` 解析，三处小改） |
+| `frontend/hooks/use-groups.ts` | 新（`refreshGroups` / `submitGroup` / `requestDelete` / `confirmDelete`；`isListLocked = isSaving ∥ isDeleting ∥ isRefreshing`） |
+| `frontend/app/console/settings/groups/page.tsx` | 改（两接口服务端读 + `canEdit`；读失败 / 403 文案分支） |
+| `frontend/app/console/settings/groups/groups-panel.tsx` | 改（删本地 CATALOG 与内存增删改；接 hook；`canEdit` 门控新建与操作列） |
+| `frontend/components/console/console-sidebar-nav.tsx` | 改（设置子面板「用户组」项按 `canViewGroups` 显隐） |
+| `frontend/components/console/console-sidebar.tsx` | 改（透传 `canViewGroups`） |
+| `frontend/app/console/layout.tsx` | 改（算 `canViewGroups` 下传；异常兜底按 false） |
+| `frontend/messages/zh-CN.json` / `en.json` | 改（`groups` +10 键，共 47；`sidebar.groups` 未新增——标签走 `settings.groups`） |
+| 文档 | 改：本计划（路径 / 搜索 / 修订与执行记录）、spec v3、`docs/DEVLOG.md` 顶部一节 |
+
+`frontend/app/console/settings/groups/group-dialog.tsx` **零改动**（纯 UI 批的组件接口已满足接线）。
+
+**验证（离线，本机）**：
+
+- 离线断言：`groups checks: PASS`（脚本 `.superpowers/sdd/console-groups-check/`，不入库；覆盖解析畸形面、矩阵分组与缺格、联动三规则 + 列批量复用、列三态、预设分区排序、错码全表）。
+- 变异自检三条实测 RED→GREEN：① 删反向蕴含清理 → 「取消 view → 清 edit」红（actual `['system.users.edit']` vs expected `[]`）；② 删 `grant_forbidden` 映射 → 红（`saveFailed` vs `grantForbidden`）；③ 排序直返 `groups` → 红（`c2,user,c1,admin,owner` vs `owner,admin,user,c2,c1`）；均还原复绿。
+- 静态门禁：`tsc --noEmit` ✓、`eslint` 0 error（2 条 `sonner.tsx` 存量 warning）、`prettier --check` ✓（`hooks/use-groups.ts` / `lib/admin-groups.ts` 首跑 warn → `prettier --write` 后复绿）。
+- 键位比对：zh / en 各 47 键 ✓。取证 grep：`CATALOG` 0 处；权限键字面量仅剩 `layout.tsx` / `page.tsx` 门控各 1 处（计划内 gating）；蛇形键名只出现在 `lib/groups.ts` 解析里。
+- **本机环境备注**：单文件 `tsc lib/groups.ts`（编译断言脚本用）**必须补 `--strict`**——文件参数调用不读项目 tsconfig，默认非 strict 下 `unknown` 的复合收窄行为不同，会误报 `TS2322`。
+
+**状态**：按批入库（backend / frontend / docs 三批，**未推送**，含提交前独立评审的修补）；运行期验收归用户。

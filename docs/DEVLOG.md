@@ -4,6 +4,53 @@
 
 ---
 
+## 2026-10-16 · 权限矩阵按页面拆行（新增 system.register 键，前后端 0.21.0）
+
+**范围**：前端（用户组弹窗矩阵 + 侧栏三项门控）+ 后端（权限目录 + 设置接口守卫按组分流）；版本 0.20.1 → 0.21.0。
+
+**动机**：用户点名——「设置项下有 3 个（常规 / 用户注册 / 用户组），权限节点就应该显示这 3 个」。原矩阵三行是后端抽象资源（用户 / 用户组 / 设置），其中「设置」一把钥匙同时管着「常规」与「用户注册」两个页面；用户在两个方案里选了「拆成独立权限」。
+
+**本轮口径**：
+
+- **后端**：目录加 `system.register.view` / `.edit`（名称「查看 / 管理用户注册」）；目录顺序调整为 users → settings → register → groups（目录顺序只决定 `/admin/permissions` 的返回顺序；前端矩阵的行序与分组由 `frontend/lib/groups.ts` 的分组表定）。设置接口 `GET / PATCH /admin/settings/:group` 守卫由单一 `system.settings.*` 改为**按组分流**（`requireGroupPermission`）：`site` 组 → `system.settings.*`，`register` / `auth` 组 → `system.register.*`；未知组仍落到 settings 档、由服务层 404。
+- **前端**：矩阵标签 `system.settings` 行「设置」→「常规」、新增 `system.register` 行「用户注册」（i18n 键 `resourceGeneral` / `resourceRegister` 替换 `resourceSettings`，共 48 键）；侧栏「常规」「用户注册」两项按各自 view 权限显隐（与用户组一致；三枚布尔 layout → sidebar → nav 下传；**三项全无权限时 main 面板「设置」入口整体不渲染**，避免点进空面板）；弹窗矩阵**表头对齐修复**——原表头是「勾选框 + 文字」整体居中，与正文列按勾选框居中的位置错开小半个字，改为「文字在上、勾选框在下」各自居中，勾选框与列严格对齐。
+- **侧栏再分组**（同轮后续，用户点名）：设置子面板从「一个组标签 + 三项」改为**三个分组**——设置（常规）/ 注册与登录（用户注册）/ 权限组（用户组），组间留白（后续分组标签 `mt-4`）；空组（无权限项）整组不渲染；`ConsoleSidebarSection` 改为接收 `groups: { label, items }[]`，uc 面板同步改形（单组）。
+- **矩阵分三组 + 暂隐藏「用户」**（同轮后续，用户点名）：弹窗矩阵照侧栏拆三组（设置 / 注册与登录 / 权限组）加小标题、组间留白；小组标题复用 `sidebar` 命名空间同款文案（与侧栏一字不差，标签 2026-10-16 按用户点名由「登录与注册」改为「注册与登录」）。**「用户」行暂不显示**——用户页未建：`system.users.*` 键仍在后端目录、owner / admin 自动持有；自建组暂不能新授「用户」权限，已有该权限的自建组保存时原样保留（隐藏键不进勾选、不清除）。列表「权限点数」改为只计可见资源（排序同步），与弹窗可勾数量一致（owner 由 8 → 6）。分组表在 `frontend/lib/groups.ts`（`MATRIX_GROUPS`），与后端目录顺序解耦；离线断言补分组 / 隐藏用例，并做过变异自检（把 users 塞回分组表 → 断言红，还原复绿）。
+- **删只读提示文案**（同轮后续，用户点名）：预设组只读弹窗底部的两档提示行（owner·admin / user 文案）删除，`readOnlyPreset` / `readOnlyPrivileged` 两键同轮退役（`groups` 命名空间 48 → 46 键）；可写弹窗的「勾选『编辑』会自动勾选『查看』。」保留。
+- **权限语义变化**：自建组原持有的 `system.settings.*` 现在只管「常规」页；要管「用户注册」页须另授 `system.register.*`（owner / admin 由代码全量授予、自动包含；已存在的自建组需在用户组页重新勾选）。无数据迁移。
+- **文档同步**：`backend/README.md`（模块表 / 用户组与权限节 / 设置节接口表）、用户组 spec（D6、§5 顺序、§7 键表、§12 时间线）、实施计划（口径修订段追加行）。
+
+**验证（本机）**：后端全量测试绿（`scripts/test.sh` 串行；新增 `TestSettingsGroupPermissionsSplitByGroup` 覆盖 register / auth / site 三组 × 读写的两把钥匙穿越矩阵）；**变异自检**：把守卫改回单钥匙 → 新测试红（`status = 403, want 200`）→ 还原复绿；`gofmt -l` 干净。前端：离线断言 `groups checks: PASS`（含四资源标签映射）；`tsc` / `eslint`（0 error，2 条 `sonner.tsx` 存量 warning）/ `prettier --check` 全绿。**运行期未验**——矩阵四行、侧栏三项显隐、表头对齐交用户实机。
+
+**提交前独立评审（2026-10-16，只读子代理，requesting-code-review）**：无 Critical（嵌套 guard 的 handler 执行次数 / abort 语义、隐藏键往返、三态与计数一致性三项逐行验证成立）；1 Important **已修**——busy 锁没盖到 ⋯ 行菜单与「新建」按钮（spec §4.1 明文要求，`ConsoleListTable` 的 `isBusy` 实际只作用于行选择框），现行菜单触发钮与编辑菜单项、新建按钮均随 `isListLocked` 禁用，并删掉传给表格的无效 `isBusy`；另修两处 Minor（列头在无可见键时禁用、refresh 403 改用 `forbidden` 文案）并补三处测试断言（未知组两档位、register 钥匙 PATCH `auth`、隐藏键勾选往返——变异自检：`auth` 档位一摘测试即红）。余下 Minor（`canViewSettings` 命名、settings 组 tier 数据化、`/nav` 入口 href 取首个可访问项）留待点名。
+
+**提交状态**：随本轮三批入库——① `feat(backend)`（权限目录与按组守卫，含 0.21.0 版本进位）② `feat(frontend)`（用户组接线 + 矩阵分组 + 侧栏分组 + 文案清理）③ `docs`（本节与 spec / 计划）；**未推送**。
+
+---
+
+## 2026-10-16 · 控制台「用户组」页接后端（access 接口，纯前端）
+
+**范围**：纯前端，后端零改动，零新依赖。spec：`docs/superpowers/specs/2026-10-15-neoblog-console-groups-design.md`（v3）；计划：`docs/superpowers/plans/2026-10-15-neoblog-console-groups.md`（v2 + 口径修订段 + 执行结果节）。
+
+**动机**：用户组页自 b5ad652 起是纯 UI（本地空数组 + 写死的 6 条权限清单，"新建 / 编辑 / 删除"只活在内存里）。后端 access 八条接口（0.5.0）与 `/users/me` 的 `permissions` 字段早就在位；本轮按用户点名「开始执行，直接执行；移除掉老的数据」把页面接到真接口。
+
+**本轮口径（D1–D22 摘要，含两处随轮修订）**：
+
+- **页面落设置子项** `/console/settings/groups`（原定的顶层 `/console/groups` 作废）：侧栏「设置」子面板第三项，标签复用 `settings.groups`；**搜索框删除**（用户点名）；表格视图保留（刷新 / 新建 / ⋯ 行菜单 / 权限矩阵弹窗）。
+- **读**：服务端直读 `lib/admin-groups.ts`（`GET /api/v1/admin/groups` + `GET /api/v1/admin/permissions`，cookie 转发 + `cache:"no-store"`）；读失败 / 403 → 不渲染列表；**权限清单从接口取**（前端零硬编码清单，资源 / 动作动态推导）。
+- **门控**：`SessionUser` 补解析 `/users/me` 的 `permissions`；`system.groups.view` 控侧栏项显隐（layout → sidebar → nav 三层传参）、`system.groups.edit` 控「新建」与操作列（`canEdit=true` 才传 `rowActions` / `actionsHeader`）。
+- **写**：`use-groups.ts`（对齐 `use-sessions`）：新建 `POST` / 编辑 `PATCH`（整份 `{name, permissions}`）/ 删除 `DELETE`；成功后用响应对象就地更新列表（**不调 `router.refresh()`**）；删除 404 视为成功；401 静默（全局会话失效弹窗接管）；错误按码映射 i18n（`preset_group_locked` / `group_name_taken` / `group_not_empty` / `grant_forbidden` / `forbidden` / `not_found` 全列，兜底按 create / edit / delete 分档）。
+- 唯一硬编码规则 = `edit⇒view` 蕴含（对齐后端 `rbac.impliedActions`）；展示计数用后端已展开的 `permissions`，提交原始勾选集合。
+- 轮次口径：无版本进位（前端轮惯例，同 f512409）；随本轮三批入库（**未推送**）。
+
+**验证（离线，本机）**：离线断言 `groups checks: PASS`（解析畸形面 / 矩阵 / 联动 / 排序 / 错码全表）；变异自检三条 RED→GREEN（删反向蕴含清理 → 「取消 view → 清 edit」红；删 `grant_forbidden` 映射 → 红（落成 `saveFailed`）；排序直返 → 红（预设分区丢失））；`tsc` / `eslint`（0 error，2 条 `sonner.tsx` 存量 warning）/ `prettier --check` 全绿；键位比对 47/47。**运行期未验**——读 / 写 / 门控六条链路交用户实机。
+
+**过程发现（值得后续点名）**：单文件编译断言脚本（`tsc lib/groups.ts --outDir …`）会忽略项目 tsconfig，**须补 `--strict`**——默认非 strict 下 `unknown` 经 `x !== null && typeof x !== "string"` 复合收窄的行为不同，会误报 `TS2322`（项目 strict 下同代码合法）。
+
+**已知缺口**：读失败态只有一行文案、无「重试」按钮（读失败不渲染面板；会话页的 `Empty` + retry 版本未套用，刷新整页重试）；错误码 / 标签映射前端各存一份（集中 `lib/groups.ts` 单点，后端清单变化时要同步）；前端显隐非安全边界（服务端 403 兜底）。
+
+---
+
 ## 2026-10-15 · 站点设置接入前台（元数据 / robots）+ 控制台页面标题（纯前端）
 
 **范围**：纯前端，后端零改动，零新依赖。spec：`docs/superpowers/specs/2026-10-15-neoblog-site-metadata-design.md`；计划：`docs/superpowers/plans/2026-10-15-neoblog-site-metadata.md`。
