@@ -60,7 +60,7 @@
 | D17 | `SessionUser` 前置改造 | 增 `permissions: string[]`，解析 `/users/me` 已下发字段；形状坏维持既有 malformed 抛错口径 |
 | D18 | 本轮不做 | 用户列表 / 改组 / 额外权限 / 成员管理入口；分页 / 批量选择；权限点描述文字；拖拽；侧栏面板化。均为插槽（§10） |
 | D19 | 工程口径 | 零新依赖、零后端改动、无版本进位（前端轮惯例，同 f512409） |
-| D20 | 工具栏 | 左 = 空（**无搜索框**）；右 = 「新建用户组」（`canEdit` 才渲染，放 `end` 槽）+ 刷新按钮（组件内置、渲染在 `end` 槽之后，实际排布 [新建][刷新]；点了**客户端重读** `GET /admin/groups`，对齐会话页 `refreshSessions` 口径） |
+| D20 | 工具栏 | 左 = 「新建」（`canEdit` 才渲染，放 `start` 槽、按钮档位 `default` = 36px；2026-10-16 用户点名由右槽移来并调整档位与文案）；右 = 刷新按钮（组件内置；点了**客户端重读** `GET /admin/groups`，对齐会话页 `refreshSessions` 口径） |
 | D21 | 表格实现 | 直接复用会话页三件套组件（不改源码）；行操作菜单用 `ui/dropdown-menu`（`DropdownMenuTrigger` 的 `render=` 用法对齐 `console-user-menu.tsx`）；`canEdit=false` 时不传 `rowActions` / `actionsHeader`（操作列整列不渲染） |
 | D22 | 空态 | 列表空 → 表格区显示居中灰字「暂无用户组」（`emptyState` 只替换表格，工具栏保留）；接线后列表数据恒 ≥3 行（3 预设），空态仅覆盖异常情形 |
 
@@ -91,14 +91,14 @@
 <div 页壳 max-w-[1000px]>
   <h1「用户组」>
   <Card size="none">
-    <工具栏：                          [新建用户组] [刷新]>
+    <工具栏：[新建]                  [刷新]>
     <表头：组名 | 成员数 | 权限点数 | 操作>
     <行 × N>
   </Card>
 </div>
 ```
 
-- 工具栏（`ConsoleListToolbar`）：**无 `start` 槽（搜索框已按用户点名移除）**；`end` = 「新建用户组」（`canEdit` 才渲染）；刷新按钮组件内置（`isRefreshing` / `onRefresh`），点了**客户端重读** `GET /api/v1/admin/groups`（排序状态保留）。
+- 工具栏（`ConsoleListToolbar`）：`start` = 「新建」（`canEdit` 才渲染；2026-10-16 用户点名由右槽移至左槽、按钮档位 `sm`→`default`（32 → 36px）、文案「新建用户组」→「新建」，右槽留空）；刷新按钮组件内置（`isRefreshing` / `onRefresh`），点了**客户端重读** `GET /api/v1/admin/groups`（排序状态保留）。
 - 表头 / 单元格：组名单元格 = 32px 图标块 + 组名 +「预设」Badge；「成员数」取接口原值、「权限点数」只计矩阵可见资源（2026-10-16 起，与弹窗可勾数量一致）；「操作」列右对齐单个 ⋯ 按钮。
 - 排序：默认无排序（＝ D3 预设分区序）；点「成员数 / 权限点数」表头切换降→升（箭头指示）。
 - 空态：列表空 → 表格区显示「暂无用户组」（工具栏保留）。
@@ -173,7 +173,7 @@
 | title | 用户组 |
 | noPermission | 无权查看用户组 |
 | loadFailed | 用户组读取失败，请刷新重试 |
-| newGroup | 新建用户组 |
+| newGroup | 新建 |
 | preset | 预设 |
 | empty | 暂无用户组 |
 | columnName / columnMembers / columnPermissions / actions | 组名 / 成员数 / 权限点数 / 操作（表头） |
