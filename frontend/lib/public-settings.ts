@@ -40,7 +40,7 @@ function toSettings(payload: unknown): PublicSettings {
 export async function getPublicSettings(): Promise<PublicSettings> {
   try {
     const response = await fetch(`${backendUrl}/api/v1/public/settings`, {
-      cache: "no-store",
+      next: { revalidate: 60 },
     });
     if (!response.ok) {
       throw new Error(
