@@ -102,6 +102,12 @@
     "emptyFilteredTitle": "No matching sessions",
     "emptyFilteredDescription": "Try a different keyword."
   },
+  "sessionExpiry": {
+    "title": "Your session has expired",
+    "description": "Please sign in again.",
+    "relogin": "Sign in again",
+    "stay": "Stay on this page"
+  },
   "common": {
     "showPassword": "Show password",
     "hidePassword": "Hide password",
