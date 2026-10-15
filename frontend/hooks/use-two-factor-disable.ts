@@ -37,7 +37,6 @@ export function useTwoFactorDisable(onDisabled: () => void) {
           return;
         }
         if (error.status === 401) {
-          router.replace("/signin");
           return;
         }
         if (error.code === "two_factor_not_setup") {

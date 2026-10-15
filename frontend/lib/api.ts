@@ -1,3 +1,5 @@
+import { reportSessionExpired } from "@/lib/session-expiry";
+
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 type RequestOptions = {
@@ -68,6 +70,9 @@ export async function apiRequest<T = unknown>(
 
   if (!response.ok) {
     const error = (payload as ErrorEnvelope | null)?.error;
+    if (response.status === 401 && error?.code === "unauthorized") {
+      reportSessionExpired();
+    }
     throw new ApiError(
       response.status,
       error?.code ?? "invalid_response",

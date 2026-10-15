@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
@@ -12,7 +11,6 @@ export type PasswordChangeState =
 export function usePasswordChange() {
   const t = useTranslations("uc");
   const tCommon = useTranslations("common");
-  const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [state, setState] = useState<PasswordChangeState>("idle");
@@ -77,7 +75,6 @@ export function usePasswordChange() {
           return;
         }
         if (error.status === 401) {
-          router.replace("/signin");
           return;
         }
       }
@@ -91,7 +88,7 @@ export function usePasswordChange() {
     } finally {
       isSubmittingRef.current = false;
     }
-  }, [currentPassword, newPassword, router, t, tCommon]);
+  }, [currentPassword, newPassword, t, tCommon]);
 
   return {
     currentPassword,

@@ -70,7 +70,6 @@ export function useProfileSave(profile: SessionUser | null) {
       router.refresh();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        router.replace("/signin");
         return;
       }
       if (looksLikeServiceFailure(error)) {

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
@@ -13,7 +12,6 @@ import {
 export function useSessions(initialSessions: UserSession[] | null) {
   const t = useTranslations("sessions");
   const tCommon = useTranslations("common");
-  const router = useRouter();
   const [sessions, setSessions] = useState(initialSessions);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(
@@ -41,7 +39,6 @@ export function useSessions(initialSessions: UserSession[] | null) {
 
   function handleUnauthorized(error: unknown): boolean {
     if (error instanceof ApiError && error.status === 401) {
-      router.replace("/signin");
       return true;
     }
     return false;

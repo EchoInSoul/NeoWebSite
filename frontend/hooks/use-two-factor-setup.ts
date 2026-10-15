@@ -52,7 +52,6 @@ export function useTwoFactorSetup() {
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.status === 401) {
-          router.replace("/signin");
           return;
         }
         if (error.code === "two_factor_already_enabled") {
@@ -111,7 +110,6 @@ export function useTwoFactorSetup() {
             return;
           }
           if (error.status === 401) {
-            router.replace("/signin");
             return;
           }
           if (error.code === "two_factor_already_enabled") {
