@@ -28,7 +28,22 @@
     "settings": "设置"
   },
   "settings": {
-    "general": "常规"
+    "general": "常规",
+    "siteGroup": "站点",
+    "siteTitle": "站点标题",
+    "siteSubtitle": "站点副标题",
+    "siteDescription": "站点描述",
+    "siteKeywords": "站点关键词",
+    "siteUrl": "站点 URL",
+    "blockSearchEngines": "屏蔽搜索引擎",
+    "siteLogo": "Logo",
+    "siteIcon": "图标",
+    "faviconPreview": "站点图标预览",
+    "faviconLargePreviewAlt": "站点图标大图预览",
+    "faviconTabIconAlt": "浏览器标签页图标",
+    "browserTabClose": "关闭标签页",
+    "changeIcon": "更换图标",
+    "removeIcon": "移除图标"
   },
   "console": {
     "title": "控制台"

@@ -28,7 +28,22 @@
     "settings": "Settings"
   },
   "settings": {
-    "general": "General"
+    "general": "General",
+    "siteGroup": "Site",
+    "siteTitle": "Site title",
+    "siteSubtitle": "Site subtitle",
+    "siteDescription": "Site description",
+    "siteKeywords": "Site keywords",
+    "siteUrl": "Site URL",
+    "blockSearchEngines": "Block search engines",
+    "siteLogo": "Logo",
+    "siteIcon": "Icon",
+    "faviconPreview": "Site icon preview",
+    "faviconLargePreviewAlt": "Large site icon preview",
+    "faviconTabIconAlt": "Browser tab icon",
+    "browserTabClose": "Close tab",
+    "changeIcon": "Change icon",
+    "removeIcon": "Remove icon"
   },
   "console": {
     "title": "Console"
