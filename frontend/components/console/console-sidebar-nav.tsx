@@ -9,6 +9,7 @@ import {
   MonitorSmartphone,
   Settings,
   SlidersHorizontal,
+  UserRoundPlus,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -31,6 +32,7 @@ const PANEL_PREFIXES = {
 } as const;
 
 const SETTINGS_GENERAL_HREF = `${PANEL_PREFIXES.settings}/general`;
+const SETTINGS_REGISTER_HREF = `${PANEL_PREFIXES.settings}/register`;
 
 type PanelKey = "main" | keyof typeof PANEL_PREFIXES;
 
@@ -114,6 +116,12 @@ export function ConsoleSidebarNav() {
           href: SETTINGS_GENERAL_HREF,
           label: ts("general"),
           icon: <SlidersHorizontal />,
+          className: "mb-1",
+        },
+        {
+          href: SETTINGS_REGISTER_HREF,
+          label: ts("register"),
+          icon: <UserRoundPlus />,
         },
       ],
     },
