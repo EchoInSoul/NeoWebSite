@@ -165,7 +165,7 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 
 | 方法 路径 | 认证 | 说明 |
 | --- | --- | --- |
-| `POST /api/v1/users` | 公开 | body `{"email","nickname","password"}` → 201 `{"email","nickname","bio"}` + 会话 cookie（注册即登录，新用户 `bio` 为 `null`）；400 `invalid_request` / `weak_password`；409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底） |
+| `POST /api/v1/users` | 公开 | body `{"email","nickname","password"}` → 201 `{"email","nickname","bio"}`，新用户 `bio` 为 `null`；**不下发会话 cookie（注册只建号，要登录得另走 `POST /sessions`）**；400 `invalid_request` / `weak_password`；409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底） |
 | `POST /api/v1/sessions` | 公开 | body `{"identifier":"邮箱或昵称","password":"..."}` → 200 + 会话 cookie；401 `invalid_credentials`；400 `invalid_request`；**已启用 2FA 的账号密码正确也不算登录完成**：换发会话后返回 401 `two_factor_required`，会话转入「待二段」状态 |
 | `DELETE /api/v1/sessions/current` | 需登录 | 销毁当前会话，返回 200 `{}` |
 | `GET /api/v1/users/me` | 需登录 | 返回 `{"email","nickname","bio","group":{"id","system_key","name"},"permissions":["..."],"two_factor_enabled":bool}`（`bio` 未设置时为 `null`；自建组 `system_key` 为 `null`，`permissions` 是展开后的生效权限）；未登录 401 `unauthorized` |

@@ -51,6 +51,8 @@ export function useSignupForm() {
       switch (error.code) {
         case "email_taken":
           return { message: t("emailTaken"), field: "email" };
+        case "email_domain_not_allowed":
+          return { message: t("emailDomainNotAllowed"), field: "email" };
         case "nickname_taken":
           return { message: t("nameTaken"), field: "name" };
         case "weak_password":

@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-10-16 · 前端接上 `email_domain_not_allowed`（域名不允许时给具体提示）
+
+**范围**：前端 3 文件（`hooks/use-signup.ts` 的 `toFailure` 加一个 case、`messages/zh-CN.json` 与 `messages/en.json` 各加一条 signup 键）。零后端改动、零版本进位。
+
+**动机**：上一轮加的域名白名单后端会返回 400 `email_domain_not_allowed`（`apierror.ErrEmailDomainNotAllowed`），但前端 `toFailure` 的 switch 里没有这个 case，落到兜底分支，注册页只弹一句「注册失败，请稍后重试」——用户看不出是自己邮箱域名被挡了。用户裁定「启用了域名限制时注册，应当返回此邮箱无法注册」。
+
+**口径**：
+
+- `email_domain_not_allowed` 映射成 `{ message: t("emailDomainNotAllowed"), field: "email" }`，与 `email_taken` 同级：**既弹 toast，又把光标打回邮箱框**。
+- 文案按用户要求收短：zh「该邮箱域名不允许注册」/ en「This email domain is not allowed」，不带解释性从句。
+
+**验证**：`tsc --noEmit` 零输出、`eslint hooks/use-signup.ts` 零输出、`prettier --check` 三个文件通过。后端 `gofmt -l` 干净、`go vet ./...` 零输出、`scripts/test.sh ./internal/modules/auth/...` ok。**运行期未验**——真实提交一次被拦域名的注册看提示归用户实机。
+
+**提交状态**：未提交（与「注册只建号」那轮一起躺着）。
+
+---
+
 ## 2026-10-16 · 控制台「注册默认组」下拉接真实用户组（存组名）+ 后端默认值对齐
 
 **范围**：前端 7 文件（`page.tsx` / `register-settings-form.tsx` / `use-register-settings-save.ts` / `admin-settings.ts` / `register-settings.ts` / 两个 message）；后端 4 文件（`rbac.go` 加 `PresetGroupNameByKey`、`registry.go` 改默认值、两处测试断言）。零迁移、零新路由、零版本进位。
@@ -30,6 +47,26 @@
 **测试**：后端默认值两处断言做了变异自检——把默认值改回组键 `"user"`，两条分别红（`want "普通用户"`）；复原后全仓 `scripts/test.sh` ok、`gofmt` 干净、`go vet ./...` 零输出。前端 `tsc --noEmit` 零输出、目标文件 `eslint` 零输出、`prettier --check` 通过。**运行期未验**——下拉弹出、选中显示、保存读回均交用户实机。
 
 **提交状态**：分两笔入库（后端默认值对齐 / 前端接线），**未推送**。
+
+---
+
+## 2026-10-16 · 注册只建号、不下发会话（去掉「注册即登录」）
+
+**范围**：后端 `auth`（`service.go` 的 `Register` 去掉 `establishSession` 并收掉 `meta` 参数、`controller.go` 的 `signup` 少传 `requestSessionMeta`）+ 两个测试；前端 `use-signup.ts`（`router.push("/console")` → 清空表单 + `push("/signin")`）。零迁移、零新路由、零版本进位。
+
+**动机**：用户发现注册完成会直接跳进控制台，裁定「注册用户只注册用户，不要授权会话」。根因不在前端跳转——后端 `Register` 建号后调 `establishSession` 种下会话 cookie，前端再 `push("/console")` 自然就进去了；而普通用户落的是「普通用户」组，控制台里没有任何可用内容，体感是"注册完给我开一个空后台"。
+
+**口径**：
+
+- **`Register` 不再种会话**，`Service.Register` 签名去掉 `SessionMeta` 参数（生产侧唯一调用方是 `controller.signup`，同步少调 `requestSessionMeta(ctx)`）；`Login` 与两步验证通过两处 `establishSession` **保持不动**。
+- 前端注册成功：toast（文案本就是「注册成功，请登录」）→ 清空四个输入框 → `router.push("/signin")`。登录页无需改动、无新增 i18n 键。
+- **已登录用户注册不影响既有会话**：该行为原本由"注册会换掉会话"间接覆盖，现在无会话可换，改由 `TestRegisterWhileLoggedInKeepsExistingSession` 直接断言"原会话仍是原来那个人，且注册方拿不到 cookie"。
+
+**测试**：`TestRegisterSucceedsAndLogsIn` → `TestRegisterSucceedsWithoutSession`，断言从"有 cookie 且 `/users/me` 200"翻成"**无 cookie + `/users/me` 401**，随后 `loginAs` 显式登录 `/users/me` 200"。`TestRegisterWhileLoggedInSwitchesSession` → `TestRegisterWhileLoggedInKeepsExistingSession`。**变异自检实测红**：把 `establishSession` 加回 `Register`，两条分别报 `register handed out session cookie "…", want none`；复原后全仓 `scripts/test.sh` ok、`gofmt` 干净、`go vet ./...` 零输出。前端 `tsc --noEmit` / `eslint` / `prettier --check` 全绿。**运行期未验**。
+
+**文档**：`backend/README.md` 的 `POST /api/v1/users` 行改写——去掉「+ 会话 cookie（注册即登录）」，改为明写「不下发会话 cookie，注册只建号，要登录另走 `POST /sessions`」。
+
+**提交状态**：未提交，等用户审查。
 
 ---
 

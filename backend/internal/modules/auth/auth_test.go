@@ -411,7 +411,7 @@ func cleanupUserByEmail(t *testing.T, db *database.Database, email string) {
 	})
 }
 
-func TestRegisterSucceedsAndLogsIn(t *testing.T) {
+func TestRegisterSucceedsWithoutSession(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
 	ts := newTestApp(t, db)
@@ -421,7 +421,6 @@ func TestRegisterSucceedsAndLogsIn(t *testing.T) {
 	cleanupUserByEmail(t, db, strings.ToLower(email))
 
 	resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: "new" + tag, Password: "pass1234"})
-	cookie := sessionCookie(t, client.Jar, ts.URL)
 	if resp.StatusCode != http.StatusCreated {
 		resp.Body.Close()
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
@@ -437,20 +436,30 @@ func TestRegisterSucceedsAndLogsIn(t *testing.T) {
 	if body.Nickname != "new"+tag {
 		t.Fatalf("nickname = %q, want %q", body.Nickname, "new"+tag)
 	}
-	if cookie == "" {
-		t.Fatal("expected a session cookie")
+	if cookie := sessionCookie(t, client.Jar, ts.URL); cookie != "" {
+		t.Fatalf("register handed out session cookie %q, want none", cookie)
 	}
 
 	me, err := client.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}
-	defer me.Body.Close()
-	if me.StatusCode != http.StatusOK {
-		t.Fatalf("me status = %d, want 200", me.StatusCode)
+	me.Body.Close()
+	if me.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("me status after register = %d, want 401", me.StatusCode)
+	}
+
+	loggedIn := loginAs(t, ts.URL, strings.ToLower(email), "pass1234")
+	after, err := loggedIn.Get(ts.URL + "/api/v1/users/me")
+	if err != nil {
+		t.Fatalf("me after login: %v", err)
+	}
+	defer after.Body.Close()
+	if after.StatusCode != http.StatusOK {
+		t.Fatalf("me status after login = %d, want 200", after.StatusCode)
 	}
 	var meBody UserResponse
-	if err := json.NewDecoder(me.Body).Decode(&meBody); err != nil {
+	if err := json.NewDecoder(after.Body).Decode(&meBody); err != nil {
 		t.Fatalf("decode me: %v", err)
 	}
 	if meBody.Email != strings.ToLower(email) || meBody.Nickname != "new"+tag {
@@ -593,20 +602,22 @@ func TestRegisterRejectsMalformedBody(t *testing.T) {
 	}
 }
 
-func TestRegisterWhileLoggedInSwitchesSession(t *testing.T) {
+func TestRegisterWhileLoggedInKeepsExistingSession(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
 	ts := newTestApp(t, db)
-	client := testClient(t)
 
-	firstEmail := "first+" + tag + "@example.com"
-	cleanupUserByEmail(t, db, firstEmail)
-	first := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: firstEmail, Nickname: "first" + tag, Password: "pass1234"})
-	first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first status = %d, want 201", first.StatusCode)
+	existingEmail := "first+" + tag + "@example.com"
+	cleanupUserByEmail(t, db, existingEmail)
+	seed := testClient(t)
+	existing := postJSON(t, seed, ts.URL+"/api/v1/users", RegisterRequest{Email: existingEmail, Nickname: "first" + tag, Password: "pass1234"})
+	existing.Body.Close()
+	if existing.StatusCode != http.StatusCreated {
+		t.Fatalf("first status = %d, want 201", existing.StatusCode)
 	}
+	loggedIn := loginAs(t, ts.URL, existingEmail, "pass1234")
 
+	client := testClient(t)
 	secondEmail := "second+" + tag + "@example.com"
 	cleanupUserByEmail(t, db, secondEmail)
 	second := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: secondEmail, Nickname: "second" + tag, Password: "pass1234"})
@@ -615,17 +626,23 @@ func TestRegisterWhileLoggedInSwitchesSession(t *testing.T) {
 		t.Fatalf("second status = %d, want 201", second.StatusCode)
 	}
 
-	me, err := client.Get(ts.URL + "/api/v1/users/me")
+	me, err := loggedIn.Get(ts.URL + "/api/v1/users/me")
 	if err != nil {
 		t.Fatalf("me: %v", err)
 	}
 	defer me.Body.Close()
+	if me.StatusCode != http.StatusOK {
+		t.Fatalf("me status = %d, want 200", me.StatusCode)
+	}
 	var body UserResponse
 	if err := json.NewDecoder(me.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Email != secondEmail {
-		t.Fatalf("me email = %q, want %q", body.Email, secondEmail)
+	if body.Email != existingEmail {
+		t.Fatalf("me email = %q, want %q", body.Email, existingEmail)
+	}
+	if cookie := sessionCookie(t, client.Jar, ts.URL); cookie != "" {
+		t.Fatalf("register handed out session cookie %q, want none", cookie)
 	}
 }
 

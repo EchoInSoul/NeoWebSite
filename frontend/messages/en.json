@@ -245,6 +245,7 @@
       "invalidName": "Username must be {minLength}-{maxLength} characters, with no spaces or @",
       "weakPassword": "Password does not meet the requirements",
       "emailTaken": "This email is already registered",
+      "emailDomainNotAllowed": "This email domain is not allowed",
       "nameTaken": "This username is already taken",
       "alreadyTaken": "This email or username is already taken",
       "invalidRequest": "Some details are invalid, please review and try again",

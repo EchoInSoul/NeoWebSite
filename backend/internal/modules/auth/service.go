@@ -45,7 +45,7 @@ func newService(db *database.Database, sessions *scs.SessionManager, totpKey []b
 	}
 }
 
-func (s *Service) Register(ctx context.Context, email, nickname, password string, meta SessionMeta) (User, error) {
+func (s *Service) Register(ctx context.Context, email, nickname, password string) (User, error) {
 	enabled, err := s.settings.GetBool(ctx, "register", "enabled")
 	if err != nil {
 		return User{}, err
@@ -93,10 +93,6 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 		if ent.IsConstraintError(err) {
 			return User{}, apierror.ErrAlreadyTaken
 		}
-		return User{}, err
-	}
-
-	if err := s.establishSession(ctx, created.ID.String(), meta); err != nil {
 		return User{}, err
 	}
 

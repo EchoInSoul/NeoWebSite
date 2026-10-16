@@ -245,6 +245,7 @@
       "invalidName": "用户名需 {minLength}-{maxLength} 位，不能含空格和 @",
       "weakPassword": "密码不符合要求",
       "emailTaken": "该邮箱已被注册",
+      "emailDomainNotAllowed": "该邮箱域名不允许注册",
       "nameTaken": "该用户名已被占用",
       "alreadyTaken": "该邮箱或用户名已被占用",
       "invalidRequest": "填写内容有误，请检查后重试",
