@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import type { FormEvent } from "react";
 import {
   Asterisk,
   AtSign,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
 import { Input } from "@/components/ui/input";
@@ -22,27 +23,45 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useRegisterSettingsSave } from "@/hooks/use-register-settings-save";
+import type { RegisterSettingsValues } from "@/lib/register-settings";
 
 const inputClassName = "w-70";
 
-export function RegisterSettingsForm() {
+export function RegisterSettingsForm({
+  settings,
+}: {
+  settings: RegisterSettingsValues;
+}) {
   const t = useTranslations("settings");
-  const [allowPublicRegistration, setAllowPublicRegistration] = useState(true);
-  const [emailDomainControl, setEmailDomainControl] = useState(false);
-  const [allowedEmailDomains, setAllowedEmailDomains] = useState("");
-  const [passwordRequirements, setPasswordRequirements] = useState(false);
-  const [passwordMinLength, setPasswordMinLength] = useState("");
-  const [passwordComplexity, setPasswordComplexity] = useState("");
+  const {
+    values,
+    isDirty,
+    isSaving,
+    setEnabled,
+    setEmailDomainControlEnabled,
+    updateAllowedEmailDomains,
+    setPasswordRequirementsEnabled,
+    updatePasswordMinLength,
+    updatePasswordComplexity,
+    save,
+  } = useRegisterSettingsSave(settings);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void save();
+  }
 
   return (
-    <>
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
       <ConsoleSettingsGroup title={t("registerGroup")}>
         <ConsoleSettingsRow
           control={
             <Switch
               aria-label={t("allowPublicRegistration")}
-              checked={allowPublicRegistration}
-              onCheckedChange={setAllowPublicRegistration}
+              checked={values.enabled}
+              onCheckedChange={setEnabled}
+              disabled={isSaving}
             />
           }
           expandedContent={
@@ -70,8 +89,9 @@ export function RegisterSettingsForm() {
           control={
             <Switch
               aria-label={t("emailDomainControl")}
-              checked={emailDomainControl}
-              onCheckedChange={setEmailDomainControl}
+              checked={values.emailDomainControlEnabled}
+              onCheckedChange={setEmailDomainControlEnabled}
+              disabled={isSaving}
             />
           }
           expandedContent={
@@ -81,9 +101,15 @@ export function RegisterSettingsForm() {
                   aria-label={t("allowedEmailDomains")}
                   className={inputClassName}
                   onChange={(event) =>
-                    setAllowedEmailDomains(event.target.value)
+                    updateAllowedEmailDomains(event.target.value)
                   }
-                  value={allowedEmailDomains}
+                  disabled={isSaving}
+                  placeholder={
+                    values.emailDomainControlEnabled
+                      ? t("allowedEmailDomainsEmptyHint")
+                      : undefined
+                  }
+                  value={values.allowedEmailDomains}
                 />
               }
               icon={<AtSign />}
@@ -99,8 +125,9 @@ export function RegisterSettingsForm() {
           control={
             <Switch
               aria-label={t("passwordRequirements")}
-              checked={passwordRequirements}
-              onCheckedChange={setPasswordRequirements}
+              checked={values.passwordRequirementsEnabled}
+              onCheckedChange={setPasswordRequirementsEnabled}
+              disabled={isSaving}
             />
           }
           expandedContent={
@@ -111,10 +138,11 @@ export function RegisterSettingsForm() {
                     aria-label={t("passwordMinLength")}
                     className={inputClassName}
                     onChange={(event) =>
-                      setPasswordMinLength(event.target.value)
+                      updatePasswordMinLength(event.target.value)
                     }
+                    disabled={isSaving}
                     type="number"
-                    value={passwordMinLength}
+                    value={values.passwordMinLength}
                   />
                 }
                 icon={<Hash />}
@@ -126,9 +154,10 @@ export function RegisterSettingsForm() {
                     aria-label={t("passwordComplexity")}
                     className={inputClassName}
                     onChange={(event) =>
-                      setPasswordComplexity(event.target.value)
+                      updatePasswordComplexity(event.target.value)
                     }
-                    value={passwordComplexity}
+                    disabled={isSaving}
+                    value={values.passwordComplexity}
                   />
                 }
                 icon={<Asterisk />}
@@ -140,6 +169,11 @@ export function RegisterSettingsForm() {
           label={t("passwordRequirements")}
         />
       </ConsoleSettingsGroup>
-    </>
+      <ConsoleFloatingSaveButton
+        isDirty={isDirty}
+        isPending={isSaving}
+        label={t("save")}
+      />
+    </form>
   );
 }
