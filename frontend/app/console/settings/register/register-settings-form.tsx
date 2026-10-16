@@ -19,19 +19,27 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useRegisterSettingsSave } from "@/hooks/use-register-settings-save";
-import type { RegisterSettingsValues } from "@/lib/register-settings";
+import type { AdminGroup } from "@/lib/groups";
+import {
+  groupSelectionMap,
+  selectableGroups,
+  type RegisterSettingsValues,
+} from "@/lib/register-settings";
 
 const inputClassName = "w-70";
 
 export function RegisterSettingsForm({
   settings,
+  groups,
 }: {
   settings: RegisterSettingsValues;
+  groups: AdminGroup[];
 }) {
   const t = useTranslations("settings");
   const {
@@ -41,11 +49,19 @@ export function RegisterSettingsForm({
     setEnabled,
     setEmailDomainControlEnabled,
     updateAllowedEmailDomains,
+    setDefaultGroup,
     setPasswordRequirementsEnabled,
     updatePasswordMinLength,
     updatePasswordComplexity,
     save,
   } = useRegisterSettingsSave(settings);
+
+  const defaultGroupOptions = selectableGroups(groups);
+  const defaultGroupItems = groupSelectionMap(defaultGroupOptions);
+  const defaultGroupKnown = Object.hasOwn(
+    defaultGroupItems,
+    values.defaultGroup,
+  );
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,15 +83,26 @@ export function RegisterSettingsForm({
           expandedContent={
             <ConsoleSettingsRow
               control={
-                <Select>
+                <Select
+                  items={defaultGroupItems}
+                  value={defaultGroupKnown ? values.defaultGroup : null}
+                  onValueChange={setDefaultGroup}
+                  disabled={isSaving}
+                >
                   <SelectTrigger
                     aria-label={t("registerDefaultGroup")}
                     className="w-45"
                     size="sm"
                   >
-                    <SelectValue />
+                    <SelectValue placeholder={t("registerDefaultGroupNone")} />
                   </SelectTrigger>
-                  <SelectContent />
+                  <SelectContent>
+                    {defaultGroupOptions.map((group) => (
+                      <SelectItem key={group.id} value={group.name}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               }
               icon={<UsersRound />}

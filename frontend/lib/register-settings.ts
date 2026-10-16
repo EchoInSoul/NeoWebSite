@@ -1,7 +1,10 @@
+import type { AdminGroup } from "@/lib/groups";
+
 export type RegisterGroupValues = {
   enabled: boolean;
   emailDomainControlEnabled: boolean;
   allowedEmailDomains: string;
+  defaultGroup: string;
 };
 
 export type AuthGroupValues = {
@@ -23,6 +26,7 @@ const REGISTER_PATCH_KEYS: Record<keyof RegisterGroupValues, string> = {
   enabled: "enabled",
   emailDomainControlEnabled: "email_domain_control_enabled",
   allowedEmailDomains: "allowed_email_domains",
+  defaultGroup: "default_group",
 };
 
 const AUTH_PATCH_KEYS: Record<keyof AuthGroupValues, string> = {
@@ -45,7 +49,8 @@ export function parseRegisterGroupValues(
   if (
     typeof raw.enabled !== "boolean" ||
     typeof raw.email_domain_control_enabled !== "boolean" ||
-    typeof raw.allowed_email_domains !== "string"
+    typeof raw.allowed_email_domains !== "string" ||
+    typeof raw.default_group !== "string"
   ) {
     return null;
   }
@@ -54,7 +59,23 @@ export function parseRegisterGroupValues(
     enabled: raw.enabled,
     emailDomainControlEnabled: raw.email_domain_control_enabled,
     allowedEmailDomains: raw.allowed_email_domains,
+    defaultGroup: raw.default_group,
   };
+}
+
+const PRIVILEGED_SYSTEM_KEYS: ReadonlySet<string> = new Set(["owner", "admin"]);
+
+export function selectableGroups(groups: AdminGroup[]): AdminGroup[] {
+  return groups.filter(
+    (group) =>
+      group.systemKey === null || !PRIVILEGED_SYSTEM_KEYS.has(group.systemKey),
+  );
+}
+
+export function groupSelectionMap(
+  groups: AdminGroup[],
+): Record<string, string> {
+  return Object.fromEntries(groups.map((group) => [group.name, group.name]));
 }
 
 export function parseAuthGroupValues(payload: unknown): AuthGroupValues | null {

@@ -41,6 +41,7 @@
     "registerGroup": "注册",
     "allowPublicRegistration": "允许公开注册",
     "registerDefaultGroup": "注册默认组",
+    "registerDefaultGroupNone": "未指定",
     "emailDomainControl": "启用邮箱域名控制",
     "allowedEmailDomains": "允许的邮箱域名",
     "allowedEmailDomainsEmptyHint": "留空表示不限制任何邮箱域名",

@@ -55,6 +55,13 @@ export function useRegisterSettingsSave(initial: RegisterSettingsValues) {
     setValues((previous) => ({ ...previous, allowedEmailDomains: value }));
   }
 
+  function setDefaultGroup(value: string | null) {
+    setValues((previous) => ({
+      ...previous,
+      defaultGroup: value ?? "",
+    }));
+  }
+
   function setPasswordRequirementsEnabled(checked: boolean) {
     setValues((previous) => ({
       ...previous,
@@ -151,6 +158,7 @@ export function useRegisterSettingsSave(initial: RegisterSettingsValues) {
     setEnabled,
     setEmailDomainControlEnabled,
     updateAllowedEmailDomains,
+    setDefaultGroup,
     setPasswordRequirementsEnabled,
     updatePasswordMinLength,
     updatePasswordComplexity,

@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 
 import { backendUrl } from "@/lib/backend-url";
+import { parseAdminGroups } from "@/lib/groups";
+import type { AdminGroup } from "@/lib/groups";
 import {
   parseRegisterSettingsValues,
   type RegisterSettingsValues,
@@ -51,7 +53,7 @@ export async function getSiteSettings(): Promise<SiteSettingsRead> {
 }
 
 export type RegisterSettingsRead =
-  | { status: "ok"; values: RegisterSettingsValues }
+  | { status: "ok"; values: RegisterSettingsValues; groups: AdminGroup[] }
   | { status: "forbidden" }
   | { status: "failed" };
 
@@ -63,7 +65,7 @@ export async function getRegisterSettings(): Promise<RegisterSettingsRead> {
   }
 
   try {
-    const [registerResponse, authResponse] = await Promise.all([
+    const [registerResponse, authResponse, groupsResponse] = await Promise.all([
       fetch(`${backendUrl}/api/v1/admin/settings/register`, {
         headers: { cookie: `session=${session}` },
         cache: "no-store",
@@ -72,9 +74,17 @@ export async function getRegisterSettings(): Promise<RegisterSettingsRead> {
         headers: { cookie: `session=${session}` },
         cache: "no-store",
       }),
+      fetch(`${backendUrl}/api/v1/admin/groups`, {
+        headers: { cookie: `session=${session}` },
+        cache: "no-store",
+      }),
     ]);
 
-    if (registerResponse.status === 403 || authResponse.status === 403) {
+    if (
+      registerResponse.status === 403 ||
+      authResponse.status === 403 ||
+      groupsResponse.status === 403
+    ) {
       return { status: "forbidden" };
     }
 
@@ -82,15 +92,19 @@ export async function getRegisterSettings(): Promise<RegisterSettingsRead> {
       return { status: "failed" };
     }
 
-    const registerPayload = await registerResponse.json().catch(() => null);
-    const authPayload = await authResponse.json().catch(() => null);
+    const [registerPayload, authPayload, groupsPayload] = await Promise.all([
+      registerResponse.json().catch(() => null),
+      authResponse.json().catch(() => null),
+      groupsResponse.json().catch(() => null),
+    ]);
     const values = parseRegisterSettingsValues(registerPayload, authPayload);
+    const groups = parseAdminGroups(groupsPayload);
 
-    if (values === null) {
+    if (values === null || groups === null) {
       return { status: "failed" };
     }
 
-    return { status: "ok", values };
+    return { status: "ok", values, groups };
   } catch {
     return { status: "failed" };
   }

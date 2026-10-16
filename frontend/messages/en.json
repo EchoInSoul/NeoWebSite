@@ -41,6 +41,7 @@
     "registerGroup": "Registration",
     "allowPublicRegistration": "Allow public registration",
     "registerDefaultGroup": "Default registration group",
+    "registerDefaultGroupNone": "Not set",
     "emailDomainControl": "Enable email domain control",
     "allowedEmailDomains": "Allowed email domains",
     "allowedEmailDomainsEmptyHint": "Leave empty to allow any email domain",
