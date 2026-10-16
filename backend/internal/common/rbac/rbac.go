@@ -99,6 +99,14 @@ func PresetGroupByKey(key string) (PresetGroup, bool) {
 	return PresetGroup{}, false
 }
 
+func PresetGroupNameByKey(key string) string {
+	group, ok := PresetGroupByKey(key)
+	if !ok {
+		return ""
+	}
+	return group.Name
+}
+
 func IsPresetGroupKey(key string) bool {
 	_, ok := PresetGroupByKey(key)
 	return ok

@@ -428,8 +428,8 @@ func TestSettingsAdminReadsRegisterDefaults(t *testing.T) {
 	if values["enabled"] != true {
 		t.Fatalf("register.enabled = %v, want true", values["enabled"])
 	}
-	if values["default_group"] != "user" {
-		t.Fatalf("register.default_group = %v, want user", values["default_group"])
+	if want := rbac.PresetGroupNameByKey(rbac.GroupKeyUser); values["default_group"] != want {
+		t.Fatalf("register.default_group = %v, want %q", values["default_group"], want)
 	}
 	if values["email_domain_control_enabled"] != false || values["email_verification_enabled"] != false {
 		t.Fatalf("register flags = %v, want false", values)

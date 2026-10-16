@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+
+	"website/backend/internal/common/rbac"
 )
 
 type wantItem struct {
@@ -100,7 +102,7 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		t.Fatalf("register items = %d, want 5", len(reg.groups["register"]))
 	}
 	assertDefinitions(t, reg.groups["register"], []wantItem{
-		{name: "default_group", typ: FieldTypeString, def: "user"},
+		{name: "default_group", typ: FieldTypeString, def: rbac.PresetGroupNameByKey(rbac.GroupKeyUser)},
 		{name: "email_domain_control_enabled", typ: FieldTypeBool, def: false},
 		{name: "allowed_email_domains", typ: FieldTypeString, def: ""},
 		{name: "email_verification_enabled", typ: FieldTypeBool, def: false},

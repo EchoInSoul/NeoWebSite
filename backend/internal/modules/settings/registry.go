@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"website/backend/internal/common/apierror"
+	"website/backend/internal/common/rbac"
 )
 
 var builtinRegistry = []Group{
@@ -24,7 +25,7 @@ var builtinRegistry = []Group{
 		Name: "register",
 		Items: []Definition{
 			{Name: "enabled", Type: FieldTypeBool, Default: true, Public: true},
-			{Name: "default_group", Type: FieldTypeString, Default: "user"},
+			{Name: "default_group", Type: FieldTypeString, Default: rbac.PresetGroupNameByKey(rbac.GroupKeyUser)},
 			{Name: "email_domain_control_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "allowed_email_domains", Type: FieldTypeString, Default: ""},
 			{Name: "email_verification_enabled", Type: FieldTypeBool, Default: false},
