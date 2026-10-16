@@ -51,6 +51,7 @@ export type ConsoleListTableProperties<TRow> = {
   selectedKeys?: ReadonlySet<string>;
   onToggleRowSelected?: (rowKey: string, checked: boolean) => void;
   getRowSelectionLabel?: (row: TRow) => string;
+  getRowSelectionDisabled?: (row: TRow) => boolean;
   rowActions?: (row: TRow) => ReactNode;
   actionsHeader?: ReactNode;
   getRowClassName?: (row: TRow, rowIndex: number) => string | undefined;
@@ -70,6 +71,7 @@ export function ConsoleListTable<TRow>({
   selectedKeys,
   onToggleRowSelected,
   getRowSelectionLabel,
+  getRowSelectionDisabled,
   expandedKeys,
   onToggleRowExpanded,
   getRowExpandLabel,
@@ -189,7 +191,9 @@ export function ConsoleListTable<TRow>({
                       onCheckedChange={(checkedValue) =>
                         onToggleRowSelected(rowKey, checkedValue)
                       }
-                      disabled={isBusy}
+                      disabled={
+                        isBusy || getRowSelectionDisabled?.(row) === true
+                      }
                       aria-label={getRowSelectionLabel?.(row)}
                     />
                   </TableCell>

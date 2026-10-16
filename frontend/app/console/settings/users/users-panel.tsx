@@ -23,28 +23,26 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useUsers } from "@/hooks/use-users";
-import { deleteBlockReason, type AdminUser } from "@/lib/users";
+import {
+  deleteBlockReason,
+  type AdminUser,
+  type DeleteBlockReason,
+} from "@/lib/users";
 
 type RowActionsProperties = {
   user: AdminUser;
   isBusy: boolean;
-  currentUserEmail: string;
-  viewerIsOwner: boolean;
+  blockReason: DeleteBlockReason | null;
   onDelete: (user: AdminUser) => void;
 };
 
 function RowActions({
   user,
   isBusy,
-  currentUserEmail,
-  viewerIsOwner,
+  blockReason,
   onDelete,
 }: RowActionsProperties) {
   const t = useTranslations("users");
-  const blockReason = deleteBlockReason(user, {
-    currentUserEmail,
-    viewerIsOwner,
-  });
   const label = t("deleteAction", { name: user.nickname });
 
   return (
@@ -75,17 +73,27 @@ export function UsersPanel({
 }) {
   const t = useTranslations("users");
   const tCommon = useTranslations("common");
+  const blockContext = { currentUserEmail, viewerIsOwner };
   const {
     users,
+    selectedKeys,
+    isAllSelected,
+    isSomeSelected,
     isRefreshing,
     isListLocked,
     isDeleteOpen,
-    deleteTarget,
     setDeleteOpen,
+    deleteTarget,
+    isBatchDeleteOpen,
+    setBatchDeleteOpen,
+    toggleRowSelected,
+    toggleAllSelected,
     refreshUsers,
     requestDelete,
     confirmDelete,
-  } = useUsers(initialUsers);
+    requestDeleteSelected,
+    confirmDeleteSelected,
+  } = useUsers(initialUsers, blockContext);
 
   const columns: readonly ConsoleListColumn<AdminUser>[] = [
     {
@@ -115,6 +123,28 @@ export function UsersPanel({
     <>
       <Card size="none">
         <ConsoleListToolbar
+          selection={
+            canDelete
+              ? {
+                  isAllSelected,
+                  isSomeSelected,
+                  onToggleAllSelected: toggleAllSelected,
+                  selectAllLabel: t("selectAll"),
+                }
+              : undefined
+          }
+          isSelectionActive={canDelete && selectedKeys.size > 0}
+          selectionActions={
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isListLocked}
+              onClick={requestDeleteSelected}
+            >
+              <Trash2 aria-hidden="true" />
+              {t("delete")}
+            </Button>
+          }
           isBusy={isListLocked}
           isRefreshing={isRefreshing}
           onRefresh={() => void refreshUsers()}
@@ -124,14 +154,25 @@ export function UsersPanel({
           rows={users}
           columns={columns}
           getRowKey={(user) => user.id}
+          selectedKeys={canDelete ? selectedKeys : undefined}
+          onToggleRowSelected={canDelete ? toggleRowSelected : undefined}
+          getRowSelectionLabel={
+            canDelete
+              ? (user) => t("selectRow", { name: user.nickname })
+              : undefined
+          }
+          getRowSelectionDisabled={
+            canDelete
+              ? (user) => deleteBlockReason(user, blockContext) !== null
+              : undefined
+          }
           rowActions={
             canDelete
               ? (user) => (
                   <RowActions
                     user={user}
                     isBusy={isListLocked}
-                    currentUserEmail={currentUserEmail}
-                    viewerIsOwner={viewerIsOwner}
+                    blockReason={deleteBlockReason(user, blockContext)}
                     onDelete={requestDelete}
                   />
                 )
@@ -164,6 +205,30 @@ export function UsersPanel({
             <AlertDialogAction
               variant="destructive"
               onClick={() => void confirmDelete()}
+            >
+              {t("delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={isBatchDeleteOpen} onOpenChange={setBatchDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Trash2 aria-hidden="true" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>
+              {t("batchDeleteConfirmTitle", { count: selectedKeys.size })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("batchDeleteConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tCommon("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => void confirmDeleteSelected()}
             >
               {t("delete")}
             </AlertDialogAction>
