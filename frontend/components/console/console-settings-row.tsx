@@ -26,7 +26,7 @@ export type ConsoleSettingsRowProperties = {
   control?: ReactNode;
   href?: string;
   expandedContent?: ReactNode;
-  defaultExpanded?: boolean;
+  defaultCollapsed?: boolean;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   className?: string;
@@ -46,13 +46,13 @@ export function ConsoleSettingsRow({
   control,
   href,
   expandedContent,
-  defaultExpanded = false,
+  defaultCollapsed = false,
   expanded,
   onExpandedChange,
   className,
 }: ConsoleSettingsRowProperties) {
   const [uncontrolledExpanded, setUncontrolledExpanded] =
-    useState<boolean>(defaultExpanded);
+    useState<boolean>(!defaultCollapsed);
   const isExpanded = expanded ?? uncontrolledExpanded;
   const isLinkRow = href !== undefined;
   const isExpandableRow = expandedContent !== undefined;

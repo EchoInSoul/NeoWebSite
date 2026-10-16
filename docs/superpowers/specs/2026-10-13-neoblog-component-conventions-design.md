@@ -71,13 +71,13 @@
   - `select`：弹层默认落触发器下方（`select.tsx:65` 的 `alignItemWithTrigger=false`）、弹层描边与底色与触发器统一（`:86`）、滚动条 `bg-inherit`（`:162,:180`）。
 - **用法**：
   - 分组：`<ConsoleSettingsGroup title="屏幕">…</ConsoleSettingsGroup>`——"框"（槽模式，§4.3）：`title` 必填 + `children` 槽 + 可选 `className`（`console-settings-group.tsx:6-21`）。
-  - 行：`<ConsoleSettingsRow … />`——`label` 必填，其余可选：`description` / `icon` / `control` / `href` / `expandedContent` / `defaultExpanded` / `className`（`console-settings-row.tsx:22-30`）。三种形态：纯控件行（只给 `control`）、整行可点行（给 `href`，尾巴出箭头）、可展开行（给 `expandedContent`，走 `collapsible`，箭头 `rotate-90`）。props 形状按"跑腿的"走：**`label` 必填**、不给视觉默认值；`defaultExpanded` 是非受控行为默认值，不属于 §4.3 禁的"全可选带默认值"。
+  - 行：`<ConsoleSettingsRow … />`——`label` 必填，其余可选：`description` / `icon` / `control` / `href` / `expandedContent` / `defaultCollapsed` / `expanded` / `onExpandedChange` / `className`（`console-settings-row.tsx:22-33`）。三种形态：纯控件行（只给 `control`）、整行可点行（给 `href`，尾巴出箭头）、可展开行（给 `expandedContent`，走 `collapsible`，箭头 `rotate-90`）。props 形状按"跑腿的"走：**`label` 必填**、不给视觉默认值；`defaultCollapsed` 是非受控行为默认值（**默认 false = 初始展开**，传参才初始收起——2026-10-16 按用户口径翻转，原名 `defaultExpanded` 已废），不属于 §4.3 禁的"全可选带默认值"。
 - **复用时的硬约束**（每条都踩过或被评审抓出，别绕）：
   1. 行只许用 `flush` 变体，且**行上不能带任何 border-color 类**。行间分隔线靠容器的 `divide-y divide-border`，而 Tailwind v4 的 `divide-*` 编译成 `:where(…)`、特异性为 0——行上任何 `border-*` 都会把分隔线吞成透明（症状：行与行之间完全没有线，`border-border` 的显式线却正常）。这也是 `item` 的 `border` 从基类挪进各变体的原因。
   2. 整行可点的行里**控件必须还能点**：覆盖层是 `absolute inset-0 z-0`，未定位的兄弟控件按绘制顺序会画在它下面，所以控件列在底座里是 `relative z-10`（`item.tsx:161`）。谁把它删了，`Button` / `SelectTrigger` / `Input` 就全点不动（`Switch` / `Checkbox` 自带 `relative` 反而能点，表现为"同排控件有的能点有的不能"）。`ui-check/page.tsx:950` 的「可点行里的控件（层级回归）」组专门守这条。
   3. 展开出来的内容**就是普通行**（直接排 `<ConsoleSettingsRow … />`），不缩进、不换底色——与对照项目 HaoBlog 一致。展开**没有动画**是有意的（对照项目也是直接显隐）。
   4. 行里的下拉要用 `Select` 且**传 `items`**（`<Select items={{ srgb: "sRGB" }}>`），否则触发器显示原始值（`srgb` 而不是 `sRGB`）——Base UI 的约定，不算 bug。
-  5. 已知缺口（别依赖）：`href` 与 `expandedContent` 同时给时按可展开行处理、`href` 静默失效；展开只有非受控 `defaultExpanded`，无 `expanded`/`onExpandedChange`；行标签点击不切换控件（对照项目有 `labelFor`/`labelId`）；`description` 会落进 `<p>`（`item.tsx:143`），别传块级元素。
+  5. 已知缺口（别依赖）：`href` 与 `expandedContent` 同时给时按可展开行处理、`href` 静默失效；展开支持非受控（`defaultCollapsed`，默认展开）与受控（`expanded` + `onExpandedChange`，2FA 面板在用）两式；行标签点击不切换控件（对照项目有 `labelFor`/`labelId`）；`description` 会落进 `<p>`（`item.tsx:143`），别传块级元素。
 - **什么时候别用**：单条设置不必为它拉一整分组；控制台以外的页面要复用时，先确认那片页面也接受"整行铺满 + 行间一根线"的 `card size="none"` 观感。
 - **样例**：`app/ui-check/page.tsx:800` 起的「设置列表（Win11 风格）」一节。
 

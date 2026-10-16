@@ -887,7 +887,6 @@ export default function UiCheckPage() {
                 }
               />
               <ConsoleSettingsRow
-                defaultExpanded
                 icon={<MonitorSmartphone />}
                 label="多显示器"
                 description="选择显示器的呈现模式"
@@ -960,7 +959,6 @@ export default function UiCheckPage() {
                 }
               />
               <ConsoleSettingsRow
-                defaultExpanded
                 icon={<Paintbrush />}
                 label="色彩配置"
                 description="整行可展开，右侧下拉必须也能展开"

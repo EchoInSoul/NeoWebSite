@@ -190,6 +190,7 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
             onExpandedChange={setIsTwoFactorExpanded}
           />
           <ConsoleSettingsRow
+            defaultCollapsed
             expandedContent={
               <>
                 <ConsoleSettingsRow
