@@ -153,11 +153,11 @@ export function actionLabelKey(action: string): string | null {
   return ACTION_LABEL_KEYS[action] ?? null;
 }
 
-// 矩阵显示分组照侧栏（labelKey 取 sidebar 命名空间）；「用户」暂不显示——用户页未建，键仍在后端目录
+// 矩阵显示分组照侧栏（labelKey 取 sidebar 命名空间）；system.users 暂不在矩阵显示，键仍在后端目录
 const MATRIX_GROUPS: Array<{ labelKey: string; resources: string[] }> = [
   { labelKey: "settings", resources: ["system.settings"] },
   { labelKey: "signInAndRegister", resources: ["system.register"] },
-  { labelKey: "permissionGroups", resources: ["system.groups"] },
+  { labelKey: "users", resources: ["system.groups"] },
 ];
 
 const DISPLAYED_RESOURCES = new Set(

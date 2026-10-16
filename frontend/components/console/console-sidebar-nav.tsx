@@ -9,6 +9,7 @@ import {
   MonitorSmartphone,
   Settings,
   SlidersHorizontal,
+  UserRoundCog,
   UserRoundPlus,
   Users,
 } from "lucide-react";
@@ -36,6 +37,7 @@ const PANEL_PREFIXES = {
 const SETTINGS_GENERAL_HREF = `${PANEL_PREFIXES.settings}/general`;
 const SETTINGS_REGISTER_HREF = `${PANEL_PREFIXES.settings}/register`;
 const SETTINGS_GROUPS_HREF = `${PANEL_PREFIXES.settings}/groups`;
+const SETTINGS_USERS_HREF = `${PANEL_PREFIXES.settings}/users`;
 
 type PanelKey = "main" | keyof typeof PANEL_PREFIXES;
 
@@ -64,10 +66,12 @@ export function ConsoleSidebarNav({
   canViewSettings = false,
   canViewRegister = false,
   canViewGroups = false,
+  canViewUsers = false,
 }: {
   canViewSettings?: boolean;
   canViewRegister?: boolean;
   canViewGroups?: boolean;
+  canViewUsers?: boolean;
 }) {
   const t = useTranslations("sidebar");
   const ts = useTranslations("settings");
@@ -75,7 +79,8 @@ export function ConsoleSidebarNav({
 
   const settingsEntryRef = useRef<HTMLAnchorElement>(null);
 
-  const hasSettingsAccess = canViewSettings || canViewRegister || canViewGroups;
+  const hasSettingsAccess =
+    canViewSettings || canViewRegister || canViewGroups || canViewUsers;
 
   const routePanel = resolvePanel(pathname);
   const [displayedPanel, setDisplayedPanel] = useState<PanelKey>(routePanel);
@@ -152,16 +157,28 @@ export function ConsoleSidebarNav({
             : [],
         },
         {
-          label: t("permissionGroups"),
-          items: canViewGroups
-            ? [
-                {
-                  href: SETTINGS_GROUPS_HREF,
-                  label: ts("groups"),
-                  icon: <Users />,
-                } satisfies ConsoleSidebarSectionItem,
-              ]
-            : [],
+          label: t("users"),
+          items: [
+            ...(canViewUsers
+              ? [
+                  {
+                    href: SETTINGS_USERS_HREF,
+                    label: ts("users"),
+                    icon: <UserRoundCog />,
+                    className: canViewGroups ? "mb-1" : undefined,
+                  } satisfies ConsoleSidebarSectionItem,
+                ]
+              : []),
+            ...(canViewGroups
+              ? [
+                  {
+                    href: SETTINGS_GROUPS_HREF,
+                    label: ts("groups"),
+                    icon: <Users />,
+                  } satisfies ConsoleSidebarSectionItem,
+                ]
+              : []),
+          ],
         },
       ].filter((group) => group.items.length > 0),
     },

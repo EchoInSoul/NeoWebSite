@@ -15,12 +15,14 @@ function ConsoleShell({
   canViewSettings = false,
   canViewRegister = false,
   canViewGroups = false,
+  canViewUsers = false,
   children,
 }: {
   displayName?: string;
   canViewSettings?: boolean;
   canViewRegister?: boolean;
   canViewGroups?: boolean;
+  canViewUsers?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -32,6 +34,7 @@ function ConsoleShell({
           canViewSettings={canViewSettings}
           canViewRegister={canViewRegister}
           canViewGroups={canViewGroups}
+          canViewUsers={canViewUsers}
         />
         <SidebarInset className="overflow-y-auto">{children}</SidebarInset>
       </div>
@@ -65,6 +68,7 @@ export default async function ConsoleLayout({
       canViewSettings={user.permissions.includes("system.settings.view")}
       canViewRegister={user.permissions.includes("system.register.view")}
       canViewGroups={user.permissions.includes("system.groups.view")}
+      canViewUsers={user.permissions.includes("system.users.view")}
     >
       {children}
     </ConsoleShell>

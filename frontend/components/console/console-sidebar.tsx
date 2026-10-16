@@ -12,11 +12,13 @@ export function ConsoleSidebar({
   canViewSettings = false,
   canViewRegister = false,
   canViewGroups = false,
+  canViewUsers = false,
 }: {
   displayName?: string;
   canViewSettings?: boolean;
   canViewRegister?: boolean;
   canViewGroups?: boolean;
+  canViewUsers?: boolean;
 }) {
   return (
     <Sidebar
@@ -29,6 +31,7 @@ export function ConsoleSidebar({
           canViewSettings={canViewSettings}
           canViewRegister={canViewRegister}
           canViewGroups={canViewGroups}
+          canViewUsers={canViewUsers}
         />
       </SidebarContent>
       <SidebarFooter className="border-t border-border">

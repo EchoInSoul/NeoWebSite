@@ -27,7 +27,7 @@
     "backToConsole": "Back to console",
     "settings": "Settings",
     "signInAndRegister": "Registration and sign-in",
-    "permissionGroups": "Permission groups"
+    "users": "Users"
   },
   "settings": {
     "general": "General",
@@ -38,6 +38,7 @@
     "saveFailed": "Saving failed. Please try again later.",
     "register": "User registration",
     "groups": "User groups",
+    "users": "User management",
     "registerGroup": "Registration",
     "allowPublicRegistration": "Allow public registration",
     "registerDefaultGroup": "Default registration group",
@@ -193,6 +194,26 @@
     "resourceGeneral": "General",
     "resourceRegister": "User registration",
     "resourceGroups": "Groups"
+  },
+  "users": {
+    "title": "User management",
+    "noPermission": "You do not have permission to view users",
+    "loadFailed": "Failed to load users. Please refresh and try again.",
+    "empty": "No users yet",
+    "columnUser": "User",
+    "columnGroup": "Group",
+    "actions": "Actions",
+    "deleteAction": "Delete “{name}”",
+    "delete": "Delete",
+    "deleteConfirmTitle": "Delete this user?",
+    "deleteConfirmDescription": "“{name}” will be signed out and deleted immediately. This cannot be undone.",
+    "deleted": "User deleted",
+    "deleteFailed": "Deleting the user failed. Please try again later.",
+    "deleteSelf": "You cannot delete yourself",
+    "deletePrivileged": "Only the owner can delete owners or admins",
+    "deleteLastOwner": "At least one owner must remain",
+    "userMissing": "This user no longer exists",
+    "forbidden": "You do not have permission to manage users"
   },
   "sessionExpiry": {
     "title": "Your session has expired",
