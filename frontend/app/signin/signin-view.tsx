@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { AuthFrame } from "@/components/auth/auth-frame";
+import { useSignupNotice } from "@/hooks/use-signup-notice";
 import { SigninForm } from "./signin-form";
 
 export function SigninView({ signupOpen }: { signupOpen: boolean }) {
   const t = useTranslations("auth.signin");
+
+  useSignupNotice();
 
   return (
     <AuthFrame
