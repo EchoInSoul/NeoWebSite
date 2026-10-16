@@ -4,6 +4,64 @@
 
 ---
 
+## 2026-10-16 · 注册域名控制「空清单」改为放行（去掉设置写前拦截）
+
+**范围**：后端 `settings` 去掉 register 组的组级校验（`registry.go` 摘掉 `ValidateOn` / `Validate` 与 `validateRegisterGroup`），前端 `register-settings.ts` 摘掉同款本地拦截与 `domainControlRequiresList` 键、改在空清单时挂提示；补两条测试。零版本进位、零迁移、零新路由。
+
+**动机**：用户裁定「开关开着 + 域名清单为空」是合法配置，且**清空名单这个动作本身不能被拦**。原先前后端各有一道「开着必须非空」的拦截（后端 `validateRegisterGroup` 报 409 `setting_conflict`，前端 `validateRegisterSettings` 先拦一道），而后端**运行时** `ensureRegistrationDomain` 本来就是 `len(allowed) == 0` 放行——保存与运行两层口径本来就对不上，且按管辖项门槛触发会连带挡住「保存其他项」。
+
+**口径**：
+
+- 运行时不变：开关开 + 清单拆分后无条目 → 任何邮箱域名都放行（fail-open，不因配置残缺把注册锁死）。
+- 保存不变：register 组**不再挂**组级校验器，清空/留空/只填逗号都能落库；`setting_conflict` 现在只剩 `password_min_length` 一处使用。
+- 界面提示：邮箱域名控制开启时，域名输入框用 `placeholder` 显示 `settings.allowedEmailDomainsEmptyHint`（zh「留空表示不限制任何邮箱域名」/ en「Leave empty to allow any email domain」），浅色走 `Input` 既有的 `placeholder:text-muted-foreground`、不改组件源码；有值时浏览器自动隐藏，不额外判空（` , ，` 这类只填分隔符的写法同样落在"有值"，但后端按空处理——占位提示此时消失属可接受的取舍，省掉一层与后端重复的拆分逻辑）。关着开关时不显示（那句提示在关闭态是废话）。目的是防管理员看着开关开着误以为限着域名。
+- 顺带删掉 `domainControlRequiresList` i18n 键（zh / en）与 `validateRegisterSettings` 的域名分支（现只剩 `passwordMinLengthRange` 一条 issue）；私有 `splitDomains` 保留（校验密长路径外已无调用方时由编译器把关——以现文件为准）。hook 的 `conflictMessage` 里两个域名项分支已摘掉。
+
+**测试**：`TestSettingsPatchRegisterDomainControlAllowsEmptyList`（PATCH 开开关 → 补清单 → 清空 → 只填逗号，全程 200 且读回一致，开关保持 true）、`TestBuiltinRegisterGroupHasNoValidator`（register 组不得再挂校验器）、`TestRegisterDomainControlEmptyListAllowsAnyDomain`（开着 + ` , ，` → gmail.com 与 example.org 都注册成功）。**变异自检三条实测红**：① 把空名单拦截挂回 registry → 前两条红（409 / 校验器仍在）；② 运行时改成 fail-closed → 第三条红（400 `email_domain_not_allowed`）；改完全部复原、`gofmt -l` 干净。
+
+**验证**：后端 `go vet ./...` 零输出、`scripts/test.sh` 全仓 `ok`（auth / settings / access / app 等）；前端 `tsc --noEmit` 零输出、目标文件 `eslint` 零输出、两个 message JSON 解析通过、旧键 grep 零残留。**运行期未验**，交用户实机。
+
+**文档**：`backend/README.md` 两处改口径——组合约束那行去掉「开域名控制必须清单非空」，`register` 组清单段改成写明「清单为空时一律放行、该组合合法且存得下、界面需自行提示」。
+
+**提交状态**：与并行轮的前端接线改动同处工作区，**未提交**，等用户审查。
+
+---
+
+## 2026-10-16 · 设置行折叠参数改为 defaultCollapsed（默认展开，传参收起）
+
+**范围**：组合件契约调整 + 三处调用点适配；零版本进位。
+
+**动机**：用户点名给设置行折叠加「是否默认折叠」参数，语义定为**不传 = 默认展开、启用后初始收起**。原参数 `defaultExpanded`（默认 false = 初始收起）语义正好相反，按「只改组件源码」的既定路径改契约。
+
+**口径**：`console-settings-row.tsx` 的 `defaultExpanded`（默认 false，收起）改为 **`defaultCollapsed`（默认 false，展开）**，`useState(!defaultCollapsed)`；受控 `expanded` / `onExpandedChange` 不动（2FA 面板在用）。调用点适配：ui-check 两处 `defaultExpanded`（原意「初始展开」）直接删——新默认即展开、观感不变；profile 改密行（原被动收起）显式加 `defaultCollapsed` 保住观感。契约文档 `2026-10-13-neoblog-component-conventions-design.md` props 清单与已知缺口行同步（顺带修掉「无 expanded/onExpandedChange」的过期表述）。
+
+**验证**：`tsc` / `eslint`（0 error）/ `prettier --check` 全绿；全仓 `defaultExpanded` 零残留（业务代码与文档）。
+
+---
+
+## 2026-10-16 · 控制台「用户注册」设置页接后端（register + auth 两组六键，纯前端）
+
+**范围**：纯前端，后端零改动、零版本进位（前端轮惯例）。spec：`docs/superpowers/specs/2026-10-16-neoblog-register-settings-wiring-design.md`；计划：`docs/superpowers/plans/2026-10-16-neoblog-register-settings-wiring.md`。
+
+**动机**：`/console/settings/register` 自建成起是纯 UI（六个本地 state + 一个空下拉），本轮把六个可接行接到真实数据源——与后端 0.20.3 刚接线的四键（域名白名单、密码策略）合上。
+
+**口径（D1–D11 摘要）**：
+
+- 读：服务端 `getRegisterSettings()` 直读两组（register + auth，cookie 转发 + `no-store`）；403 →「无权查看设置」、其余失败 →「设置读取失败」，两种都不出表单。
+- 写：悬浮保存 + 脏值比对；**按组分别 PATCH、只发变动键**；成功以响应回包重置基线（两组分别解析合并）。
+- 校验双保险：本地只拦「本次动到的规则」（开域名控制 + 空清单；密长 8–64 整数——与后端管辖门槛同语义，只改「允许公开注册」不被旧脏值误拦）；后端 409 `setting_conflict` 按 `param` 映射同款文案；403 →「无权修改设置」；401 静默；5xx / 断网 → 通用不可用文案。
+- `password_min_length` 表单态是文本、PATCH 里是数字；`allowed_email_domains` / `password_complexity` 空串是合法值。
+- 「注册默认组」下拉**不接**（值形状「组键 vs 组 ID」待裁定）；`email_verification_enabled` 不在 UI。
+- 新增 3 条 i18n 键（`noPermissionToSave` / `domainControlRequiresList` / `passwordMinLengthRange`，zh / en 键位一致）。
+
+**验证（离线，本机）**：纯函数断言 `register-settings checks: PASS`（两组解析 / 脏检测 / 校验命中门槛 / 按组 patch；脚本在 `.superpowers/sdd/2026-10-16-register-settings-wiring/`，不入库）；**变异自检四条实测红**：① 校验去掉命中门槛 →「只改允许公开注册」被误拦（`domainControlRequiresList` vs `null`）；② patch 恒发全部键 →「无变化 → `{}`」断言红；③ 放宽整数把关 → `8.5` 被放行、断言红；④ 全角逗号不认 → 先炸在「纯分隔符（含全角）→ 拦」断言。`tsc` / `eslint`（0 error，2 条 `sonner.tsx` 存量 warning）/ `prettier --check` 全绿；取证 grep：表单 `useState` 0、默认组 `onValueChange` 0、蛇形键仅在 lib（映射表 + 解析函数）与 hook（409 param）。**运行期未验**——读两组 / 保存 / 校验 / 门控交用户实机（清单见计划 Task 4 Step 3）。
+
+**已知缺口**：两组两次 PATCH 非事务（第一组成功第二组失败 → 半区已落库、基线不重置、重试幂等）；未保存离开无守卫；多标签页后写覆盖；密长文本前导零会判脏（保存后由回包归一）；客户端 8–64 与后端常量靠口径对齐（不共享常量）。
+
+**提交状态**：待用户审查后按批提交。
+
+---
+
 ## 2026-10-16 · 注册域名控制与密码策略接线（register/auth 首批消费 + 设置写前校验插槽）（0.20.3）
 
 **版本**：后端 0.20.2 → **0.20.3**（patch；用户 2026-10-16 直接设定，未走 0.21.0 线）。零迁移、零新路由、零新依赖、前端零改动。（并行轮的提交自称 0.21.0、其 `version.go` 实际落在 0.20.2——本轮按用户裁定从 0.20.2 走 patch 到 0.20.3，不回补 0.21.0。）spec：`docs/superpowers/specs/2026-10-16-neoblog-registration-policy-design.md`（v2）；计划：`docs/superpowers/plans/2026-10-16-neoblog-registration-policy.md`（v2）。
