@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-10-16 · 控制台「注册默认组」下拉接真实用户组（存组名）+ 后端默认值对齐
+
+**范围**：前端 7 文件（`page.tsx` / `register-settings-form.tsx` / `use-register-settings-save.ts` / `admin-settings.ts` / `register-settings.ts` / 两个 message）；后端 4 文件（`rbac.go` 加 `PresetGroupNameByKey`、`registry.go` 改默认值、两处测试断言）。零迁移、零新路由、零版本进位。
+
+**动机**：`/console/settings/register` 的「注册默认组」自建成起是空下拉（`<SelectContent />` 空、无 `value`、无 `onValueChange`）。用户 2026-10-16 裁定接真实用户组，且**值存组名不用 UUID**（「我创建的用户组是什么名称，它就可以选择什么名称」）。
+
+**口径**：
+
+- **值形状 = 组名**（`register.default_group` 存 `groups[].name`）。组名在 ent schema 上是 `field.String("name").NotEmpty().Unique()`，重名被后端挡下（`group_name_taken`），故按名称作 `SelectItem` 的 value 安全。
+- **禁掉特权组**：按 `system_key` 过滤（`owner` / `admin`），自建组 `system_key` 为 null 故全保留。理由：注册是自助入口，指到特权组等于开放提权后门；后端 `access.Service.UpdateUser` 也有对应的 owner 保护。
+- **存量指向特权组时不掩饰**：库里已有的 owner/admin 名称不在可选项里，此时 `Select` 的 `value` 传 `null`、显示「未指定」占位，而不是让下拉假装没限制。
+- **后端默认值对齐**：原默认值是组**键** `"user"`，与组名形状对不上（普通用户组组名是「普通用户」），新库读出来会显示「未指定」。改为 `rbac.PresetGroupNameByKey(rbac.GroupKeyUser)`——不写字面量，取自 rbac 预设组定义；为此给 rbac 加了 `PresetGroupNameByKey`（`settings` → `rbac` 单向依赖，无循环）。两处断言（`controller_test` 默认读回、`registry_test` 清单形状）同步改用该函数。
+- **Base UI 的 `items` 是必需的**：只给 `SelectItem` 不足以让触发按钮渲染当前选中项文字，需传 `{名称: 名称}` 记录（`groupSelectionMap`）。
+- **读组列表**：`getRegisterSettings` 并行第三个请求 `/api/v1/admin/groups`，复用 `lib/groups` 的 `parseAdminGroups`；组列表 403 也归「无权查看设置」，解析失败归 `failed`。
+- 新增 1 条 i18n 键 `registerDefaultGroupNone`（zh「未指定」/ en「Not set」）。
+
+**已知缺口（都在用户手上）**：
+
+1. **后端 `Register` 仍无消费方**——`default_group` 现在只是能选能存的设置值，新用户归属仍由 ent schema 默认值决定。用户 2026-10-16 明确「只接前端，后端下轮再说」。
+2. **权限落差（本轮引入的新失败模式）**：注册设置页要 `system.register.view`，组列表要 `system.groups.view`。只有前者、没后者的管理员会看到整页「无权查看设置」，连原本能用的域名白名单 / 密码设置行也一起没了。修法待用户点名（组读不到时降级置空下拉，还是后端放宽读）。
+3. 组名被改后，存量 `default_group` 值会失配（下拉显示「未指定」但不报错）；组被删同理。后端那轮做消费方时需一并处理。
+4. 下拉无空值选项（不可清空）；`setDefaultGroup` 的 `null` 分支目前只有占位显示会走到，实际取消选择走不到。
+
+**测试**：后端默认值两处断言做了变异自检——把默认值改回组键 `"user"`，两条分别红（`want "普通用户"`）；复原后全仓 `scripts/test.sh` ok、`gofmt` 干净、`go vet ./...` 零输出。前端 `tsc --noEmit` 零输出、目标文件 `eslint` 零输出、`prettier --check` 通过。**运行期未验**——下拉弹出、选中显示、保存读回均交用户实机。
+
+**提交状态**：分两笔入库（后端默认值对齐 / 前端接线），**未推送**。
+
+---
+
 ## 2026-10-16 · 注册域名控制「空清单」改为放行（去掉设置写前拦截）
 
 **范围**：后端 `settings` 去掉 register 组的组级校验（`registry.go` 摘掉 `ValidateOn` / `Validate` 与 `validateRegisterGroup`），前端 `register-settings.ts` 摘掉同款本地拦截与 `domainControlRequiresList` 键、改在空清单时挂提示；补两条测试。零版本进位、零迁移、零新路由。
