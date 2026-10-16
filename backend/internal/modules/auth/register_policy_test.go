@@ -74,6 +74,26 @@ func TestRegisterDomainControlBlocksOtherDomains(t *testing.T) {
 	}
 }
 
+func TestRegisterDomainControlEmptyListAllowsAnyDomain(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	ts, _, settingsService := newTestAppWithSessionsAndSettings(t, db)
+	enableDomainControl(t, settingsService, " , ，")
+
+	emails := []string{"any1+" + tag + "@gmail.com", "any2+" + tag + "@example.org"}
+	for i, email := range emails {
+		nickname := "any" + tag + string(rune('a'+i))
+		t.Cleanup(func() {
+			cleanupUserByEmail(t, db, email)
+		})
+		resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: nickname, Password: "pass1234"})
+		if resp.StatusCode != http.StatusCreated {
+			code := decodeError(t, resp)
+			t.Fatalf("%s: status = %d, want 201 (code %q)", email, resp.StatusCode, code)
+		}
+	}
+}
+
 func TestRegisterPasswordPolicyMinLength(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)

@@ -1,12 +1,9 @@
 package settings
 
 import (
-	"errors"
 	"reflect"
 	"sort"
 	"testing"
-
-	"website/backend/internal/common/apierror"
 )
 
 type wantItem struct {
@@ -234,29 +231,13 @@ func TestRegistryRejects(t *testing.T) {
 	}
 }
 
-func TestValidateRegisterGroup(t *testing.T) {
-	cases := []struct {
-		name   string
-		values map[string]any
-		want   string
-	}{
-		{"switch off", map[string]any{"email_domain_control_enabled": false, "allowed_email_domains": ""}, ""},
-		{"switch on with list", map[string]any{"email_domain_control_enabled": true, "allowed_email_domains": "a.com, b.com"}, ""},
-		{"switch on empty list", map[string]any{"email_domain_control_enabled": true, "allowed_email_domains": ""}, "email_domain_control_enabled"},
-		{"switch on blank list", map[string]any{"email_domain_control_enabled": true, "allowed_email_domains": " , ，"}, "email_domain_control_enabled"},
+func TestBuiltinRegisterGroupHasNoValidator(t *testing.T) {
+	reg, err := compileRegistry(builtinRegistry)
+	if err != nil {
+		t.Fatalf("builtin registry rejected: %v", err)
 	}
-	for _, tc := range cases {
-		err := validateRegisterGroup(tc.values)
-		if tc.want == "" {
-			if err != nil {
-				t.Fatalf("%s: err = %v, want nil", tc.name, err)
-			}
-			continue
-		}
-		var itemErr *ItemError
-		if !errors.As(err, &itemErr) || itemErr.Item != tc.want || !errors.Is(err, apierror.ErrSettingConflict) {
-			t.Fatalf("%s: err = %v, want ItemError{%s, ErrSettingConflict}", tc.name, err, tc.want)
-		}
+	if _, ok := reg.validators["register"]; ok {
+		t.Fatal("register group must not carry a validator: empty domain list means no restriction")
 	}
 }
 

@@ -21,9 +21,7 @@ var builtinRegistry = []Group{
 		},
 	},
 	{
-		Name:       "register",
-		ValidateOn: []string{"email_domain_control_enabled", "allowed_email_domains"},
-		Validate:   validateRegisterGroup,
+		Name: "register",
 		Items: []Definition{
 			{Name: "enabled", Type: FieldTypeBool, Default: true, Public: true},
 			{Name: "default_group", Type: FieldTypeString, Default: "user"},
@@ -119,24 +117,6 @@ const (
 	passwordMinLengthFloor = 8
 	passwordMinLengthCap   = 64
 )
-
-func validateRegisterGroup(values map[string]any) error {
-	enabled, ok := values["email_domain_control_enabled"].(bool)
-	if !ok {
-		return fmt.Errorf("settings: email_domain_control_enabled is not a bool")
-	}
-	if !enabled {
-		return nil
-	}
-	raw, ok := values["allowed_email_domains"].(string)
-	if !ok {
-		return fmt.Errorf("settings: allowed_email_domains is not a string")
-	}
-	if len(SplitListValue(raw)) > 0 {
-		return nil
-	}
-	return &ItemError{Item: "email_domain_control_enabled", Err: apierror.ErrSettingConflict}
-}
 
 func validateAuthGroup(values map[string]any) error {
 	length, ok := values["password_min_length"].(int64)

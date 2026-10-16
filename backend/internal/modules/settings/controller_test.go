@@ -611,36 +611,35 @@ func TestSettingsPatchNeedsEditPermission(t *testing.T) {
 	allowed.Body.Close()
 }
 
-func TestSettingsPatchRegisterDomainControlRequiresList(t *testing.T) {
+func TestSettingsPatchRegisterDomainControlAllowsEmptyList(t *testing.T) {
 	db := testDB(t)
 	resetGroups(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
 	enable := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"email_domain_control_enabled": true})
-	expectStatus(t, enable, http.StatusConflict)
-	body := decodeError(t, enable)
-	if body["code"] != "setting_conflict" || body["param"] != "email_domain_control_enabled" {
-		t.Fatalf("conflict body = %v, want setting_conflict/email_domain_control_enabled", body)
-	}
-	if count := registerRowCount(t, db); count != 0 {
-		t.Fatalf("register rows = %d, want 0 after rejected write", count)
-	}
+	expectStatus(t, enable, http.StatusOK)
+	enable.Body.Close()
 
 	set := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"allowed_email_domains": "example.com"})
 	expectStatus(t, set, http.StatusOK)
 	set.Body.Close()
 
-	enable = doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"email_domain_control_enabled": true})
-	expectStatus(t, enable, http.StatusOK)
-	enable.Body.Close()
-
-	clear := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"allowed_email_domains": ""})
-	expectStatus(t, clear, http.StatusConflict)
-	body = decodeError(t, clear)
-	if body["code"] != "setting_conflict" || body["param"] != "email_domain_control_enabled" {
-		t.Fatalf("clear conflict body = %v, want setting_conflict/email_domain_control_enabled", body)
+	for _, raw := range []string{"", " , ，"} {
+		clear := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"allowed_email_domains": raw})
+		expectStatus(t, clear, http.StatusOK)
+		_, values := decodeGroup(t, clear)
+		if values["allowed_email_domains"] != raw {
+			t.Fatalf("allowed_email_domains = %v, want %q", values["allowed_email_domains"], raw)
+		}
+		if values["email_domain_control_enabled"] != true {
+			t.Fatalf("email_domain_control_enabled = %v, want true", values["email_domain_control_enabled"])
+		}
 	}
+
+	blanks := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"email_domain_control_enabled": true, "allowed_email_domains": " , ，"})
+	expectStatus(t, blanks, http.StatusOK)
+	blanks.Body.Close()
 }
 
 func TestSettingsPatchAuthMinLengthRange(t *testing.T) {
