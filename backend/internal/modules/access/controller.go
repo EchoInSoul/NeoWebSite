@@ -30,6 +30,10 @@ type userRequest struct {
 	ExtraPermissions *[]string `json:"extra_permissions"`
 }
 
+type userBatchRequest struct {
+	IDs []string `json:"ids"`
+}
+
 type controller struct {
 	service *Service
 }
@@ -47,6 +51,8 @@ func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.GET("/admin/users", guard.RequirePermission(rbac.PermissionUsersView), c.listUsers)
 	r.GET("/admin/users/:id", guard.RequirePermission(rbac.PermissionUsersView), c.getUser)
 	r.PATCH("/admin/users/:id", guard.RequirePermission(rbac.PermissionUsersEdit), c.updateUser)
+	r.DELETE("/admin/users", guard.RequirePermission(rbac.PermissionUsersEdit), c.deleteUsers)
+	r.DELETE("/admin/users/:id", guard.RequirePermission(rbac.PermissionUsersEdit), c.deleteUser)
 }
 
 func (c *controller) listPermissions(ctx *gin.Context) {
@@ -169,6 +175,35 @@ func (c *controller) updateUser(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, user)
+}
+
+func (c *controller) deleteUsers(ctx *gin.Context) {
+	operator, ok := operatorFrom(ctx)
+	if !ok {
+		return
+	}
+	var request userBatchRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil || len(request.IDs) == 0 {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+	if err := c.service.DeleteUsers(ctx.Request.Context(), operator, request.IDs); err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"ids": request.IDs, "deleted": true})
+}
+
+func (c *controller) deleteUser(ctx *gin.Context) {
+	operator, ok := operatorFrom(ctx)
+	if !ok {
+		return
+	}
+	if err := c.service.DeleteUser(ctx.Request.Context(), operator, ctx.Param("id")); err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"id": ctx.Param("id"), "deleted": true})
 }
 
 func operatorFrom(ctx *gin.Context) (guard.Identity, bool) {

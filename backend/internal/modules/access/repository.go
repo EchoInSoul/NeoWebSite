@@ -68,6 +68,18 @@ func (r *repository) findUser(ctx context.Context, id uuid.UUID) (userRecord, er
 	return toUserRecord(row), nil
 }
 
+func (r *repository) findUsers(ctx context.Context, ids []uuid.UUID) ([]userRecord, error) {
+	rows, err := r.client.User.Query().Where(user.IDIn(ids...)).WithGroup().All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]userRecord, 0, len(rows))
+	for _, row := range rows {
+		records = append(records, toUserRecord(row))
+	}
+	return records, nil
+}
+
 func (r *repository) findGroup(ctx context.Context, id uuid.UUID) (groupRecord, error) {
 	row, err := r.client.Group.Query().Where(group.IDEQ(id)).Only(ctx)
 	if err != nil {
@@ -245,6 +257,53 @@ func (r *repository) deleteGroup(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	return nil
+}
+
+func (r *repository) deleteUsers(ctx context.Context, ids []uuid.UUID, lockOwnerCount bool) error {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if lockOwnerCount {
+		owners, err := tx.User.Query().
+			Where(user.GroupIDEQ(rbac.GroupIDOwner)).
+			ForUpdate().
+			All(ctx)
+		if err != nil {
+			return err
+		}
+		removed := make(map[uuid.UUID]struct{}, len(ids))
+		for _, id := range ids {
+			removed[id] = struct{}{}
+		}
+		remaining := 0
+		for _, owner := range owners {
+			if _, ok := removed[owner.ID]; !ok {
+				remaining++
+			}
+		}
+		if remaining < 1 {
+			return apierror.ErrLastOwner
+		}
+	} else {
+		locked, err := tx.User.Query().
+			Where(user.IDIn(ids...)).
+			ForUpdate().
+			All(ctx)
+		if err != nil {
+			return err
+		}
+		if len(locked) != len(ids) {
+			return apierror.ErrNotFound
+		}
+	}
+
+	if _, err := tx.User.Delete().Where(user.IDIn(ids...)).Exec(ctx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *repository) updateUser(ctx context.Context, params updateUserParams) error {

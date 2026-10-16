@@ -150,6 +150,13 @@ func TestAdminRequiresAuthAndPermission(t *testing.T) {
 	if code := decodeErrorCode(t, forbidden); code != "forbidden" {
 		t.Fatalf("plain error = %q, want forbidden", code)
 	}
+
+	otherID := createTestUser(t, db, rbac.GroupIDUser)
+	forbiddenDelete := doJSON(t, plain, http.MethodDelete, ts.URL+"/api/v1/admin/users/"+otherID.String(), nil)
+	expectStatus(t, forbiddenDelete, http.StatusForbidden)
+	if code := decodeErrorCode(t, forbiddenDelete); code != "forbidden" {
+		t.Fatalf("plain delete error = %q, want forbidden", code)
+	}
 }
 
 func TestPermissionsEndpoint(t *testing.T) {
@@ -453,6 +460,62 @@ func TestUsersEndpointsAndRules(t *testing.T) {
 	expectStatus(t, unknownKey, http.StatusBadRequest)
 	if code := decodeErrorCode(t, unknownKey); code != "invalid_permission" {
 		t.Fatalf("unknown key error = %q, want invalid_permission", code)
+	}
+
+	selfDelete := doJSON(t, owner, http.MethodDelete, ts.URL+"/api/v1/admin/users/"+ownerID.String(), nil)
+	expectStatus(t, selfDelete, http.StatusForbidden)
+	if code := decodeErrorCode(t, selfDelete); code != "cannot_modify_self" {
+		t.Fatalf("self delete error = %q, want cannot_modify_self", code)
+	}
+
+	protectedDelete := doJSON(t, manager, http.MethodDelete, ts.URL+"/api/v1/admin/users/"+plainTargetID.String(), nil)
+	expectStatus(t, protectedDelete, http.StatusForbidden)
+	if code := decodeErrorCode(t, protectedDelete); code != "owner_protected" {
+		t.Fatalf("privileged delete error = %q, want owner_protected", code)
+	}
+
+	deleted := doJSON(t, manager, http.MethodDelete, ts.URL+"/api/v1/admin/users/"+freeTargetID.String(), nil)
+	expectStatus(t, deleted, http.StatusOK)
+
+	missingDelete := doJSON(t, manager, http.MethodDelete, ts.URL+"/api/v1/admin/users/"+freeTargetID.String(), nil)
+	expectStatus(t, missingDelete, http.StatusNotFound)
+	if code := decodeErrorCode(t, missingDelete); code != "not_found" {
+		t.Fatalf("missing delete error = %q, want not_found", code)
+	}
+
+	batchFirstID := createTestUser(t, db, rbac.GroupIDUser)
+	batchSecondID := createTestUser(t, db, rbac.GroupIDUser)
+	batchDeleted := doJSON(t, manager, http.MethodDelete, ts.URL+"/api/v1/admin/users", map[string]any{
+		"ids": []string{batchFirstID.String(), batchSecondID.String()},
+	})
+	expectStatus(t, batchDeleted, http.StatusOK)
+	for _, id := range []uuid.UUID{batchFirstID, batchSecondID} {
+		gone := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/users/"+id.String(), nil)
+		expectStatus(t, gone, http.StatusNotFound)
+	}
+
+	batchEmpty := doJSON(t, manager, http.MethodDelete, ts.URL+"/api/v1/admin/users", map[string]any{
+		"ids": []string{},
+	})
+	expectStatus(t, batchEmpty, http.StatusBadRequest)
+	if code := decodeErrorCode(t, batchEmpty); code != "invalid_request" {
+		t.Fatalf("empty batch error = %q, want invalid_request", code)
+	}
+
+	batchSelf := doJSON(t, owner, http.MethodDelete, ts.URL+"/api/v1/admin/users", map[string]any{
+		"ids": []string{ownerID.String()},
+	})
+	expectStatus(t, batchSelf, http.StatusForbidden)
+	if code := decodeErrorCode(t, batchSelf); code != "cannot_modify_self" {
+		t.Fatalf("self batch error = %q, want cannot_modify_self", code)
+	}
+
+	batchProtected := doJSON(t, manager, http.MethodDelete, ts.URL+"/api/v1/admin/users", map[string]any{
+		"ids": []string{plainTargetID.String()},
+	})
+	expectStatus(t, batchProtected, http.StatusForbidden)
+	if code := decodeErrorCode(t, batchProtected); code != "owner_protected" {
+		t.Fatalf("privileged batch error = %q, want owner_protected", code)
 	}
 }
 

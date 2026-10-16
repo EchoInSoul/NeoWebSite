@@ -303,6 +303,56 @@ func (s *Service) UpdateUser(ctx context.Context, operator guard.Identity, userI
 	return s.GetUser(ctx, userID)
 }
 
+func (s *Service) DeleteUser(ctx context.Context, operator guard.Identity, userID string) error {
+	return s.DeleteUsers(ctx, operator, []string{userID})
+}
+
+func (s *Service) DeleteUsers(ctx context.Context, operator guard.Identity, ids []string) error {
+	operatorID, err := uuid.Parse(operator.UserID)
+	if err != nil {
+		return apierror.ErrNotFound
+	}
+
+	targets := make([]uuid.UUID, 0, len(ids))
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	for _, raw := range ids {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return apierror.ErrNotFound
+		}
+		if id == operatorID {
+			return apierror.ErrCannotModifySelf
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		targets = append(targets, id)
+	}
+	if len(targets) == 0 {
+		return apierror.ErrInvalidRequest
+	}
+
+	rows, err := s.repo.findUsers(ctx, targets)
+	if err != nil {
+		return err
+	}
+	if len(rows) != len(targets) {
+		return apierror.ErrNotFound
+	}
+
+	lockOwnerCount := false
+	for _, row := range rows {
+		if isPrivilegedGroupKey(row.Group.SystemKey) && operator.GroupKey != rbac.GroupKeyOwner {
+			return apierror.ErrOwnerProtected
+		}
+		if row.Group.SystemKey == rbac.GroupKeyOwner {
+			lockOwnerCount = true
+		}
+	}
+	return s.repo.deleteUsers(ctx, targets, lockOwnerCount)
+}
+
 func (s *Service) groupDetail(ctx context.Context, id uuid.UUID) (Group, error) {
 	record, err := s.repo.findGroup(ctx, id)
 	if err != nil {

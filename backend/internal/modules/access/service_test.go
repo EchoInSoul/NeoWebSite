@@ -14,6 +14,7 @@ import (
 	"website/backend/internal/common/guard"
 	"website/backend/internal/common/rbac"
 	"website/backend/internal/database"
+	"website/backend/internal/database/ent/userpermission"
 )
 
 func ptr[T any](v T) *T {
@@ -270,6 +271,110 @@ func TestDeleteGroup(t *testing.T) {
 	}
 }
 
+func TestDeleteUser(t *testing.T) {
+	db := testDB(t)
+	service := newService(db)
+	ctx := context.Background()
+	owner, ownerID := createOwnerIdentity(t, db)
+
+	if err := service.DeleteUser(ctx, owner, ownerID.String()); !errors.Is(err, apierror.ErrCannotModifySelf) {
+		t.Fatalf("self delete error = %v, want apierror.ErrCannotModifySelf", err)
+	}
+
+	targetID := createTestUser(t, db, rbac.GroupIDUser)
+	addUserPermissions(t, db, targetID, []string{rbac.PermissionUsersView})
+	if err := service.DeleteUser(ctx, owner, targetID.String()); err != nil {
+		t.Fatalf("delete plain user: %v", err)
+	}
+	if _, err := service.GetUser(ctx, targetID.String()); !errors.Is(err, apierror.ErrNotFound) {
+		t.Fatalf("deleted user lookup error = %v, want apierror.ErrNotFound", err)
+	}
+	orphans, err := db.Client.UserPermission.Query().
+		Where(userpermission.UserIDEQ(targetID)).
+		Count(ctx)
+	if err != nil {
+		t.Fatalf("count orphan permissions: %v", err)
+	}
+	if orphans != 0 {
+		t.Fatalf("orphan permission rows = %d, want 0", orphans)
+	}
+
+	managerGroupID := createTestGroup(t, db, "mgr-"+uniqueTag(t), []string{rbac.PermissionUsersEdit})
+	managerID := createTestUser(t, db, managerGroupID)
+	manager := identityFor(t, db, managerID)
+
+	plainID := createTestUser(t, db, rbac.GroupIDUser)
+	if err := service.DeleteUser(ctx, manager, plainID.String()); err != nil {
+		t.Fatalf("manager deleting plain user: %v", err)
+	}
+
+	adminID := createTestUser(t, db, rbac.GroupIDAdmin)
+	if err := service.DeleteUser(ctx, manager, adminID.String()); !errors.Is(err, apierror.ErrOwnerProtected) {
+		t.Fatalf("non-owner deleting admin error = %v, want apierror.ErrOwnerProtected", err)
+	}
+	if err := service.DeleteUser(ctx, manager, ownerID.String()); !errors.Is(err, apierror.ErrOwnerProtected) {
+		t.Fatalf("non-owner deleting owner error = %v, want apierror.ErrOwnerProtected", err)
+	}
+	if err := service.DeleteUser(ctx, owner, uuid.New().String()); !errors.Is(err, apierror.ErrNotFound) {
+		t.Fatalf("missing user delete error = %v, want apierror.ErrNotFound", err)
+	}
+	if err := service.DeleteUser(ctx, owner, "not-a-uuid"); !errors.Is(err, apierror.ErrNotFound) {
+		t.Fatalf("invalid id delete error = %v, want apierror.ErrNotFound", err)
+	}
+}
+
+func TestDeleteUsers(t *testing.T) {
+	db := testDB(t)
+	service := newService(db)
+	ctx := context.Background()
+	owner, ownerID := createOwnerIdentity(t, db)
+
+	firstID := createTestUser(t, db, rbac.GroupIDUser)
+	secondID := createTestUser(t, db, rbac.GroupIDUser)
+	addUserPermissions(t, db, firstID, []string{rbac.PermissionUsersView})
+	if err := service.DeleteUsers(ctx, owner, []string{firstID.String(), secondID.String(), firstID.String()}); err != nil {
+		t.Fatalf("batch delete: %v", err)
+	}
+	for _, id := range []uuid.UUID{firstID, secondID} {
+		if _, err := service.GetUser(ctx, id.String()); !errors.Is(err, apierror.ErrNotFound) {
+			t.Fatalf("deleted user %s lookup error = %v, want apierror.ErrNotFound", id, err)
+		}
+	}
+
+	keepID := createTestUser(t, db, rbac.GroupIDUser)
+	if err := service.DeleteUsers(ctx, owner, []string{keepID.String(), ownerID.String()}); !errors.Is(err, apierror.ErrCannotModifySelf) {
+		t.Fatalf("self batch error = %v, want apierror.ErrCannotModifySelf", err)
+	}
+	if _, err := service.GetUser(ctx, keepID.String()); err != nil {
+		t.Fatalf("batch containing self deleted a bystander: %v", err)
+	}
+
+	if err := service.DeleteUsers(ctx, owner, []string{keepID.String(), uuid.New().String()}); !errors.Is(err, apierror.ErrNotFound) {
+		t.Fatalf("missing member error = %v, want apierror.ErrNotFound", err)
+	}
+	if _, err := service.GetUser(ctx, keepID.String()); err != nil {
+		t.Fatalf("batch containing a missing id deleted an existing user: %v", err)
+	}
+
+	if err := service.DeleteUsers(ctx, owner, nil); !errors.Is(err, apierror.ErrInvalidRequest) {
+		t.Fatalf("empty batch error = %v, want apierror.ErrInvalidRequest", err)
+	}
+
+	managerGroupID := createTestGroup(t, db, "mgr-"+uniqueTag(t), []string{rbac.PermissionUsersEdit})
+	managerID := createTestUser(t, db, managerGroupID)
+	manager := identityFor(t, db, managerID)
+	adminID := createTestUser(t, db, rbac.GroupIDAdmin)
+	if err := service.DeleteUsers(ctx, manager, []string{keepID.String(), adminID.String()}); !errors.Is(err, apierror.ErrOwnerProtected) {
+		t.Fatalf("privileged batch error = %v, want apierror.ErrOwnerProtected", err)
+	}
+	if _, err := service.GetUser(ctx, keepID.String()); err != nil {
+		t.Fatalf("privileged batch deleted a plain user: %v", err)
+	}
+	if err := service.DeleteUsers(ctx, manager, []string{keepID.String()}); err != nil {
+		t.Fatalf("manager batch delete: %v", err)
+	}
+}
+
 func TestUpdateUser(t *testing.T) {
 	db := testDB(t)
 	service := newService(db)
@@ -374,6 +479,44 @@ func TestLastOwnerConcurrent(t *testing.T) {
 	go func() {
 		defer waitGroup.Done()
 		_, results[1] = service.UpdateUser(ctx, first, secondID.String(), UpdateUserInput{GroupID: ptr(rbac.GroupIDUser.String())})
+	}()
+	waitGroup.Wait()
+
+	lastOwnerErrors := 0
+	for _, err := range results {
+		switch {
+		case err == nil:
+		case errors.Is(err, apierror.ErrLastOwner):
+			lastOwnerErrors++
+		default:
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	if lastOwnerErrors != 1 {
+		t.Fatalf("last owner errors = %d, want exactly 1 (results: %v)", lastOwnerErrors, results)
+	}
+}
+
+func TestDeleteLastOwnerConcurrent(t *testing.T) {
+	db := testDB(t)
+	service := newService(db)
+	ctx := context.Background()
+
+	firstID := createTestUser(t, db, rbac.GroupIDOwner)
+	secondID := createTestUser(t, db, rbac.GroupIDOwner)
+	first := identityFor(t, db, firstID)
+	second := identityFor(t, db, secondID)
+
+	results := make([]error, 2)
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(2)
+	go func() {
+		defer waitGroup.Done()
+		results[0] = service.DeleteUser(ctx, second, firstID.String())
+	}()
+	go func() {
+		defer waitGroup.Done()
+		results[1] = service.DeleteUser(ctx, first, secondID.String())
 	}()
 	waitGroup.Wait()
 
