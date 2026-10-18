@@ -2,12 +2,14 @@
 
 import type { FormEvent } from "react";
 import {
-  AlignLeft,
+  AppWindow,
+  Baseline,
   CirclePlus,
+  FileText,
   Globe,
   SearchX,
+  Shapes,
   Tags,
-  TextQuote,
   Type,
   X,
 } from "lucide-react";
@@ -92,7 +94,7 @@ export function SiteSettingsForm({
                 value={values.subtitle}
               />
             }
-            icon={<TextQuote />}
+            icon={<Baseline />}
             label={t("siteSubtitle")}
           />
         </ConsoleSettingsGroup>
@@ -175,7 +177,7 @@ export function SiteSettingsForm({
                 </div>
               </div>
             }
-            icon={<CirclePlus />}
+            icon={<AppWindow />}
             label={t("siteIcon")}
           />
           <ConsoleSettingsRow
@@ -195,7 +197,7 @@ export function SiteSettingsForm({
                 />
               </button>
             }
-            icon={<CirclePlus />}
+            icon={<Shapes />}
             label={t("siteLogo")}
           />
         </ConsoleSettingsGroup>
@@ -213,7 +215,7 @@ export function SiteSettingsForm({
                 value={values.description}
               />
             }
-            icon={<AlignLeft />}
+            icon={<FileText />}
             label={t("siteDescription")}
           />
           <ConsoleSettingsRow
