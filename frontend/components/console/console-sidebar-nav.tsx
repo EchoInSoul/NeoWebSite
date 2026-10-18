@@ -1,6 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type TransitionEvent,
+} from "react";
 import { flushSync } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -14,13 +20,21 @@ import {
   Users,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { cn } from "cn";
 
 import {
   SidebarGroup,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  SIDEBAR_SLIDE_DURATION_MS,
+  SIDEBAR_SLIDE_TRANSITION,
+  sidebarSlideOffsetClass,
+  type SidebarSlideOffset,
+} from "@/lib/sidebar-transition";
 
 import {
   ConsoleSidebarSection,
@@ -39,6 +53,8 @@ const SETTINGS_REGISTER_HREF = `${PANEL_PREFIXES.settings}/register`;
 const SETTINGS_GROUPS_HREF = `${PANEL_PREFIXES.settings}/groups`;
 const SETTINGS_USERS_HREF = `${PANEL_PREFIXES.settings}/users`;
 
+const SLIDE_FALLBACK_MS = SIDEBAR_SLIDE_DURATION_MS + 80;
+
 type PanelKey = "main" | keyof typeof PANEL_PREFIXES;
 
 type ConsoleSidebarPanelContent = {
@@ -46,6 +62,12 @@ type ConsoleSidebarPanelContent = {
   tooltip: string;
   back: ConsoleSidebarBack;
   groups: ConsoleSidebarSectionGroup[];
+};
+
+type SidebarSlideState = {
+  offset: SidebarSlideOffset;
+  isVisible: boolean;
+  isSettled: boolean;
 };
 
 function isUnder(pathname: string, base: string) {
@@ -62,6 +84,50 @@ function resolvePanel(pathname: string): PanelKey {
   return "main";
 }
 
+function resolveSlideState(
+  panelKey: PanelKey,
+  settledPanel: PanelKey,
+  outgoingPanel: PanelKey | null,
+): SidebarSlideState {
+  if (panelKey === settledPanel) {
+    return { offset: "none", isVisible: true, isSettled: true };
+  }
+  return {
+    offset: panelKey === "main" ? "left" : "right",
+    isVisible: panelKey === outgoingPanel,
+    isSettled: false,
+  };
+}
+
+function SidebarSlidePanel({
+  slideState,
+  isCollapsed,
+  onTransitionEnd,
+  children,
+}: {
+  slideState: SidebarSlideState;
+  isCollapsed: boolean;
+  onTransitionEnd: (event: TransitionEvent<HTMLDivElement>) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      aria-hidden={!slideState.isSettled}
+      inert={!slideState.isSettled}
+      onTransitionEnd={onTransitionEnd}
+      className={cn(
+        "absolute inset-0 no-scrollbar overflow-y-auto bg-white dark:bg-neutral-950",
+        slideState.isVisible ? "visible" : "invisible",
+        slideState.isSettled ? "z-10" : "pointer-events-none z-0",
+        slideState.isVisible ? SIDEBAR_SLIDE_TRANSITION : "transition-none",
+        sidebarSlideOffsetClass(slideState.offset, isCollapsed),
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function ConsoleSidebarNav({
   canViewSettings = false,
   canViewRegister = false,
@@ -76,6 +142,8 @@ export function ConsoleSidebarNav({
   const t = useTranslations("sidebar");
   const ts = useTranslations("settings");
   const pathname = usePathname();
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
 
   const settingsEntryRef = useRef<HTMLAnchorElement>(null);
 
@@ -86,10 +154,46 @@ export function ConsoleSidebarNav({
   const [displayedPanel, setDisplayedPanel] = useState<PanelKey>(routePanel);
   const [syncedRoutePanel, setSyncedRoutePanel] =
     useState<PanelKey>(routePanel);
+  const [settledPanel, setSettledPanel] = useState<PanelKey>(routePanel);
+  const [outgoingPanel, setOutgoingPanel] = useState<PanelKey | null>(null);
 
   if (routePanel !== syncedRoutePanel) {
     setSyncedRoutePanel(routePanel);
     setDisplayedPanel(routePanel);
+  }
+
+  if (displayedPanel !== settledPanel) {
+    setOutgoingPanel(settledPanel);
+    setSettledPanel(displayedPanel);
+  }
+
+  useEffect(() => {
+    if (outgoingPanel === null) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setOutgoingPanel(null);
+    }, SLIDE_FALLBACK_MS);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [outgoingPanel]);
+
+  function handlePanelTransitionEnd(panelKey: PanelKey) {
+    return function handleTransitionEnd(
+      event: TransitionEvent<HTMLDivElement>,
+    ) {
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+      if (event.propertyName !== "translate") {
+        return;
+      }
+      if (panelKey !== outgoingPanel) {
+        return;
+      }
+      setOutgoingPanel(null);
+    };
   }
 
   const panels: Record<
@@ -184,43 +288,54 @@ export function ConsoleSidebarNav({
     },
   };
 
-  if (displayedPanel === "main") {
-    return (
-      <SidebarGroup>
-        <SidebarMenu>
-          {hasSettingsAccess ? (
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={
-                  displayedPanel === "main" && routePanel === "settings"
-                }
-                render={
-                  <Link
-                    ref={settingsEntryRef}
-                    href={SETTINGS_GENERAL_HREF}
-                    onClick={() => setDisplayedPanel("settings")}
-                  />
-                }
-                tooltip={t("settings")}
-              >
-                <Settings />
-                <span>{t("settings")}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ) : null}
-        </SidebarMenu>
-      </SidebarGroup>
-    );
-  }
-
-  const panel = panels[displayedPanel];
+  const mainPanel = (
+    <SidebarGroup>
+      <SidebarMenu>
+        {hasSettingsAccess ? (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={displayedPanel === "main" && routePanel === "settings"}
+              render={
+                <Link
+                  ref={settingsEntryRef}
+                  href={SETTINGS_GENERAL_HREF}
+                  onClick={() => setDisplayedPanel("settings")}
+                />
+              }
+              tooltip={t("settings")}
+            >
+              <Settings />
+              <span>{t("settings")}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ) : null}
+      </SidebarMenu>
+    </SidebarGroup>
+  );
 
   return (
-    <ConsoleSidebarSection
-      title={panel.title}
-      tooltip={panel.tooltip}
-      back={panel.back}
-      groups={panel.groups}
-    />
+    <div className="relative min-h-0 flex-1 overflow-hidden">
+      <SidebarSlidePanel
+        slideState={resolveSlideState("main", settledPanel, outgoingPanel)}
+        isCollapsed={isCollapsed}
+        onTransitionEnd={handlePanelTransitionEnd("main")}
+      >
+        {mainPanel}
+      </SidebarSlidePanel>
+      <SidebarSlidePanel
+        slideState={resolveSlideState("uc", settledPanel, outgoingPanel)}
+        isCollapsed={isCollapsed}
+        onTransitionEnd={handlePanelTransitionEnd("uc")}
+      >
+        <ConsoleSidebarSection {...panels.uc} />
+      </SidebarSlidePanel>
+      <SidebarSlidePanel
+        slideState={resolveSlideState("settings", settledPanel, outgoingPanel)}
+        isCollapsed={isCollapsed}
+        onTransitionEnd={handlePanelTransitionEnd("settings")}
+      >
+        <ConsoleSidebarSection {...panels.settings} />
+      </SidebarSlidePanel>
+    </div>
   );
 }
