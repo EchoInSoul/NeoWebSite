@@ -12,6 +12,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CircleUserRound,
+  LogIn,
   MonitorSmartphone,
   Settings,
   SlidersHorizontal,
@@ -50,6 +51,7 @@ const PANEL_PREFIXES = {
 
 const SETTINGS_GENERAL_HREF = `${PANEL_PREFIXES.settings}/general`;
 const SETTINGS_REGISTER_HREF = `${PANEL_PREFIXES.settings}/register`;
+const SETTINGS_LOGIN_HREF = `${PANEL_PREFIXES.settings}/login`;
 const SETTINGS_GROUPS_HREF = `${PANEL_PREFIXES.settings}/groups`;
 const SETTINGS_USERS_HREF = `${PANEL_PREFIXES.settings}/users`;
 
@@ -256,6 +258,12 @@ export function ConsoleSidebarNav({
                   href: SETTINGS_REGISTER_HREF,
                   label: ts("register"),
                   icon: <UserRoundPlus />,
+                  className: "mb-1",
+                } satisfies ConsoleSidebarSectionItem,
+                {
+                  href: SETTINGS_LOGIN_HREF,
+                  label: ts("loginControl"),
+                  icon: <LogIn />,
                 } satisfies ConsoleSidebarSectionItem,
               ]
             : [],
