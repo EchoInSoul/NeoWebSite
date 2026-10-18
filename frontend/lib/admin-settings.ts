@@ -4,6 +4,10 @@ import { backendUrl } from "@/lib/backend-url";
 import { parseAdminGroups } from "@/lib/groups";
 import type { AdminGroup } from "@/lib/groups";
 import {
+  parseLoginGroupValues,
+  type LoginSettingsValues,
+} from "@/lib/login-settings";
+import {
   parseRegisterSettingsValues,
   type RegisterSettingsValues,
 } from "@/lib/register-settings";
@@ -108,4 +112,44 @@ export async function getRegisterSettings(): Promise<RegisterSettingsRead> {
   } catch {
     return { status: "failed" };
   }
+}
+
+export type LoginSettingsRead =
+  | { status: "ok"; values: LoginSettingsValues }
+  | { status: "forbidden" }
+  | { status: "failed" };
+
+export async function getLoginSettings(): Promise<LoginSettingsRead> {
+  const session = (await cookies()).get("session")?.value;
+
+  if (!session) {
+    return { status: "failed" };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${backendUrl}/api/v1/admin/settings/auth`, {
+      headers: { cookie: `session=${session}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { status: "failed" };
+  }
+
+  if (response.status === 403) {
+    return { status: "forbidden" };
+  }
+
+  if (!response.ok) {
+    return { status: "failed" };
+  }
+
+  const payload = await response.json().catch(() => null);
+  const values = parseLoginGroupValues(payload);
+
+  if (values === null) {
+    return { status: "failed" };
+  }
+
+  return { status: "ok", values };
 }

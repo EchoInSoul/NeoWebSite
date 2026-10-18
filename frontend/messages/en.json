@@ -57,6 +57,7 @@
     "sessionMaxAgeEnabled": "Enable session expiry",
     "sessionMaxAge": "Session expiry",
     "sessionMaxAgeUnitDay": "days",
+    "sessionMaxAgeDaysRange": "Session expiry must be between 1 and 30 days",
     "identityGroup": "Authentication",
     "twoFactorAuth": "Two-factor authentication (TOTP)",
     "passwordReset": "Enable password reset",

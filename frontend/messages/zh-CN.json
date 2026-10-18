@@ -57,6 +57,7 @@
     "sessionMaxAgeEnabled": "启用会话有效期",
     "sessionMaxAge": "会话有效期",
     "sessionMaxAgeUnitDay": "天",
+    "sessionMaxAgeDaysRange": "会话有效期需在 1–30 天之间",
     "identityGroup": "身份验证",
     "twoFactorAuth": "两步验证（TOTP）",
     "passwordReset": "启用密码重置",

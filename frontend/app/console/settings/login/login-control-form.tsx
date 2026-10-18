@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import {
   Clock,
   Clock3,
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
 import { Input } from "@/components/ui/input";
@@ -22,21 +23,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useLoginSettingsSave } from "@/hooks/use-login-settings-save";
+import {
+  CAPTCHA_PROVIDER_BUILTIN,
+  type LoginSettingsValues,
+} from "@/lib/login-settings";
 
 const SESSION_UNIT_DAY = "day";
-const CAPTCHA_PROVIDER_BUILTIN = "builtin";
 
-export function LoginControlForm() {
+export function LoginControlForm({
+  settings,
+}: {
+  settings: LoginSettingsValues;
+}) {
   const t = useTranslations("settings");
-  const [sessionMaxAgeEnabled, setSessionMaxAgeEnabled] = useState(true);
-  const [sessionMaxAgeDays, setSessionMaxAgeDays] = useState("7");
+  const {
+    values,
+    isDirty,
+    isSaving,
+    setSessionMaxAgeEnabled,
+    updateSessionMaxAgeDays,
+    setTotpEnabled,
+    setPasswordResetEnabled,
+    setCaptchaEnabled,
+    setCaptchaProvider,
+    save,
+  } = useLoginSettingsSave(settings);
   const [sessionMaxAgeUnit, setSessionMaxAgeUnit] = useState(SESSION_UNIT_DAY);
-  const [totpEnabled, setTotpEnabled] = useState(true);
-  const [passwordResetEnabled, setPasswordResetEnabled] = useState(true);
-  const [captchaEnabled, setCaptchaEnabled] = useState(true);
-  const [captchaProvider, setCaptchaProvider] = useState(
-    CAPTCHA_PROVIDER_BUILTIN,
-  );
 
   const sessionUnitItems = {
     [SESSION_UNIT_DAY]: t("sessionMaxAgeUnitDay"),
@@ -45,15 +58,21 @@ export function LoginControlForm() {
     [CAPTCHA_PROVIDER_BUILTIN]: t("captchaProviderBuiltin"),
   };
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void save();
+  }
+
   return (
-    <div className="flex flex-col gap-4">
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
       <ConsoleSettingsGroup title={t("sessionGroup")}>
         <ConsoleSettingsRow
           control={
             <Switch
               aria-label={t("sessionMaxAgeEnabled")}
-              checked={sessionMaxAgeEnabled}
+              checked={values.sessionMaxAgeEnabled}
               onCheckedChange={setSessionMaxAgeEnabled}
+              disabled={isSaving}
             />
           }
           expandedContent={
@@ -63,11 +82,14 @@ export function LoginControlForm() {
                   <Input
                     aria-label={t("sessionMaxAge")}
                     className="w-28"
+                    max={30}
+                    min={1}
                     onChange={(event) =>
-                      setSessionMaxAgeDays(event.target.value)
+                      updateSessionMaxAgeDays(event.target.value)
                     }
                     type="number"
-                    value={sessionMaxAgeDays}
+                    value={values.sessionMaxAgeDays}
+                    disabled={isSaving}
                   />
                   <Select
                     items={sessionUnitItems}
@@ -77,6 +99,7 @@ export function LoginControlForm() {
                         setSessionMaxAgeUnit(value);
                       }
                     }}
+                    disabled={isSaving}
                   >
                     <SelectTrigger
                       aria-label={t("sessionMaxAgeUnitDay")}
@@ -106,8 +129,9 @@ export function LoginControlForm() {
           control={
             <Switch
               aria-label={t("twoFactorAuth")}
-              checked={totpEnabled}
+              checked={values.totpEnabled}
               onCheckedChange={setTotpEnabled}
+              disabled={isSaving}
             />
           }
           icon={<Smartphone />}
@@ -117,8 +141,9 @@ export function LoginControlForm() {
           control={
             <Switch
               aria-label={t("passwordReset")}
-              checked={passwordResetEnabled}
+              checked={values.passwordResetEnabled}
               onCheckedChange={setPasswordResetEnabled}
+              disabled={isSaving}
             />
           }
           icon={<KeyRound />}
@@ -130,8 +155,9 @@ export function LoginControlForm() {
           control={
             <Switch
               aria-label={t("captchaEnabled")}
-              checked={captchaEnabled}
+              checked={values.captchaEnabled}
               onCheckedChange={setCaptchaEnabled}
+              disabled={isSaving}
             />
           }
           expandedContent={
@@ -139,12 +165,13 @@ export function LoginControlForm() {
               control={
                 <Select
                   items={captchaProviderItems}
-                  value={captchaProvider}
+                  value={values.captchaProvider}
                   onValueChange={(value) => {
                     if (value !== null) {
                       setCaptchaProvider(value);
                     }
                   }}
+                  disabled={isSaving}
                 >
                   <SelectTrigger
                     aria-label={t("captchaProvider")}
@@ -168,6 +195,11 @@ export function LoginControlForm() {
           label={t("captchaEnabled")}
         />
       </ConsoleSettingsGroup>
-    </div>
+      <ConsoleFloatingSaveButton
+        isDirty={isDirty}
+        isPending={isSaving}
+        label={t("save")}
+      />
+    </form>
   );
 }
