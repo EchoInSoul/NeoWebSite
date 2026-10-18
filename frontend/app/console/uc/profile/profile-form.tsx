@@ -43,7 +43,13 @@ const inputClassName = "w-70";
 const inputGroupClassName = "w-70";
 const textareaClassName = "w-70 min-h-20";
 
-export function ProfileForm({ profile }: { profile: SessionUser | null }) {
+export function ProfileForm({
+  profile,
+  totpAvailable,
+}: {
+  profile: SessionUser | null;
+  totpAvailable: boolean;
+}) {
   const t = useTranslations("uc");
   const tCommon = useTranslations("common");
   const {
@@ -70,6 +76,7 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
     useState(false);
   const [isNewPasswordVisible, setIsNewPasswordVisible] = useState(false);
   const twoFactorEnabled = profile?.twoFactorEnabled ?? false;
+  const showTwoFactor = totpAvailable || twoFactorEnabled;
   const [isTwoFactorExpanded, setIsTwoFactorExpanded] = useState(false);
 
   const isLocked = profile === null || isSaving;
@@ -168,27 +175,29 @@ export function ProfileForm({ profile }: { profile: SessionUser | null }) {
             icon={<Mail />}
             label={t("email")}
           />
-          <ConsoleSettingsRow
-            control={
-              <Switch
-                aria-label={t("twoFactor")}
-                checked={twoFactorEnabled}
-                disabled={isLocked}
-                onCheckedChange={openTwoFactorPanel}
-              />
-            }
-            expanded={isTwoFactorExpanded}
-            expandedContent={
-              twoFactorEnabled ? (
-                <TwoFactorDisablePanel onDone={closeTwoFactorPanel} />
-              ) : (
-                <TwoFactorPanel onDone={closeTwoFactorPanel} />
-              )
-            }
-            icon={<ShieldCheck />}
-            label={t("twoFactor")}
-            onExpandedChange={setIsTwoFactorExpanded}
-          />
+          {showTwoFactor ? (
+            <ConsoleSettingsRow
+              control={
+                <Switch
+                  aria-label={t("twoFactor")}
+                  checked={twoFactorEnabled}
+                  disabled={isLocked}
+                  onCheckedChange={openTwoFactorPanel}
+                />
+              }
+              expanded={isTwoFactorExpanded}
+              expandedContent={
+                twoFactorEnabled ? (
+                  <TwoFactorDisablePanel onDone={closeTwoFactorPanel} />
+                ) : (
+                  <TwoFactorPanel onDone={closeTwoFactorPanel} />
+                )
+              }
+              icon={<ShieldCheck />}
+              label={t("twoFactor")}
+              onExpandedChange={setIsTwoFactorExpanded}
+            />
+          ) : null}
           <ConsoleSettingsRow
             defaultCollapsed
             expandedContent={
