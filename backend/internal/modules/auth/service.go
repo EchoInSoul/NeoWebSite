@@ -274,6 +274,9 @@ func isFreshTOTPSetup(row *ent.User, now time.Time) bool {
 }
 
 func (s *Service) SetupTOTP(ctx context.Context, userID string) (TwoFactorSetupResponse, error) {
+	if !s.twoFactorAvailable(ctx) {
+		return TwoFactorSetupResponse{}, apierror.ErrTwoFactorDisabled
+	}
 	found, err := s.activeUser(ctx, userID)
 	if err != nil {
 		return TwoFactorSetupResponse{}, err
@@ -332,6 +335,9 @@ func (s *Service) reuseTOTPSetup(accountName, sealed string) (TwoFactorSetupResp
 }
 
 func (s *Service) EnableTOTP(ctx context.Context, userID, code, currentToken string) (RecoveryCodesResponse, error) {
+	if !s.twoFactorAvailable(ctx) {
+		return RecoveryCodesResponse{}, apierror.ErrTwoFactorDisabled
+	}
 	found, err := s.activeUser(ctx, userID)
 	if err != nil {
 		return RecoveryCodesResponse{}, err
@@ -417,6 +423,14 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID, password 
 		return RecoveryCodesResponse{}, err
 	}
 	return RecoveryCodesResponse{RecoveryCodes: codes}, nil
+}
+
+func (s *Service) twoFactorAvailable(ctx context.Context) bool {
+	enabled, err := s.settings.GetBool(ctx, "auth", "totp_enabled")
+	if err != nil {
+		return true
+	}
+	return enabled
 }
 
 func (s *Service) activeUser(ctx context.Context, userID string) (*ent.User, error) {

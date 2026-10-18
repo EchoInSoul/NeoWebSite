@@ -33,7 +33,7 @@ var builtinRegistry = []Group{
 	},
 	{
 		Name:       "auth",
-		ValidateOn: []string{"password_min_length"},
+		ValidateOn: []string{"password_min_length", "session_max_age_days", "session_max_age_enabled"},
 		Validate:   validateAuthGroup,
 		Items: []Definition{
 			{Name: "password_requirements_enabled", Type: FieldTypeBool, Default: false},
@@ -41,7 +41,7 @@ var builtinRegistry = []Group{
 			{Name: "password_complexity", Type: FieldTypeString, Default: ""},
 			{Name: "session_max_age_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "session_max_age_days", Type: FieldTypeNumber, Default: int64(7)},
-			{Name: "totp_enabled", Type: FieldTypeBool, Default: false},
+			{Name: "totp_enabled", Type: FieldTypeBool, Default: true, Public: true},
 			{Name: "password_reset_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "captcha_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "captcha_provider", Type: FieldTypeString, Default: ""},
@@ -117,6 +117,8 @@ func checkDefault(item Definition) error {
 const (
 	passwordMinLengthFloor = 8
 	passwordMinLengthCap   = 64
+	sessionMaxAgeDaysFloor = 1
+	sessionMaxAgeDaysCap   = 30
 )
 
 func validateAuthGroup(values map[string]any) error {
@@ -126,6 +128,14 @@ func validateAuthGroup(values map[string]any) error {
 	}
 	if length < passwordMinLengthFloor || length > passwordMinLengthCap {
 		return &ItemError{Item: "password_min_length", Err: apierror.ErrSettingConflict}
+	}
+
+	days, ok := values["session_max_age_days"].(int64)
+	if !ok {
+		return fmt.Errorf("settings: session_max_age_days is not a number")
+	}
+	if days < sessionMaxAgeDaysFloor || days > sessionMaxAgeDaysCap {
+		return &ItemError{Item: "session_max_age_days", Err: apierror.ErrSettingConflict}
 	}
 	return nil
 }

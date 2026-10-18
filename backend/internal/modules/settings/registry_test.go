@@ -117,7 +117,7 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "password_complexity", typ: FieldTypeString, def: ""},
 		{name: "session_max_age_enabled", typ: FieldTypeBool, def: false},
 		{name: "session_max_age_days", typ: FieldTypeNumber, def: int64(7)},
-		{name: "totp_enabled", typ: FieldTypeBool, def: false},
+		{name: "totp_enabled", typ: FieldTypeBool, def: true, public: true},
 		{name: "password_reset_enabled", typ: FieldTypeBool, def: false},
 		{name: "captcha_enabled", typ: FieldTypeBool, def: false},
 		{name: "captcha_provider", typ: FieldTypeString, def: ""},
@@ -140,6 +140,7 @@ func TestBuiltinPublicAllowlist(t *testing.T) {
 	}
 	sort.Strings(public)
 	want := []string{
+		"auth.totp_enabled",
 		"register.enabled",
 		"site.block_search_engines",
 		"site.description",
@@ -246,13 +247,19 @@ func TestBuiltinRegisterGroupHasNoValidator(t *testing.T) {
 func TestValidateAuthGroup(t *testing.T) {
 	for _, tc := range []struct {
 		length  int64
+		days    int64
 		wantErr bool
 	}{
-		{8, false}, {16, false}, {64, false}, {7, true}, {0, true}, {-3, true}, {65, true},
+		{8, 7, false}, {16, 1, false}, {64, 30, false},
+		{7, 7, true}, {0, 7, true}, {-3, 7, true}, {65, 7, true},
+		{8, 0, true}, {8, 31, true}, {8, -1, true},
 	} {
-		err := validateAuthGroup(map[string]any{"password_min_length": tc.length})
+		err := validateAuthGroup(map[string]any{
+			"password_min_length":  tc.length,
+			"session_max_age_days": tc.days,
+		})
 		if (err != nil) != tc.wantErr {
-			t.Fatalf("length %d: err = %v, wantErr = %v", tc.length, err, tc.wantErr)
+			t.Fatalf("length %d days %d: err = %v, wantErr = %v", tc.length, tc.days, err, tc.wantErr)
 		}
 	}
 }

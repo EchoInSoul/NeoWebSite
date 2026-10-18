@@ -42,8 +42,21 @@ func (s *Service) establishSession(ctx context.Context, userID string, meta Sess
 	s.sessions.Put(ctx, guard.SessionLastSeenAtKey, now)
 	s.sessions.Remove(ctx, pendingUserIDKey)
 	s.sessions.Remove(ctx, pendingAttemptsKey)
+	s.applySessionDeadline(ctx)
 
 	return nil
+}
+
+func (s *Service) applySessionDeadline(ctx context.Context) {
+	enabled, err := s.settings.GetBool(ctx, "auth", "session_max_age_enabled")
+	if err != nil || !enabled {
+		return
+	}
+	days, err := s.settings.GetNumber(ctx, "auth", "session_max_age_days")
+	if err != nil || days < 1 || days > 30 {
+		return
+	}
+	s.sessions.SetDeadline(ctx, time.Now().Add(time.Duration(days)*24*time.Hour))
 }
 
 func (s *Service) enterPendingSession(ctx context.Context, userID string) {

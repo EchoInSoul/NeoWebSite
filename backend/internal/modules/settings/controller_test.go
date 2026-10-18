@@ -339,15 +339,15 @@ func TestSettingsGroupPermissionsSplitByGroup(t *testing.T) {
 
 func TestSettingsPublicGetAnonymously(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register", "site")
+	resetGroups(t, db, "auth", "register", "site")
 	ts := newSettingsTestApp(t, db)
 
 	resp := doJSON(t, &http.Client{}, http.MethodGet, ts.URL+"/api/v1/public/settings", nil)
 	expectStatus(t, resp, http.StatusOK)
 
 	items := decodePublicItems(t, resp)
-	if len(items) != 2 {
-		t.Fatalf("public items = %v, want the site and register groups", items)
+	if len(items) != 3 {
+		t.Fatalf("public items = %v, want the site, register and auth groups", items)
 	}
 	if items[0]["group"] != "site" {
 		t.Fatalf("group = %v, want site first in registry order", items[0]["group"])
@@ -374,11 +374,18 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 	if !ok || values["enabled"] != true {
 		t.Fatalf("values = %v, want enabled true merged from default", items[1]["values"])
 	}
+	if items[2]["group"] != "auth" {
+		t.Fatalf("group = %v, want auth", items[2]["group"])
+	}
+	authValues, ok := items[2]["values"].(map[string]any)
+	if !ok || len(authValues) != 1 || authValues["totp_enabled"] != true {
+		t.Fatalf("public auth values = %v, want only totp_enabled true", items[2]["values"])
+	}
 }
 
 func TestSettingsPatchSiteReadsBackPublicly(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register", "site")
+	resetGroups(t, db, "auth", "register", "site")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -401,8 +408,8 @@ func TestSettingsPatchSiteReadsBackPublicly(t *testing.T) {
 	public := doJSON(t, &http.Client{}, http.MethodGet, ts.URL+"/api/v1/public/settings", nil)
 	expectStatus(t, public, http.StatusOK)
 	items := decodePublicItems(t, public)
-	if len(items) != 2 || items[0]["group"] != "site" {
-		t.Fatalf("public items = %v, want site first then register", items)
+	if len(items) != 3 || items[0]["group"] != "site" {
+		t.Fatalf("public items = %v, want site first then register and auth", items)
 	}
 	siteValues, ok := items[0]["values"].(map[string]any)
 	if !ok || siteValues["title"] != "我的博客" || siteValues["block_search_engines"] != true {
@@ -462,6 +469,9 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	}
 	if values["captcha_provider"] != "" {
 		t.Fatalf("auth.captcha_provider = %v, want empty", values["captcha_provider"])
+	}
+	if values["totp_enabled"] != true {
+		t.Fatalf("auth.totp_enabled = %v, want true", values["totp_enabled"])
 	}
 
 	patch := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"session_max_age_days": 14})
@@ -662,6 +672,50 @@ func TestSettingsPatchAuthMinLengthRange(t *testing.T) {
 	_, values := decodeGroup(t, ok)
 	if values["password_min_length"] != float64(16) {
 		t.Fatalf("password_min_length = %v, want 16", values["password_min_length"])
+	}
+}
+
+func TestSettingsPatchAuthSessionMaxAgeRange(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "auth")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	for _, days := range []int{0, 31} {
+		resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"session_max_age_days": days})
+		expectStatus(t, resp, http.StatusConflict)
+		body := decodeError(t, resp)
+		if body["code"] != "setting_conflict" || body["param"] != "session_max_age_days" {
+			t.Fatalf("days %d: conflict body = %v", days, body)
+		}
+	}
+
+	ok := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"session_max_age_enabled": true, "session_max_age_days": 30})
+	expectStatus(t, ok, http.StatusOK)
+	_, values := decodeGroup(t, ok)
+	if values["session_max_age_days"] != float64(30) || values["session_max_age_enabled"] != true {
+		t.Fatalf("session max age = %v, want enabled with 30 days", values)
+	}
+}
+
+func TestSettingsPatchAuthSessionMaxAgeRejectsDirtyDaysOnEnable(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "auth")
+	module, err := New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	if err := module.Service.SetNumber(context.Background(), "auth", "session_max_age_days", 0); err != nil {
+		t.Fatalf("seed dirty days: %v", err)
+	}
+
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"session_max_age_enabled": true})
+	expectStatus(t, resp, http.StatusConflict)
+	body := decodeError(t, resp)
+	if body["code"] != "setting_conflict" || body["param"] != "session_max_age_days" {
+		t.Fatalf("conflict body = %v", body)
 	}
 }
 

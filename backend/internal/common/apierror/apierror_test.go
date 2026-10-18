@@ -254,16 +254,16 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrMethodNotAllowed,
 		ErrInvalidCredentials, ErrUnauthorized, ErrTwoFactorRequired, ErrTwoFactorInvalidCode,
 		ErrTwoFactorLocked, ErrForbidden, ErrGrantForbidden,
-		ErrOwnerProtected, ErrCannotModifySelf, ErrRegistrationClosed, ErrNotFound, ErrPresetGroupLocked,
+		ErrOwnerProtected, ErrCannotModifySelf, ErrRegistrationClosed, ErrTwoFactorDisabled, ErrNotFound, ErrPresetGroupLocked,
 		ErrEmailTaken, ErrNicknameTaken, ErrAlreadyTaken, ErrGroupNameTaken,
 		ErrGroupNotEmpty, ErrLastOwner, ErrSettingConflict, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
 		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrServiceUnavailable, ErrInternal,
 	}
-	if len(all) != 31 {
-		t.Fatalf("sentinel count = %d, want 31", len(all))
+	if len(all) != 32 {
+		t.Fatalf("sentinel count = %d, want 32", len(all))
 	}
-	if len(statusByCode) != 31 {
-		t.Fatalf("statusByCode entries = %d, want 31", len(statusByCode))
+	if len(statusByCode) != 32 {
+		t.Fatalf("statusByCode entries = %d, want 32", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,

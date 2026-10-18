@@ -17,6 +17,7 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
 	"website/backend/internal/database/ent/recoverycode"
+	"website/backend/internal/modules/settings"
 )
 
 const testCodeHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -1006,7 +1007,11 @@ func TestTwoFactorSetupConcurrentCallsShareSecret(t *testing.T) {
 	u, _ := createTestUser(t, db, tag)
 	id := uuid.MustParse(u.ID)
 	fakeTOTPClock(t, time.Unix(1700000001, 0))
-	svc := newService(db, scs.New(), testTOTPKey, nil)
+	settingsModule, err := settings.New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	svc := newService(db, scs.New(), testTOTPKey, settingsModule.Service)
 
 	results := make([]TwoFactorSetupResponse, 8)
 	errs := make([]error, 8)
