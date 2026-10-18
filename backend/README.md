@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.20.3
+当前版本：0.21.0
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -276,16 +276,16 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 | `PATCH /api/v1/admin/settings/:group` | 同上两把钥匙的 `edit` 档（`system.settings.edit` / `system.register.edit`，隐含 `view`） | 更新后的组记录 |
 | `GET /api/v1/public/settings` | **无鉴权** | `{items: […]}`，只含**至少有一项标了 `Public` 的组**，且每组只出公开项 |
 
-管理侧未知组 404；请求体非法、项名不在清单、值类型不符 → 400（带 `param` = 项名）；组级组合约束不满足（`password_min_length` 取 8–64）→ 409 `setting_conflict`（`param` = 判定项名，未必是要改的那一项）。owner / admin 由权限目录运行时全量授予全部权限点，无需数据迁移；自建组需显式授。公开侧按组点查**刻意不提供**——前台要读公开设置就一次取全，避免每加一项就多一个 fetcher。
+管理侧未知组 404；请求体非法、项名不在清单、值类型不符 → 400（带 `param` = 项名）；组级组合约束不满足（`password_min_length` 取 8–64、`session_max_age_days` 取 1–30）→ 409 `setting_conflict`（`param` = 判定项名，未必是要改的那一项）。owner / admin 由权限目录运行时全量授予全部权限点，无需数据迁移；自建组需显式授。公开侧按组点查**刻意不提供**——前台要读公开设置就一次取全，避免每加一项就多一个 fetcher。
 
-**当前清单项**：① `site` 组六项——`title` / `subtitle` / `description` / `keywords` / `url`（均为文字、默认空串）与 `block_search_engines`（开关、默认 `false`）；六项全部标 `Public`（供前台读站名、SEO 与 robots 元数据；`keywords` 存英文逗号分隔的单个字符串；后端暂无消费方）；② `register` 组五项——`enabled`（开关，默认 `true`，已标 `Public`）是注册总闸：`auth.Service.Register` 的第一句读它，为 `false` 时注册返回 403 `registration_closed`，登录与 `auth.CreateAdminUser` 不受它影响；`email_domain_control_enabled`（开关，默认 `false`）与 `allowed_email_domains`（文字，逗号分隔、中英文逗号都认）是注册邮箱域名白名单：开关开启且清单条目非空时 `auth.Service.Register` 拒绝域名不在清单里的邮箱（400 `email_domain_not_allowed`；大小写不敏感、精确匹配域名、不放行子域），只拦公开注册，`CreateAdminUser` 与 `PATCH /users/me` 不受影响；清单为空（含只填逗号、全空白这类拆分后无条目的写法）时一律放行，也就是"开着但不限制任何域名"是一种合法且能存得下的配置，管理界面需自行提示这层含义；`default_group`（文字，默认**普通用户组的组名**「普通用户」，取自 `rbac.PresetGroupNameByKey(rbac.GroupKeyUser)`）是注册落到哪个用户组的设定，**值形状是组名不是 UUID 也不是组键**——控制台「用户注册」页的「注册默认组」下拉列的就是它，可选项按 `system_key` 排除 `owner` / `admin`（注册是自助入口，指到特权组等于开放提权后门）；它与 `email_verification_enabled` 一样**暂无消费方**（`auth.Service.Register` 不读它，新用户归属仍由 ent schema 默认值决定），组名被改或组被删会让存量值失配；两者均非公开；③ `auth` 组九项——`password_requirements_enabled`（开关，默认 `false`）与 `password_min_length`（默认 `8`，取值 8–64）是密码策略：开启后 `POST /users` 与 `POST /users/me/password` 按 `password_min_length` 校验（关闭时沿用写死的 8；字母+数字与 ≤72 字节恒生效），`PATCH /admin/settings/auth` 拒绝 8–64 之外的写入（409 `setting_conflict`）；`password_complexity`、`session_max_age_enabled`、`session_max_age_days`（默认 `7`，单位天）、`totp_enabled`、`password_reset_enabled`、`captcha_enabled`、`captcha_provider` 均非公开、纯数据、暂无消费方。前端 `lib/public-settings.ts` 读聚合端点，`/signup` 在关闭时直接 404、登录页隐掉注册入口；**读不到该端点时按 fail-open 处理**（照常出页面），与「后端连不上照常出页 + toast」的既有口径一致。关掉注册的实际操作（暂无界面）：
+**当前清单项**：① `site` 组六项——`title` / `subtitle` / `description` / `keywords` / `url`（均为文字、默认空串）与 `block_search_engines`（开关、默认 `false`）；六项全部标 `Public`（供前台读站名、SEO 与 robots 元数据；`keywords` 存英文逗号分隔的单个字符串；后端暂无消费方）；② `register` 组五项——`enabled`（开关，默认 `true`，已标 `Public`）是注册总闸：`auth.Service.Register` 的第一句读它，为 `false` 时注册返回 403 `registration_closed`，登录与 `auth.CreateAdminUser` 不受它影响；`email_domain_control_enabled`（开关，默认 `false`）与 `allowed_email_domains`（文字，逗号分隔、中英文逗号都认）是注册邮箱域名白名单：开关开启且清单条目非空时 `auth.Service.Register` 拒绝域名不在清单里的邮箱（400 `email_domain_not_allowed`；大小写不敏感、精确匹配域名、不放行子域），只拦公开注册，`CreateAdminUser` 与 `PATCH /users/me` 不受影响；清单为空（含只填逗号、全空白这类拆分后无条目的写法）时一律放行，也就是"开着但不限制任何域名"是一种合法且能存得下的配置，管理界面需自行提示这层含义；`default_group`（文字，默认**普通用户组的组名**「普通用户」，取自 `rbac.PresetGroupNameByKey(rbac.GroupKeyUser)`）是注册落到哪个用户组的设定，**值形状是组名不是 UUID 也不是组键**——控制台「用户注册」页的「注册默认组」下拉列的就是它，可选项按 `system_key` 排除 `owner` / `admin`（注册是自助入口，指到特权组等于开放提权后门）；它与 `email_verification_enabled` 一样**暂无消费方**（`auth.Service.Register` 不读它，新用户归属仍由 ent schema 默认值决定），组名被改或组被删会让存量值失配；两者均非公开；③ `auth` 组九项——`password_requirements_enabled`（开关，默认 `false`）与 `password_min_length`（默认 `8`，取值 8–64）是密码策略：开启后 `POST /users` 与 `POST /users/me/password` 按 `password_min_length` 校验（关闭时沿用写死的 8；字母+数字与 ≤72 字节恒生效），`PATCH /admin/settings/auth` 拒绝 8–64 之外的写入（409 `setting_conflict`）；`session_max_age_enabled`（开关，默认 `false`）与 `session_max_age_days`（默认 `7`，单位天，取值 1–30）是会话有效期：开启后 `auth.Service.establishSession` 在登录（含二段验证通过）时把会话 deadline 设为「当前时间 + N 天」，只影响之后新建的会话，已登录会话不变；关闭时沿用 `SESSION_LIFETIME`（默认 168h = 7 天）；`PATCH /admin/settings/auth` 拒绝 1–30 之外的写入（409 `setting_conflict`），开启开关时也会校验存量天数。`totp_enabled`（开关，默认 `true`，已标 `Public`）是两步验证总开关：为 `false` 时 `POST /users/me/2fa/setup` 与 `/enable` 返回 403 `two_factor_disabled`；`/disable` 与恢复码接口不受影响；登录是否要求二段仍只看用户自己的 `totp_enabled_at`，已开启 2FA 的用户不会因站级开关关闭而绕过验证。`password_complexity`、`password_reset_enabled`、`captcha_enabled`、`captcha_provider` 仍非公开、纯数据、暂无消费方。前端 `lib/public-settings.ts` 读聚合端点，`/signup` 在关闭时直接 404、登录页隐掉注册入口；**读不到该端点时按 fail-open 处理**（照常出页面），与「后端连不上照常出页 + toast」的既有口径一致。关掉注册的实际操作（暂无界面）：
 
 ```
 GET   /api/v1/public/settings                →  {"items":[{"group":"register","values":{"enabled":false}}]}
 PATCH /api/v1/admin/settings/register        →  {"group":"register","values":{"enabled":false}}
 ```
 
-（两行响应都是节选：`GET` 的完整负载里 `site` 组六项排在前面、`auth` 组因无公开项整条不出现；`PATCH` 回的是整组合并结果，`register` 另四项非公开策略一并回显。）
+（两行响应都是节选：`GET` 的完整负载里 `site` 组六项、`register` 组的 `enabled` 和 `auth` 组的 `totp_enabled` 都在；`PATCH` 回的是整组合并结果，`register` 另四项非公开策略一并回显。）
 
 **怎么加一个设置**：在 `internal/modules/settings/registry.go` 的 `builtinRegistry` 里添加（组不存在就新增一个 `Group` 字面量）：
 

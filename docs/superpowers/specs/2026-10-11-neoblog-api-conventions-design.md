@@ -112,8 +112,8 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 14 | `PATCH /api/v1/admin/users/:id` | `backend/internal/modules/access/controller.go:53` |
 | 15 | `POST /api/v1/admin/mail/messages` | `backend/internal/modules/mail/controller.go:36`（0.9.0 新增，域 `admin` 下资源 `mail/messages`，创建即发送） |
 | 16 | `POST /api/v1/sessions/current/verify` | `backend/internal/modules/auth/controller.go:29`（0.10.0 新增，公开路由，靠「待二段」会话；v1.5 改名：原 `POST /auth/2fa/verify`——二步验证 = 对当前（待二段）会话的验证） |
-| 17 | `POST /api/v1/users/me/2fa/setup` | `backend/internal/modules/auth/controller.go:39`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/setup`） |
-| 18 | `POST /api/v1/users/me/2fa/enable` | `backend/internal/modules/auth/controller.go:40`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/enable`） |
+| 17 | `POST /api/v1/users/me/2fa/setup` | `backend/internal/modules/auth/controller.go:39`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/setup`；0.21.0 起站级 `auth/totp_enabled` 关闭时返回 403 `two_factor_disabled`） |
+| 18 | `POST /api/v1/users/me/2fa/enable` | `backend/internal/modules/auth/controller.go:40`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/enable`；0.21.0 起站级 `auth/totp_enabled` 关闭时返回 403 `two_factor_disabled`） |
 | 19 | `POST /api/v1/users/me/2fa/disable` | `backend/internal/modules/auth/controller.go:41`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/disable`） |
 | 20 | `POST /api/v1/users/me/2fa/recovery-codes` | `backend/internal/modules/auth/controller.go:42`（0.10.0 新增，守卫内；资源名 `recovery-codes` 保持连字符小写；v1.5 改名：原 `POST /auth/2fa/recovery-codes`） |
 | 21 | `GET /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:33`（0.12.0 新增，守卫链 `RequireAuth → LoadIdentity → RequirePermission(system.settings.view)`；0.13.0 起返回组记录 `{group, values}`，`values` 为整组「默认值 ⊕ 覆盖」合并，含未标公开的项） |
@@ -392,7 +392,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 
 ### 7.3 code 词汇表（收编现有 token；此后只增不改义）
 
-19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；0.12.0 起新增 `registration_closed`（注册开关关闭，见设置 spec 与本轮 spec）；0.20.3 起新增 `email_domain_not_allowed`（注册邮箱域名白名单拒绝，400 / `invalid_request_error`，param 默认 `email`）与 `setting_conflict`（设置写前组合校验不满足，409 / `conflict_error`，param 由设置端点覆盖为判定项名）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`，设置端点 `PATCH` 的项名与类型错误覆盖为出错项名：
+19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；0.12.0 起新增 `registration_closed`（注册开关关闭，见设置 spec 与本轮 spec）；0.20.3 起新增 `email_domain_not_allowed`（注册邮箱域名白名单拒绝，400 / `invalid_request_error`，param 默认 `email`）与 `setting_conflict`（设置写前组合校验不满足，409 / `conflict_error`，param 由设置端点覆盖为判定项名）；0.21.0 起新增 `two_factor_disabled`（站级 `auth/totp_enabled` 关闭时调用 2FA setup / enable，403 / `permission_error`）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`，设置端点 `PATCH` 的项名与类型错误覆盖为出错项名：
 
 | code | HTTP | type | 默认 param | 场景 | 建议默认 message（注册表基线，可润色） |
 | --- | --- | --- | --- | --- | --- |
@@ -413,6 +413,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `owner_protected` | 403 | `permission_error` | null | 非 owner 改动 owner / admin 组成员 | 该成员只能由所有者修改 |
 | `cannot_modify_self` | 403 | `permission_error` | null | 改自己的组或额外权限 | 不能修改自己的组或额外权限 |
 | `registration_closed` | 403 | `permission_error` | null | 注册开关（设置项 `register/enabled`）已关闭时提交注册；判定在字段校验之前，关闭态下连非法字段也返回本码而非 `invalid_request`（0.12.0 新增） | 当前已关闭注册 |
+| `two_factor_disabled` | 403 | `permission_error` | null | 站级两步验证开关（设置项 `auth/totp_enabled`）关闭时调用 setup / enable；disable 与 recovery-codes 不受影响（0.21.0 新增） | 当前未启用两步验证 |
 | `preset_group_locked` | 409 | `conflict_error` | null | 改 / 删预设组的锁死字段（锁来自资源状态，owner 亦被拒；现状 403，改判见 §14 决策 5） | 预设组不可修改 |
 | `not_found` | 404 | `not_found_error` | null | 资源不存在（含路由未匹配兜底；方法不匹配自 v1.4 起归 `method_not_allowed`；路径 / 字段值**格式**非法归 `invalid_request`，§14 决策 4） | 资源不存在 |
 | `email_taken` | 409 | `conflict_error` | `email` | 邮箱已注册 | 该邮箱已被使用 |

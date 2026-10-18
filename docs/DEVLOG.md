@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-19 · 登录控制页接线（auth 组前端读写 + 会话有效期与 TOTP 站级开关生效）（0.21.0）
+
+**范围**：前端 9 文件（`app/console/settings/login/{page,login-control-form}.tsx`、`hooks/use-login-settings-save.ts`、`lib/login-settings.ts`、`lib/admin-settings.ts`、`app/console/uc/profile/{page,profile-form}.tsx` 与两份 message）；后端 6 文件（`settings/registry.go`、`auth/session.go`、`auth/service.go`、`common/apierror/apierror.go`、`totp_flow_test.go` 的 nil settings 修正、新增 `auth/settings_consumers_test.go`），外加 README / API 规范 / 本条目。零迁移、零新路由、零新依赖。版本 0.20.3 → **0.21.0**（minor）。
+
+**动机**：`/console/settings/login` 自上一轮建成起是纯 UI（六个本地 state、无保存、不读后端）；本轮按用户点名的范围接成真页面，并让 `auth` 组里成本最低的两个策略真正生效——会话有效期与两步验证总开关。密码重置与人机验证只接页面开关，行为留给各自独立轮次。
+
+**口径**：
+
+- **页面读写**：`getLoginSettings()` 读 `GET /admin/settings/auth`；保存走 `PATCH` 且只发本页改过的键（`session_max_age_enabled` / `session_max_age_days` / `totp_enabled` / `password_reset_enabled` / `captcha_enabled` / `captcha_provider`）。与「用户注册」页共用 `auth` 组，但两边都只发自己的键，互不覆盖；权限继续沿用 `system.register.view/edit`（`settings/controller.go` 已按组分流）。
+- **会话有效期**：`auth.Service.establishSession` 在登录（含二段验证通过）时读 `session_max_age_enabled` / `session_max_age_days`，用 scs `SetDeadline` 设为「当前时间 + N 天」。**只影响之后新建的会话**，已登录会话不变；关闭时沿用 `SESSION_LIFETIME`（默认 168h = 7 天）。读设置失败按 fail-open 处理（沿用环境变量默认值），不阻断登录。
+- **天数范围 1–30**：`settings/registry.go` 的 `ValidateOn` 加入 `session_max_age_days` 与 `session_max_age_enabled`，越界返回 409 `setting_conflict`（param `session_max_age_days`）；加入 `enabled` 是为了在开启开关时也校验存量天数（库里可能有旧的越界值）。
+- **TOTP 总开关**：`totp_enabled` 默认值由 `false` 改为 `true`（保持「2FA 一直可用」的现状），并标 `Public`；`SetupTOTP` / `EnableTOTP` 在开关关闭时返回 403 `two_factor_disabled`（新增 token），`DisableTOTP` / 恢复码接口不受影响。登录是否要求二段仍只看用户自己的 `totp_enabled_at`，站级开关关闭不会让已开 2FA 的用户绕过验证。
+- **用户中心**：个人设置页读公开设置，站级开关关闭且用户自己未开启 2FA 时隐藏整行；用户已开启 2FA 时仍显示，保留 `disable` 的退出口，避免被锁死。
+- **公开面**：`auth` 组因 `totp_enabled` 标公开而出现在 `/public/settings`，公开白名单从 6 项变 7 项；前台 `getPublicSettings` 仍是 60 秒 revalidate，后台改开关最多 60 秒后反映到用户中心，但后端接口立即生效。
+- **`captcha_provider` 映射**：后端默认 `""`，前端统一显示/提交 `builtin`（`CAPTCHA_PROVIDER_BUILTIN`）；解析只接受 `""` 或 `builtin`，其他值按读取失败处理。
+
+**验证**：后端 `gofmt -l` 干净、`go vet ./...` 零输出、`bash scripts/test.sh` 全绿；变异自检三条——去掉 `applySessionDeadline` 调用、把两个 TOTP 门控改成 `if false`、把天数范围校验改成永不触发——分别实测变红后还原。前端 `tsc --noEmit`、ESLint、Prettier 通过。**运行期未验**：真实登录后改会话天数/关 TOTP 的行为归用户实机。
+
+**已知缺口**：`password_reset_enabled` 与 `captcha_enabled` / `captcha_provider` 仍是纯数据（密码重置与人机验证后端零实现，各自单开 spec）；登录控制页与用户注册页仍共用 `system.register.*` 权限，未拆独立权限点；已登录会话不会被新有效期即时改写。
+
+**提交状态**：未提交。
+
+---
+
 ## 2026-10-16 · 前端接上 `email_domain_not_allowed`（域名不允许时给具体提示）
 
 **范围**：前端 3 文件（`hooks/use-signup.ts` 的 `toFailure` 加一个 case、`messages/zh-CN.json` 与 `messages/en.json` 各加一条 signup 键）。零后端改动、零版本进位。
