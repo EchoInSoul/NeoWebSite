@@ -4,6 +4,8 @@
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
+模块内部的工程风格（文件职责、错误分层、DTO 归属、命名、测试与文档流程）见 [STYLE.md](STYLE.md)；本 README 继续只负责接口、环境与运维契约。
+
 ## 目录与 NestJS 对照
 
 | 路径 | NestJS 对应 | 职责 |
@@ -32,8 +34,8 @@
 
 ## 硬性规则
 
-1. 一个功能一个模块目录 `internal/modules/<name>/`，自包含 module / controller / service / dto。**无路由的能力模块可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件（当前没有此类模块：`settings` 自 0.12.0 起带路由）。**
-2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。
+1. 一个功能一个模块目录 `internal/modules/<name>/`。**有路由的模块必须自包含 module / controller / service / dto；需要 DB 时同目录 `repository.go`。** 无路由的能力模块可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件。
+2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。**例外：`mail` 是无 service 的能力模块，controller 可直接调用注入的 `Mailer`。**
 3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app、`internal/common/guard`（中间件）和 `internal/common/apierror`（统一错误写出）；service 一律不 import gin。
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
 5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**`settings.New(db) (*Module, error)` 仍是唯一返回 error 的模块构造器（清单自检不过启动即失败，错误沿启动链返回）；无状态的包级纯函数可直接导出（如 `mail.Render`）——不算对外暴露内部实现。**
@@ -144,7 +146,10 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 ## 测试
 
+静态检查（格式 / vet / 编译 / 空白）用 `bash scripts/check.sh`；它不是测试，不会替代下面的全仓测试。
+
 ```bash
+bash scripts/check.sh                  # 静态检查
 bash scripts/test.sh                   # 全仓：确认 DATABASE_URL_TEST 已导出后，串行跑所有包
 bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go test）
 ```
