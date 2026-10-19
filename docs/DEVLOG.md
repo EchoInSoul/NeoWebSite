@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-20 · 后端工程风格规范化（规范文档 + 检查门禁 + 内部结构收口）（0.21.1）
+
+**范围**：两笔提交。`5c2cdeb` 新增 `backend/STYLE.md`、`backend/scripts/check.sh`，README 补规范入口并修正硬性规则 1 / 2，计划文档入库；`a917591` 动 28 个文件——新增共享响应信封 `internal/common/apiresponse` 与 5 个新文件，DTO 归位、access 错误分层、错误字符串前缀与检查门禁落地，STYLE / README / 计划同步。零迁移、零新路由、零新依赖、**零 API 形状变化**。版本 0.21.0 → **0.21.1**（patch）。
+
+**动机**：项目从首个后端提交起就是 NestJS 式模块化，但规范只写到骨架；DTO 放置、错误所有权、集合信封在 5 个模块里各自长出了不同写法。本轮把模块内部约定写成可执行规范，并收敛会造成新代码分裂的结构差异。
+
+**口径**：
+
+- **规范优先级**：早期设计文档的决策条款 > README > 现有实现中重复出现的写法。STYLE 分「现行规则 / 目标态 / 已接受例外 / 当前差距」四块；标为目标态的条目不得在日常迭代提前实施。
+- **共享响应信封**：`internal/common/apiresponse` 提供 `ItemList[T]` / `Deleted` / `DeletedBatch` / `Empty`。`ItemList` 与 `DeletedBatch` 的 nil 集合输出 `[]`；auth / access / settings 删除各自的 `itemList`、`publicSettingsView` 与 `gin.H` 删除确认。线上仍是 `items`、`{"id","deleted":true}`、`{"ids",...}`、`{}`。
+- **DTO 归位**：access 的请求 / 响应类型进 `dto.go`；settings 的 `groupView` 改名 `groupResponse` 并进 `dto.go`；mail 新建 `dto.go`；health 的 `Status` 改名 `HealthResponse`。字段名、JSON tag、指针性一律不变。
+- **access 错误分层**：`repository.go` 不再 import `apierror`，改用 `errRecordNotFound` / `errGroupNameTaken` / `errGroupNotEmpty` / `errLastOwner` 四个域哨兵；`service.go` 的 `mapRepoError` 统一翻译成 `apierror`。`IdentityByUserID` 先认域哨兵再映射 `guard.ErrUserNotFound`，避免把 401 变成 500。所有 404 / 409 行为由既有测试兜底。
+- **错误字符串**：auth / guard / mail / settings / access 自己构造的错误补域前缀。例外：config 启动校验错误点名环境变量或行号；`apierror.Error()` 返回 wire code；第三方库错误原样透传。
+- **检查门禁**：`check.sh` 串起 gofmt（含未跟踪 Go 文件）、`go vet`、`go build`、空白检查，并新增「repository 不得 import apierror」的 grep 门禁。
+- **明确未实施**：D4 的 `data` / `total` / `limit` / `offset` 与分页、epoch 时间戳、`/healthy` 字段改名、认证响应补 `id` 仍为目标态；本轮只统一内部结构。
+
+**验证**：`bash scripts/check.sh` 通过；负向探针（临时未格式化 Go 文件）实测报 `gofmt needed` 并退出 1；repository 门禁在重构前实测命中 `access/repository.go`，重构后为空。`bash scripts/test.sh`（真库，`-p 1`）全仓通过，含 `app` / `auth` / `access` / `settings` / `mail`。新增 `apiresponse` 6 条 JSON 形状测试与 `TestMapRepoError` 表驱动测试。`git diff --check` 干净；生成代码、迁移、版本与 DEVLOG 未混入代码提交。**运行期未另起服务手测**：本轮无接口形状与业务行为变化，全仓测试覆盖。
+
+**已知缺口**：日志可观测性仍未做（无 request id，模块用 `slog.Default()`，没有统一注入），STYLE §9.2 明确另开轮次。以下为已接受例外，不是待办：mail 无 service、settings 用模块哨兵、main 用标准库 log、config 错误不加前缀、mail log sender 在开发态记录邮件正文、第三方库错误原样透传、各包复制测试 helper。
+
+**提交状态**：`5c2cdeb`（STYLE / check / README / 计划）与 `a917591`（内部结构收口）已入库；本条目与版本进位随收尾提交入库。
+
+---
+
 ## 2026-10-19 · 登录控制页接线（auth 组前端读写 + 会话有效期与 TOTP 站级开关生效）（0.21.0）
 
 **范围**：前端 9 文件（`app/console/settings/login/{page,login-control-form}.tsx`、`hooks/use-login-settings-save.ts`、`lib/login-settings.ts`、`lib/admin-settings.ts`、`app/console/uc/profile/{page,profile-form}.tsx` 与两份 message）；后端 10 文件（4 个生产文件：`settings/registry.go`、`auth/session.go`、`auth/service.go`、`common/apierror/apierror.go`；5 个测试文件：`auth/settings_consumers_test.go`（新增）、`auth/totp_flow_test.go`、`settings/registry_test.go`、`settings/controller_test.go`、`common/apierror/apierror_test.go`；以及 `version/version.go`），外加 README / API 规范 / 本条目。代码审查及其修复批次另动 12 个文件——后端 `settings/{types,registry,service}.go` 与 `settings/{registry,controller}_test.go`，前端 `lib/{admin-settings,login-settings}.ts`、`hooks/use-two-factor-setup.ts`、`app/console/uc/profile/two-factor-panel.tsx`、`app/console/settings/login/login-control-form.tsx` 与两份 message。零迁移、零新路由、零新依赖。版本 0.20.3 → **0.21.0**（minor）。
