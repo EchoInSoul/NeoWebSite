@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-10-20 · 鉴权入口限流（登录 / 注册 / 2FA verify + 前端 429 反馈）（0.21.2）
+
+**范围**：后端新增 `internal/common/ratelimit`（实现 + 单测）、`apierror` 的 429 / `Retry-After`、`config.TrustedProxies`、`app.go` 注入 limiter、`auth/{ratelimit.go,service.go,controller.go,module.go}` 与测试（`ratelimit_test.go`、`auth_test.go`、`sessions_test.go`、`totp_flow_test.go`）；前端 `lib/{api,rate-limit}.ts`、登录/注册 hooks 与表单、中英文案。零迁移、零新依赖、零新路由；版本 0.21.1 → 0.21.2（patch）。
+
+**动机**：审查确认登录、注册与 2FA verify 三个公开入口没有在线暴破防护；原有二段「会话内连错 5 次」存在 scs 会话里，换会话或并发请求即可绕过，README 也把它记为已知缺口。本轮把账号/标识与 IP 两个维度的闸门补上，并让前端能显示等待时间。
+
+**口径**：
+
+- 只覆盖 `POST /sessions`、`POST /users`、`POST /sessions/current/verify`；不做全站限流，不动登录 CSRF、2FA 密码复核、auth_version 三项已入库逻辑。
+- 进程内固定窗口 + 失败冷却，单实例计数、重启清零；键数上限 100000，惰性清扫。登录账号 5 次失败 / 15 分钟窗口 → 15 分钟冷却，成功后清零；登录 IP 30 次 / 15 分钟。注册邮箱 3 次 / 1 小时，注册 IP 5 次 / 1 小时。2FA 账号 10 次失败 / 15 分钟 → 15 分钟冷却，2FA IP 30 次 / 15 分钟；会话内 5 次 `two_factor_locked` 保留，账号级冷却负责跨会话与并发。
+- 未知标识与已知标识使用同一套计数与响应，不通过 429 泄漏账号存在性；成功登录/验证只清账号失败计数，不清 IP 窗口。
+- 新增 429：`type=rate_limit_error`、`code=rate_limited`，错误信封不变；`Retry-After` 秒数向上取整、最小 1。前端 `ApiError.retryAfter` 读取该头；429 只弹 sonner「请求过于频繁」，不显示等待时间，登录/注册/二段提交按钮按该头暂时禁用并把按钮文字切换为剩余时间（如「12 分 48 秒」）；429 不触发会话过期处理。
+- 新增 `TRUSTED_PROXIES`（默认 `127.0.0.1/32,::1/128`），`app.New` 用 `SetTrustedProxies` 配置，`requestSessionMeta` 改用 `ClientIP()`；限流键与会话列表 IP 同源，非可信来源的 XFF 不采信。生产经非回环代理时必须显式配置。
+- 新增错误码按 STYLE 登记 `apierror`；实现遵循 `backend/STYLE.md` 现行条款，未提前实施目标态 API 形状。
+
+**验证**：后端 `bash scripts/check.sh` 通过；`bash scripts/test.sh`（真库，`-p 1`）全仓通过，含新增限流单测与登录/注册/2FA 集成用例。前端 `tsc --noEmit`、ESLint、Prettier 通过。变异自检四条——去掉登录账号 `checkFailure`、去掉注册 IP `allowWindow`、去掉 verify 账号 `checkFailure`、去掉 `Retry-After` 写出——分别实测变红后还原。live 5732 冒烟：同一未知标识 5 次错误密码后第 6 次返回 429，`Retry-After: 892`。本机 cgo 不可用，未跑 `-race`；并发用例用 goroutine + 互斥锁断言。前端 429 画面：sonner「请求过于频繁」经用户浏览器截图确认；按钮倒计时文字待用户复验。本机 in-app browser 未完成 hydration，无法自动化点击；`tsc` / ESLint / Prettier 已通过。
+
+**已知缺口**：限流是单实例进程内计数，重启清零，多实例各算各的；定向打满 5 次可让已知账号冷却 15 分钟（临时锁号取舍，不永久锁定）；不提供 `x-ratelimit-*` 剩余额度/重置时间；共享存储版本未做。
+
+**提交状态**：未提交（全部改动留在工作区；提交批次由用户点名）。
+
+---
+
 ## 2026-10-20 · 后端工程风格规范化（规范文档 + 检查门禁 + 内部结构收口）（0.21.1）
 
 **范围**：两笔提交。`5c2cdeb` 新增 `backend/STYLE.md`、`backend/scripts/check.sh`，README 补规范入口并修正硬性规则 1 / 2，计划文档入库；`a917591` 动 28 个文件——新增共享响应信封 `internal/common/apiresponse` 与 5 个新文件，DTO 归位、access 错误分层、错误字符串前缀与检查门禁落地，STYLE / README / 计划同步。零迁移、零新路由、零新依赖、**零 API 形状变化**。版本 0.21.0 → **0.21.1**（patch）。

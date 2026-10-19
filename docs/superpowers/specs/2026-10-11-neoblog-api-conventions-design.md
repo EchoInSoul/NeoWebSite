@@ -166,7 +166,7 @@ POST /api/v1/v1/posts          禁止：重复版本段
 | 404 | 资源不存在（含未匹配路由兜底） | `not_found_error` |
 | 405 | 路径存在但该路径未注册此方法（响应带 `Allow` 头） | `invalid_request_error` |
 | 409 | 与现状冲突（重名、非空、竞态、预设组锁定） | `conflict_error` |
-| 429 | 触发限流（当前无产生点，词汇保留） | `rate_limit_error` |
+| 429 | 触发限流（登录 / 注册 / 2FA verify；响应带 `Retry-After`） | `rate_limit_error` |
 | 500 | 服务器内部错误兜底 | `server_error` |
 | 503 | 仅 `/healthy` 降级时（探针豁免，见规则 5） | — |
 
@@ -387,12 +387,12 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `permission_error` | 403 | 已登录但缺权限点或触发保护规则 |
 | `not_found_error` | 404 | 资源不存在、路由未匹配（方法不匹配自 v1.4 起为 405，不再并入 404） |
 | `conflict_error` | 409 | 与当前状态冲突（重名、非空、竞态、预设组锁定、保护计数） |
-| `rate_limit_error` | 429 | 触发限流（**词汇保留**，当前无产生点，见 §11） |
+| `rate_limit_error` | 429 | 触发限流（登录 / 注册 / 2FA verify；见 §11） |
 | `server_error` | >=500 | 服务器内部错误（503 仅 `/healthy` 降级，探针豁免错误信封，§4 规则 5） |
 
 ### 7.3 code 词汇表（收编现有 token；此后只增不改义）
 
-19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；0.12.0 起新增 `registration_closed`（注册开关关闭，见设置 spec 与本轮 spec）；0.20.3 起新增 `email_domain_not_allowed`（注册邮箱域名白名单拒绝，400 / `invalid_request_error`，param 默认 `email`）与 `setting_conflict`（设置写前组合校验不满足，409 / `conflict_error`，param 由设置端点覆盖为判定项名）；0.21.0 起新增 `two_factor_disabled`（站级 `auth/totp_enabled` 关闭时调用 2FA setup / enable，403 / `permission_error`）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`，设置端点 `PATCH` 的项名与类型错误覆盖为出错项名：
+19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；0.12.0 起新增 `registration_closed`（注册开关关闭，见设置 spec 与本轮 spec）；0.20.3 起新增 `email_domain_not_allowed`（注册邮箱域名白名单拒绝，400 / `invalid_request_error`，param 默认 `email`）与 `setting_conflict`（设置写前组合校验不满足，409 / `conflict_error`，param 由设置端点覆盖为判定项名）；0.21.0 起新增 `two_factor_disabled`（站级 `auth/totp_enabled` 关闭时调用 2FA setup / enable，403 / `permission_error`）；0.21.2 起新增 `rate_limited`（登录 / 注册 / 2FA verify 限流，429 / `rate_limit_error`；响应带 `Retry-After` 秒数）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`，设置端点 `PATCH` 的项名与类型错误覆盖为出错项名：
 
 | code | HTTP | type | 默认 param | 场景 | 建议默认 message（注册表基线，可润色） |
 | --- | --- | --- | --- | --- | --- |
@@ -548,7 +548,7 @@ ID 规则：
 
 | # | 项 | OpenAI 做法 | 本规范决定 | 理由 |
 | --- | --- | --- | --- | --- |
-| 1 | 限流响应头 | 429 附 `x-ratelimit-*`、`retry-after` 头 | 裁剪；`rate_limit_error` / 429 词汇保留 | 后端尚无限流实现（README「认证」章节已知缺口：登录注册暂无限流）；限流落地时再一并定头字段，届时属 v1 内增量 |
+| 1 | 限流响应头 | 429 附 `x-ratelimit-*`、`retry-after` 头 | 只保留 `Retry-After`；`rate_limit_error` / 429 已落地（0.21.2） | 登录 / 注册 / 2FA verify 三个入口需要可机器读取的等待时间；`x-ratelimit-*` 的剩余额度/重置时间本轮不提供，避免多一套状态契约 |
 | 2 | Idempotency-Key | 写操作幂等键（重放保护） | 裁剪 | 现有写操作（注册 / 登录 / 改密 / 组管理）低频且重复提交无资金类风险；引入需存储与并发去重，成本大于收益 |
 | 3 | SSE 流式 | `stream=true`、`text/event-stream` | 裁剪 | 无生成式输出或服务端推送场景；出现时另立设计，不进本规范 |
 | 4 | `object` 自描述字段 | 每个资源带 `"object": "chat.completion"` | 裁剪（D8） | 前端是强类型消费方，无动态反序列化需求；去掉后每个 DTO 少一个恒定字段与维护负担 |
@@ -625,7 +625,7 @@ ID 规则：
 | `preset_group_locked` | access/controller.go:212（触发于 service.go:116-118,171-173） | **409 / `conflict_error`（现状 403，改判）** | 锁定来自资源状态（`system_key` 非空），owner 亦被拒（§14 决策 5） |
 | `forbidden` | guard/permission.go:65 | 403 / `permission_error` | — |
 | `internal_error` | auth/controller.go:44,72,82,91,101,153；access/controller.go:181,214；guard/permission.go:43,56 | 500 / `server_error` | 兜底；param 恒 null，不泄漏内部细节 |
-| `rate_limit_error` / 429 | （现状无产生点，全代码无 429 路径） | 429 / `rate_limit_error` | 词汇保留（§11）；限流落地时再新增 code 与响应头 |
+| `rate_limit_error` / 429 | auth 登录 / 注册 / 2FA verify 限流（0.21.2） | 429 / `rate_limit_error` / `rate_limited` | 响应带 `Retry-After` 秒数；不提供 `x-ratelimit-*`（§11） |
 
 ### 13.3 表 C：错误写出收敛点清单
 
@@ -680,4 +680,4 @@ ID 规则：
 
 - §7.3「建议默认 message」中文文案逐条定稿（当前为注册表基线草案）。
 - §7.4 第 1 条 apierror 哨兵方案二选一（service 直用哨兵 vs 模块哨兵 + 注册映射），由落地计划定。
-- `rate_limit_error` / 429 无现状产生点，限流功能落地时再补 code 与响应头字段（§11）。
+- 限流已落地：429 / `rate_limit_error` / `rate_limited`，响应带 `Retry-After`（§11）；`x-ratelimit-*` 仍不提供。
