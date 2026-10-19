@@ -30,6 +30,7 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
     setup,
     isLoading,
     isLoadFailed,
+    isDisabledBySite,
     code,
     submitState,
     recoveryCodes,
@@ -59,13 +60,15 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
   const isPending = isLoading || submitState === "verifying";
   const statusText = isLoading
     ? t("twoFactorSetupLoading")
-    : isLoadFailed
-      ? t("twoFactorSetupFailed")
-      : submitState === "verifying"
-        ? t("twoFactorVerifying")
-        : submitState === "invalid"
-          ? t("twoFactorInvalidCode")
-          : "";
+    : isDisabledBySite
+      ? t("twoFactorSiteDisabled")
+      : isLoadFailed
+        ? t("twoFactorSetupFailed")
+        : submitState === "verifying"
+          ? t("twoFactorVerifying")
+          : submitState === "invalid"
+            ? t("twoFactorInvalidCode")
+            : "";
 
   return (
     <>

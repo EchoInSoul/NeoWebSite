@@ -30,6 +30,7 @@ export function useTwoFactorSetup() {
   const [setup, setSetup] = useState<TwoFactorSetup | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadFailed, setIsLoadFailed] = useState(false);
+  const [isDisabledBySite, setIsDisabledBySite] = useState(false);
   const [code, setCode] = useState("");
   const [submitState, setSubmitState] = useState<TwoFactorSubmitState>("idle");
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
@@ -39,6 +40,7 @@ export function useTwoFactorSetup() {
   const loadSetup = useCallback(async () => {
     setIsLoading(true);
     setIsLoadFailed(false);
+    setIsDisabledBySite(false);
 
     try {
       const payload = await apiRequest<TwoFactorSetupPayload>(
@@ -55,6 +57,12 @@ export function useTwoFactorSetup() {
           return;
         }
         if (error.code === "two_factor_already_enabled") {
+          router.refresh();
+          return;
+        }
+        if (error.code === "two_factor_disabled") {
+          setIsDisabledBySite(true);
+          toast.error(t("twoFactorSiteDisabled"));
           router.refresh();
           return;
         }
@@ -117,6 +125,13 @@ export function useTwoFactorSetup() {
             router.refresh();
             return;
           }
+          if (error.code === "two_factor_disabled") {
+            setSubmitState("idle");
+            setIsDisabledBySite(true);
+            toast.error(t("twoFactorSiteDisabled"));
+            router.refresh();
+            return;
+          }
           if (error.code === "two_factor_not_setup") {
             setSubmitState("idle");
             void loadSetup();
@@ -161,6 +176,7 @@ export function useTwoFactorSetup() {
     setup,
     isLoading,
     isLoadFailed,
+    isDisabledBySite,
     code,
     submitState,
     recoveryCodes,
