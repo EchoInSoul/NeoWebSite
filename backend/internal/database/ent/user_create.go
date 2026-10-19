@@ -59,6 +59,20 @@ func (_c *UserCreate) SetPasswordHash(v string) *UserCreate {
 	return _c
 }
 
+// SetAuthVersion sets the "auth_version" field.
+func (_c *UserCreate) SetAuthVersion(v int) *UserCreate {
+	_c.mutation.SetAuthVersion(v)
+	return _c
+}
+
+// SetNillableAuthVersion sets the "auth_version" field if the given value is not nil.
+func (_c *UserCreate) SetNillableAuthVersion(v *int) *UserCreate {
+	if v != nil {
+		_c.SetAuthVersion(*v)
+	}
+	return _c
+}
+
 // SetGroupID sets the "group_id" field.
 func (_c *UserCreate) SetGroupID(v uuid.UUID) *UserCreate {
 	_c.mutation.SetGroupID(v)
@@ -241,6 +255,10 @@ func (_c *UserCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *UserCreate) defaults() {
+	if _, ok := _c.mutation.AuthVersion(); !ok {
+		v := user.DefaultAuthVersion
+		_c.mutation.SetAuthVersion(v)
+	}
 	if _, ok := _c.mutation.GroupID(); !ok {
 		v := user.DefaultGroupID()
 		_c.mutation.SetGroupID(v)
@@ -284,6 +302,9 @@ func (_c *UserCreate) check() error {
 		if err := user.PasswordHashValidator(v); err != nil {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.AuthVersion(); !ok {
+		return &ValidationError{Name: "auth_version", err: errors.New(`ent: missing required field "User.auth_version"`)}
 	}
 	if _, ok := _c.mutation.GroupID(); !ok {
 		return &ValidationError{Name: "group_id", err: errors.New(`ent: missing required field "User.group_id"`)}
@@ -348,6 +369,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 		_node.PasswordHash = value
+	}
+	if value, ok := _c.mutation.AuthVersion(); ok {
+		_spec.SetField(user.FieldAuthVersion, field.TypeInt, value)
+		_node.AuthVersion = value
 	}
 	if value, ok := _c.mutation.TotpSecret(); ok {
 		_spec.SetField(user.FieldTotpSecret, field.TypeString, value)
@@ -525,6 +550,24 @@ func (u *UserUpsert) SetPasswordHash(v string) *UserUpsert {
 // UpdatePasswordHash sets the "password_hash" field to the value that was provided on create.
 func (u *UserUpsert) UpdatePasswordHash() *UserUpsert {
 	u.SetExcluded(user.FieldPasswordHash)
+	return u
+}
+
+// SetAuthVersion sets the "auth_version" field.
+func (u *UserUpsert) SetAuthVersion(v int) *UserUpsert {
+	u.Set(user.FieldAuthVersion, v)
+	return u
+}
+
+// UpdateAuthVersion sets the "auth_version" field to the value that was provided on create.
+func (u *UserUpsert) UpdateAuthVersion() *UserUpsert {
+	u.SetExcluded(user.FieldAuthVersion)
+	return u
+}
+
+// AddAuthVersion adds v to the "auth_version" field.
+func (u *UserUpsert) AddAuthVersion(v int) *UserUpsert {
+	u.Add(user.FieldAuthVersion, v)
 	return u
 }
 
@@ -741,6 +784,27 @@ func (u *UserUpsertOne) SetPasswordHash(v string) *UserUpsertOne {
 func (u *UserUpsertOne) UpdatePasswordHash() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdatePasswordHash()
+	})
+}
+
+// SetAuthVersion sets the "auth_version" field.
+func (u *UserUpsertOne) SetAuthVersion(v int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAuthVersion(v)
+	})
+}
+
+// AddAuthVersion adds v to the "auth_version" field.
+func (u *UserUpsertOne) AddAuthVersion(v int) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddAuthVersion(v)
+	})
+}
+
+// UpdateAuthVersion sets the "auth_version" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateAuthVersion() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAuthVersion()
 	})
 }
 
@@ -1141,6 +1205,27 @@ func (u *UserUpsertBulk) SetPasswordHash(v string) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdatePasswordHash() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdatePasswordHash()
+	})
+}
+
+// SetAuthVersion sets the "auth_version" field.
+func (u *UserUpsertBulk) SetAuthVersion(v int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetAuthVersion(v)
+	})
+}
+
+// AddAuthVersion adds v to the "auth_version" field.
+func (u *UserUpsertBulk) AddAuthVersion(v int) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddAuthVersion(v)
+	})
+}
+
+// UpdateAuthVersion sets the "auth_version" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateAuthVersion() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateAuthVersion()
 	})
 }
 

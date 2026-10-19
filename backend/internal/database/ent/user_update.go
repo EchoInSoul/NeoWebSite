@@ -94,6 +94,27 @@ func (_u *UserUpdate) SetNillablePasswordHash(v *string) *UserUpdate {
 	return _u
 }
 
+// SetAuthVersion sets the "auth_version" field.
+func (_u *UserUpdate) SetAuthVersion(v int) *UserUpdate {
+	_u.mutation.ResetAuthVersion()
+	_u.mutation.SetAuthVersion(v)
+	return _u
+}
+
+// SetNillableAuthVersion sets the "auth_version" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableAuthVersion(v *int) *UserUpdate {
+	if v != nil {
+		_u.SetAuthVersion(*v)
+	}
+	return _u
+}
+
+// AddAuthVersion adds value to the "auth_version" field.
+func (_u *UserUpdate) AddAuthVersion(v int) *UserUpdate {
+	_u.mutation.AddAuthVersion(v)
+	return _u
+}
+
 // SetGroupID sets the "group_id" field.
 func (_u *UserUpdate) SetGroupID(v uuid.UUID) *UserUpdate {
 	_u.mutation.SetGroupID(v)
@@ -375,6 +396,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.AuthVersion(); ok {
+		_spec.SetField(user.FieldAuthVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAuthVersion(); ok {
+		_spec.AddField(user.FieldAuthVersion, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.TotpSecret(); ok {
 		_spec.SetField(user.FieldTotpSecret, field.TypeString, value)
 	}
@@ -603,6 +630,27 @@ func (_u *UserUpdateOne) SetNillablePasswordHash(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetPasswordHash(*v)
 	}
+	return _u
+}
+
+// SetAuthVersion sets the "auth_version" field.
+func (_u *UserUpdateOne) SetAuthVersion(v int) *UserUpdateOne {
+	_u.mutation.ResetAuthVersion()
+	_u.mutation.SetAuthVersion(v)
+	return _u
+}
+
+// SetNillableAuthVersion sets the "auth_version" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableAuthVersion(v *int) *UserUpdateOne {
+	if v != nil {
+		_u.SetAuthVersion(*v)
+	}
+	return _u
+}
+
+// AddAuthVersion adds value to the "auth_version" field.
+func (_u *UserUpdateOne) AddAuthVersion(v int) *UserUpdateOne {
+	_u.mutation.AddAuthVersion(v)
 	return _u
 }
 
@@ -916,6 +964,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AuthVersion(); ok {
+		_spec.SetField(user.FieldAuthVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAuthVersion(); ok {
+		_spec.AddField(user.FieldAuthVersion, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.TotpSecret(); ok {
 		_spec.SetField(user.FieldTotpSecret, field.TypeString, value)

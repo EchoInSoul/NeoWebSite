@@ -27,6 +27,8 @@ type User struct {
 	Bio *string `json:"bio,omitempty"`
 	// PasswordHash holds the value of the "password_hash" field.
 	PasswordHash string `json:"password_hash,omitempty"`
+	// AuthVersion holds the value of the "auth_version" field.
+	AuthVersion int `json:"auth_version,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID uuid.UUID `json:"group_id,omitempty"`
 	// TotpSecret holds the value of the "totp_secret" field.
@@ -94,7 +96,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldTotpLastCounter:
+		case user.FieldAuthVersion, user.FieldTotpLastCounter:
 			values[i] = new(sql.NullInt64)
 		case user.FieldEmail, user.FieldNickname, user.FieldBio, user.FieldPasswordHash, user.FieldTotpSecret:
 			values[i] = new(sql.NullString)
@@ -147,6 +149,12 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field password_hash", values[i])
 			} else if value.Valid {
 				_m.PasswordHash = value.String
+			}
+		case user.FieldAuthVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field auth_version", values[i])
+			} else if value.Valid {
+				_m.AuthVersion = int(value.Int64)
 			}
 		case user.FieldGroupID:
 			if value, ok := values[i].(*uuid.UUID); !ok {
@@ -258,6 +266,9 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("password_hash=")
 	builder.WriteString(_m.PasswordHash)
+	builder.WriteString(", ")
+	builder.WriteString("auth_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AuthVersion))
 	builder.WriteString(", ")
 	builder.WriteString("group_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GroupID))

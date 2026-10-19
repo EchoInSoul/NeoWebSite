@@ -112,16 +112,20 @@ func init() {
 	userDescPasswordHash := userFields[4].Descriptor()
 	// user.PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
 	user.PasswordHashValidator = userDescPasswordHash.Validators[0].(func(string) error)
+	// userDescAuthVersion is the schema descriptor for auth_version field.
+	userDescAuthVersion := userFields[5].Descriptor()
+	// user.DefaultAuthVersion holds the default value on creation for the auth_version field.
+	user.DefaultAuthVersion = userDescAuthVersion.Default.(int)
 	// userDescGroupID is the schema descriptor for group_id field.
-	userDescGroupID := userFields[5].Descriptor()
+	userDescGroupID := userFields[6].Descriptor()
 	// user.DefaultGroupID holds the default value on creation for the group_id field.
 	user.DefaultGroupID = userDescGroupID.Default.(func() uuid.UUID)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[10].Descriptor()
+	userDescCreatedAt := userFields[11].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[11].Descriptor()
+	userDescUpdatedAt := userFields[12].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

@@ -23,6 +23,8 @@ const (
 	FieldBio = "bio"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
 	FieldPasswordHash = "password_hash"
+	// FieldAuthVersion holds the string denoting the auth_version field in the database.
+	FieldAuthVersion = "auth_version"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
 	// FieldTotpSecret holds the string denoting the totp_secret field in the database.
@@ -75,6 +77,7 @@ var Columns = []string{
 	FieldNickname,
 	FieldBio,
 	FieldPasswordHash,
+	FieldAuthVersion,
 	FieldGroupID,
 	FieldTotpSecret,
 	FieldTotpEnabledAt,
@@ -101,6 +104,8 @@ var (
 	NicknameValidator func(string) error
 	// PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
 	PasswordHashValidator func(string) error
+	// DefaultAuthVersion holds the default value on creation for the "auth_version" field.
+	DefaultAuthVersion int
 	// DefaultGroupID holds the default value on creation for the "group_id" field.
 	DefaultGroupID func() uuid.UUID
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -139,6 +144,11 @@ func ByBio(opts ...sql.OrderTermOption) OrderOption {
 // ByPasswordHash orders the results by the password_hash field.
 func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPasswordHash, opts...).ToFunc()
+}
+
+// ByAuthVersion orders the results by the auth_version field.
+func ByAuthVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAuthVersion, opts...).ToFunc()
 }
 
 // ByGroupID orders the results by the group_id field.

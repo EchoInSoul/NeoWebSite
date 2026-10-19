@@ -2751,6 +2751,8 @@ type UserMutation struct {
 	nickname             *string
 	bio                  *string
 	password_hash        *string
+	auth_version         *int
+	addauth_version      *int
 	totp_secret          *string
 	totp_enabled_at      *time.Time
 	totp_last_counter    *int64
@@ -3031,6 +3033,62 @@ func (m *UserMutation) OldPasswordHash(ctx context.Context) (v string, err error
 // ResetPasswordHash resets all changes to the "password_hash" field.
 func (m *UserMutation) ResetPasswordHash() {
 	m.password_hash = nil
+}
+
+// SetAuthVersion sets the "auth_version" field.
+func (m *UserMutation) SetAuthVersion(i int) {
+	m.auth_version = &i
+	m.addauth_version = nil
+}
+
+// AuthVersion returns the value of the "auth_version" field in the mutation.
+func (m *UserMutation) AuthVersion() (r int, exists bool) {
+	v := m.auth_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAuthVersion returns the old "auth_version" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldAuthVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAuthVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAuthVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAuthVersion: %w", err)
+	}
+	return oldValue.AuthVersion, nil
+}
+
+// AddAuthVersion adds i to the "auth_version" field.
+func (m *UserMutation) AddAuthVersion(i int) {
+	if m.addauth_version != nil {
+		*m.addauth_version += i
+	} else {
+		m.addauth_version = &i
+	}
+}
+
+// AddedAuthVersion returns the value that was added to the "auth_version" field in this mutation.
+func (m *UserMutation) AddedAuthVersion() (r int, exists bool) {
+	v := m.addauth_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAuthVersion resets all changes to the "auth_version" field.
+func (m *UserMutation) ResetAuthVersion() {
+	m.auth_version = nil
+	m.addauth_version = nil
 }
 
 // SetGroupID sets the "group_id" field.
@@ -3527,7 +3585,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.email != nil {
 		fields = append(fields, user.FieldEmail)
 	}
@@ -3539,6 +3597,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.password_hash != nil {
 		fields = append(fields, user.FieldPasswordHash)
+	}
+	if m.auth_version != nil {
+		fields = append(fields, user.FieldAuthVersion)
 	}
 	if m.group != nil {
 		fields = append(fields, user.FieldGroupID)
@@ -3577,6 +3638,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Bio()
 	case user.FieldPasswordHash:
 		return m.PasswordHash()
+	case user.FieldAuthVersion:
+		return m.AuthVersion()
 	case user.FieldGroupID:
 		return m.GroupID()
 	case user.FieldTotpSecret:
@@ -3608,6 +3671,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldBio(ctx)
 	case user.FieldPasswordHash:
 		return m.OldPasswordHash(ctx)
+	case user.FieldAuthVersion:
+		return m.OldAuthVersion(ctx)
 	case user.FieldGroupID:
 		return m.OldGroupID(ctx)
 	case user.FieldTotpSecret:
@@ -3658,6 +3723,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPasswordHash(v)
+		return nil
+	case user.FieldAuthVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAuthVersion(v)
 		return nil
 	case user.FieldGroupID:
 		v, ok := value.(uuid.UUID)
@@ -3716,6 +3788,9 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *UserMutation) AddedFields() []string {
 	var fields []string
+	if m.addauth_version != nil {
+		fields = append(fields, user.FieldAuthVersion)
+	}
 	if m.addtotp_last_counter != nil {
 		fields = append(fields, user.FieldTotpLastCounter)
 	}
@@ -3727,6 +3802,8 @@ func (m *UserMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case user.FieldAuthVersion:
+		return m.AddedAuthVersion()
 	case user.FieldTotpLastCounter:
 		return m.AddedTotpLastCounter()
 	}
@@ -3738,6 +3815,13 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *UserMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case user.FieldAuthVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAuthVersion(v)
+		return nil
 	case user.FieldTotpLastCounter:
 		v, ok := value.(int64)
 		if !ok {
@@ -3816,6 +3900,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldPasswordHash:
 		m.ResetPasswordHash()
+		return nil
+	case user.FieldAuthVersion:
+		m.ResetAuthVersion()
 		return nil
 	case user.FieldGroupID:
 		m.ResetGroupID()

@@ -24,6 +24,7 @@ func (User) Fields() []ent.Field {
 		field.String("nickname").NotEmpty().Unique(),
 		field.String("bio").Optional().Nillable(),
 		field.String("password_hash").NotEmpty(),
+		field.Int("auth_version").Default(0),
 		field.UUID("group_id", uuid.UUID{}).Default(func() uuid.UUID { return rbac.GroupIDUser }),
 		field.String("totp_secret").Optional().Nillable(),
 		field.Time("totp_enabled_at").Optional().Nillable(),
