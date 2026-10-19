@@ -232,13 +232,16 @@ func (s *Service) PatchGroup(ctx context.Context, group string, raw map[string]j
 	if err != nil {
 		return nil, err
 	}
-	if validator, ok := s.registry.validators[group]; ok && validatorApplies(validator, writes) {
-		merged, err := s.mergedGroupValues(ctx, group, writes)
-		if err != nil {
-			return nil, err
-		}
-		if err := validator.check(merged); err != nil {
-			return nil, err
+	if validator, ok := s.registry.validators[group]; ok {
+		touched := touchedNames(writes)
+		if validatorApplies(validator, touched) {
+			merged, err := s.mergedGroupValues(ctx, group, writes)
+			if err != nil {
+				return nil, err
+			}
+			if err := validator.check(merged, touched); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if err := s.repo.upsertMany(ctx, group, values); err != nil {
@@ -284,12 +287,18 @@ func (s *Service) resolveGroupWrites(group string, items []ItemWrite) (map[strin
 	return values, nil
 }
 
-func validatorApplies(validator groupValidator, writes []ItemWrite) bool {
+func touchedNames(writes []ItemWrite) map[string]bool {
+	touched := make(map[string]bool, len(writes))
 	for _, write := range writes {
-		for _, item := range validator.items {
-			if write.Name == item {
-				return true
-			}
+		touched[write.Name] = true
+	}
+	return touched
+}
+
+func validatorApplies(validator groupValidator, touched map[string]bool) bool {
+	for _, name := range validator.items {
+		if touched[name] {
+			return true
 		}
 	}
 	return false

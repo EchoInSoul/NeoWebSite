@@ -246,20 +246,38 @@ func TestBuiltinRegisterGroupHasNoValidator(t *testing.T) {
 
 func TestValidateAuthGroup(t *testing.T) {
 	for _, tc := range []struct {
+		name    string
+		enabled bool
 		length  int64
 		days    int64
+		touched []string
 		wantErr bool
 	}{
-		{8, 7, false}, {16, 1, false}, {64, 30, false},
-		{7, 7, true}, {0, 7, true}, {-3, 7, true}, {65, 7, true},
-		{8, 0, true}, {8, 31, true}, {8, -1, true},
+		{"both in range", false, 8, 7, []string{"password_min_length", "session_max_age_days"}, false},
+		{"both at caps", false, 64, 30, []string{"password_min_length", "session_max_age_days"}, false},
+		{"length too short", false, 7, 7, []string{"password_min_length"}, true},
+		{"length negative", false, -3, 7, []string{"password_min_length"}, true},
+		{"length too long", false, 65, 7, []string{"password_min_length"}, true},
+		{"days zero written", false, 8, 0, []string{"session_max_age_days"}, true},
+		{"days above cap written", false, 8, 31, []string{"session_max_age_days"}, true},
+		{"days negative written", false, 8, -1, []string{"session_max_age_days"}, true},
+		{"enable over dirty days", true, 8, 0, []string{"session_max_age_enabled"}, true},
+		{"disable over dirty days", false, 8, 0, []string{"session_max_age_enabled"}, false},
+		{"length over dirty days", false, 12, 0, []string{"password_min_length"}, false},
+		{"untouched dirty pair", false, 0, 0, []string{"totp_enabled"}, false},
 	} {
+		touched := make(map[string]bool, len(tc.touched))
+		for _, name := range tc.touched {
+			touched[name] = true
+		}
+
 		err := validateAuthGroup(map[string]any{
-			"password_min_length":  tc.length,
-			"session_max_age_days": tc.days,
-		})
+			"password_min_length":     tc.length,
+			"session_max_age_enabled": tc.enabled,
+			"session_max_age_days":    tc.days,
+		}, touched)
 		if (err != nil) != tc.wantErr {
-			t.Fatalf("length %d days %d: err = %v, wantErr = %v", tc.length, tc.days, err, tc.wantErr)
+			t.Fatalf("%s: err = %v, wantErr = %v", tc.name, err, tc.wantErr)
 		}
 	}
 }

@@ -121,21 +121,26 @@ const (
 	sessionMaxAgeDaysCap   = 30
 )
 
-func validateAuthGroup(values map[string]any) error {
-	length, ok := values["password_min_length"].(int64)
-	if !ok {
-		return fmt.Errorf("settings: password_min_length is not a number")
-	}
-	if length < passwordMinLengthFloor || length > passwordMinLengthCap {
-		return &ItemError{Item: "password_min_length", Err: apierror.ErrSettingConflict}
+func validateAuthGroup(values map[string]any, touched map[string]bool) error {
+	if touched["password_min_length"] {
+		length, ok := values["password_min_length"].(int64)
+		if !ok {
+			return fmt.Errorf("settings: password_min_length is not a number")
+		}
+		if length < passwordMinLengthFloor || length > passwordMinLengthCap {
+			return &ItemError{Item: "password_min_length", Err: apierror.ErrSettingConflict}
+		}
 	}
 
-	days, ok := values["session_max_age_days"].(int64)
-	if !ok {
-		return fmt.Errorf("settings: session_max_age_days is not a number")
-	}
-	if days < sessionMaxAgeDaysFloor || days > sessionMaxAgeDaysCap {
-		return &ItemError{Item: "session_max_age_days", Err: apierror.ErrSettingConflict}
+	enableTouched, _ := values["session_max_age_enabled"].(bool)
+	if touched["session_max_age_days"] || (touched["session_max_age_enabled"] && enableTouched) {
+		days, ok := values["session_max_age_days"].(int64)
+		if !ok {
+			return fmt.Errorf("settings: session_max_age_days is not a number")
+		}
+		if days < sessionMaxAgeDaysFloor || days > sessionMaxAgeDaysCap {
+			return &ItemError{Item: "session_max_age_days", Err: apierror.ErrSettingConflict}
+		}
 	}
 	return nil
 }

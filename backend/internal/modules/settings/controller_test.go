@@ -719,6 +719,52 @@ func TestSettingsPatchAuthSessionMaxAgeRejectsDirtyDaysOnEnable(t *testing.T) {
 	}
 }
 
+func TestSettingsPatchAuthSessionMaxAgeAllowsDisableWithDirtyDays(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "auth")
+	module, err := New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	ctx := context.Background()
+	if err := module.Service.SetNumber(ctx, "auth", "session_max_age_days", 0); err != nil {
+		t.Fatalf("seed dirty days: %v", err)
+	}
+	if err := module.Service.SetBool(ctx, "auth", "session_max_age_enabled", true); err != nil {
+		t.Fatalf("seed enabled switch: %v", err)
+	}
+
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"session_max_age_enabled": false})
+	expectStatus(t, resp, http.StatusOK)
+	_, values := decodeGroup(t, resp)
+	if values["session_max_age_enabled"] != false {
+		t.Fatalf("session_max_age_enabled = %v, want false", values["session_max_age_enabled"])
+	}
+}
+
+func TestSettingsPatchAuthMinLengthIgnoresDirtySessionDays(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "auth")
+	module, err := New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	if err := module.Service.SetNumber(context.Background(), "auth", "session_max_age_days", 0); err != nil {
+		t.Fatalf("seed dirty days: %v", err)
+	}
+
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"password_min_length": 12})
+	expectStatus(t, resp, http.StatusOK)
+	_, values := decodeGroup(t, resp)
+	if values["password_min_length"] != float64(12) {
+		t.Fatalf("password_min_length = %v, want 12", values["password_min_length"])
+	}
+}
+
 func TestSettingsPatchIgnoresDirtyStateOutsideValidateOn(t *testing.T) {
 	db := testDB(t)
 	resetGroups(t, db, "register")
