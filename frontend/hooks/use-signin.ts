@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { useServiceHealth } from "@/hooks/use-service-health";
 import { ApiError, apiRequest } from "@/lib/api";
+import { formatRetryDuration } from "@/lib/rate-limit";
 
 export type SigninField = "identifier" | "password";
 
@@ -17,12 +18,39 @@ const EMPTY_VALUES: Record<SigninField, string> = {
 
 export function useSigninForm() {
   const t = useTranslations("auth.signin");
+  const locale = useLocale();
   const { serviceDown, resolveServiceError } = useServiceHealth();
   const router = useRouter();
   const [values, setValues] = useState(EMPTY_VALUES);
   const [step, setStep] = useState<SigninStep>("credentials");
   const [code, setCode] = useState("");
   const [isPending, setIsPending] = useState(false);
+  const [retryUntil, setRetryUntil] = useState(0);
+  const [retryRemaining, setRetryRemaining] = useState(0);
+
+  useEffect(() => {
+    if (retryUntil === 0) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((retryUntil - Date.now()) / 1000),
+      );
+      setRetryRemaining(remaining);
+      if (remaining === 0) {
+        setRetryUntil(0);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [retryUntil]);
+
+  function applyRateLimit(seconds: number) {
+    const safe = Math.max(1, Math.ceil(seconds));
+    setRetryRemaining(safe);
+    setRetryUntil(Date.now() + safe * 1000);
+  }
 
   function changeField(field: SigninField, value: string) {
     setValues((previous) => ({ ...previous, [field]: value }));
@@ -48,6 +76,8 @@ export function useSigninForm() {
           return t("locked");
         case "unauthorized":
           return t("verifyExpired");
+        case "rate_limited":
+          return t("rateLimited");
       }
     }
 
@@ -55,6 +85,10 @@ export function useSigninForm() {
   }
 
   async function submit(): Promise<SigninField | undefined> {
+    if (retryRemaining > 0) {
+      return undefined;
+    }
+
     const identifier = values.identifier.trim();
     const password = values.password;
 
@@ -83,6 +117,10 @@ export function useSigninForm() {
         return undefined;
       }
 
+      if (error instanceof ApiError && error.code === "rate_limited") {
+        applyRateLimit(error.retryAfter ?? 60);
+      }
+
       toast.error((await resolveServiceError(error)) ?? toMessage(error));
       return undefined;
     } finally {
@@ -91,6 +129,10 @@ export function useSigninForm() {
   }
 
   async function submitCode(): Promise<"code" | undefined> {
+    if (retryRemaining > 0) {
+      return undefined;
+    }
+
     const trimmedCode = code.trim();
 
     if (trimmedCode === "") {
@@ -114,6 +156,10 @@ export function useSigninForm() {
         backToCredentials();
       }
 
+      if (error instanceof ApiError && error.code === "rate_limited") {
+        applyRateLimit(error.retryAfter ?? 60);
+      }
+
       toast.error((await resolveServiceError(error)) ?? toMessage(error));
       return undefined;
     } finally {
@@ -121,12 +167,21 @@ export function useSigninForm() {
     }
   }
 
+  const retryLabel =
+    retryRemaining > 0
+      ? t("retryIn", {
+          duration: formatRetryDuration(retryRemaining, locale),
+        })
+      : null;
+
   return {
     values,
     step,
     code,
     isPending,
     serviceDown,
+    retryRemaining,
+    retryLabel,
     changeField,
     changeCode,
     backToCredentials,

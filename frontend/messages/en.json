@@ -269,6 +269,8 @@
       "invalidCode": "That code is not correct, try again",
       "locked": "Too many attempts, please sign in again",
       "verifyExpired": "Verification expired, please sign in again",
+      "rateLimited": "Too many requests.",
+      "retryIn": "{duration}",
       "failed": "Sign in failed, please try again later",
       "prompt": "No account yet?",
       "link": "Sign up"
@@ -292,6 +294,8 @@
       "alreadyTaken": "This email or username is already taken",
       "invalidRequest": "Some details are invalid, please review and try again",
       "registrationClosed": "Sign-ups are currently closed",
+      "rateLimited": "Too many requests.",
+      "retryIn": "{duration}",
       "failed": "Sign up failed, please try again later",
       "success": "Account created, please sign in",
       "prompt": "Already have an account?",

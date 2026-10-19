@@ -24,6 +24,8 @@ export function SigninForm() {
     code,
     isPending,
     serviceDown,
+    retryRemaining,
+    retryLabel,
     changeField,
     changeCode,
     backToCredentials,
@@ -122,12 +124,17 @@ export function SigninForm() {
         </fieldset>
       )}
 
-      <Button type="submit" className="w-full" disabled={isPending}>
-        {serviceDown
-          ? tCommon("serviceUnavailableButton")
-          : step === "verify"
-            ? t("verifySubmit")
-            : t("submit")}
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={isPending || retryRemaining > 0}
+      >
+        {retryLabel ??
+          (serviceDown
+            ? tCommon("serviceUnavailableButton")
+            : step === "verify"
+              ? t("verifySubmit")
+              : t("submit"))}
       </Button>
 
       {step === "verify" ? (

@@ -19,8 +19,15 @@ import { PASSWORD_MIN_LENGTH } from "@/lib/password";
 export function SignupForm() {
   const t = useTranslations("auth.signup");
   const tCommon = useTranslations("common");
-  const { values, isPending, serviceDown, changeField, submit } =
-    useSignupForm();
+  const {
+    values,
+    isPending,
+    serviceDown,
+    retryRemaining,
+    retryLabel,
+    changeField,
+    submit,
+  } = useSignupForm();
 
   const formRef = useRef<HTMLFormElement>(null);
   const emailFieldId = useId();
@@ -137,8 +144,13 @@ export function SignupForm() {
         </div>
       </fieldset>
 
-      <Button type="submit" className="w-full" disabled={isPending}>
-        {serviceDown ? tCommon("serviceUnavailableButton") : t("submit")}
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={isPending || retryRemaining > 0}
+      >
+        {retryLabel ??
+          (serviceDown ? tCommon("serviceUnavailableButton") : t("submit"))}
       </Button>
     </form>
   );

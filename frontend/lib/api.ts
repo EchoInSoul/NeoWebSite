@@ -1,3 +1,4 @@
+import { parseRetryAfter } from "@/lib/rate-limit";
 import { reportSessionExpired } from "@/lib/session-expiry";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -19,13 +20,20 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly param?: string;
+  readonly retryAfter?: number;
 
-  constructor(status: number, code: string, param?: string) {
+  constructor(
+    status: number,
+    code: string,
+    param?: string,
+    retryAfter?: number,
+  ) {
     super(code);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.param = param;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -77,6 +85,7 @@ export async function apiRequest<T = unknown>(
       response.status,
       error?.code ?? "invalid_response",
       error?.param ?? undefined,
+      parseRetryAfter(response.headers.get("Retry-After")),
     );
   }
 
