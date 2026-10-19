@@ -31,6 +31,13 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
+  SIDEBAR_PANELS,
+  sidebarPanelOrder,
+  subscribeSidebarPanel,
+  type SidebarPanel,
+  type SidebarSubPanel,
+} from "@/lib/sidebar-panel";
+import {
   SIDEBAR_SLIDE_DURATION_MS,
   SIDEBAR_SLIDE_TRANSITION,
   sidebarSlideOffsetClass,
@@ -47,7 +54,7 @@ import {
 const PANEL_PREFIXES = {
   uc: "/console/uc",
   settings: "/console/settings",
-} as const;
+} as const satisfies Record<SidebarSubPanel, string>;
 
 const SETTINGS_GENERAL_HREF = `${PANEL_PREFIXES.settings}/general`;
 const SETTINGS_REGISTER_HREF = `${PANEL_PREFIXES.settings}/register`;
@@ -57,7 +64,7 @@ const SETTINGS_USERS_HREF = `${PANEL_PREFIXES.settings}/users`;
 
 const SLIDE_FALLBACK_MS = SIDEBAR_SLIDE_DURATION_MS + 80;
 
-type PanelKey = "main" | keyof typeof PANEL_PREFIXES;
+type PanelKey = SidebarPanel;
 
 type ConsoleSidebarPanelContent = {
   title: string;
@@ -77,13 +84,11 @@ function isUnder(pathname: string, base: string) {
 }
 
 function resolvePanel(pathname: string): PanelKey {
-  if (isUnder(pathname, PANEL_PREFIXES.uc)) {
-    return "uc";
-  }
-  if (isUnder(pathname, PANEL_PREFIXES.settings)) {
-    return "settings";
-  }
-  return "main";
+  const matched = (Object.keys(PANEL_PREFIXES) as SidebarSubPanel[]).find(
+    (panel) => isUnder(pathname, PANEL_PREFIXES[panel]),
+  );
+
+  return matched ?? "main";
 }
 
 function resolveSlideState(
@@ -95,7 +100,10 @@ function resolveSlideState(
     return { offset: "none", isVisible: true, isSettled: true };
   }
   return {
-    offset: panelKey === "main" ? "left" : "right",
+    offset:
+      sidebarPanelOrder(panelKey) < sidebarPanelOrder(settledPanel)
+        ? "left"
+        : "right",
     isVisible: panelKey === outgoingPanel,
     isSettled: false,
   };
@@ -187,6 +195,8 @@ export function ConsoleSidebarNav({
     setLastSettingsHref(pathname);
   }
 
+  useEffect(() => subscribeSidebarPanel(setDisplayedPanel), []);
+
   useEffect(() => {
     if (outgoingPanel === null) {
       return;
@@ -223,7 +233,15 @@ export function ConsoleSidebarNav({
     uc: {
       title: t("profile"),
       tooltip: t("backToConsole"),
-      back: { kind: "link", href: "/console" },
+      back: {
+        kind: "link",
+        href: "/console",
+        onNavigate: () => {
+          flushSync(() => {
+            setDisplayedPanel("main");
+          });
+        },
+      },
       groups: [
         {
           label: t("account"),
@@ -330,7 +348,7 @@ export function ConsoleSidebarNav({
                 <Link
                   ref={settingsEntryRef}
                   href={settingsEntryHref}
-                  onClick={(event) => {
+                  onNavigate={(event) => {
                     if (settingsEntryHref === pathname) {
                       event.preventDefault();
                     }
@@ -349,29 +367,29 @@ export function ConsoleSidebarNav({
     </SidebarGroup>
   );
 
+  const panelContent = Object.fromEntries(
+    SIDEBAR_PANELS.map((panel) => [
+      panel,
+      panel === "main" ? (
+        mainPanel
+      ) : (
+        <ConsoleSidebarSection {...panels[panel]} />
+      ),
+    ]),
+  ) as Record<PanelKey, ReactNode>;
+
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">
-      <SidebarSlidePanel
-        slideState={resolveSlideState("main", settledPanel, outgoingPanel)}
-        isCollapsed={isCollapsed}
-        onTransitionEnd={handlePanelTransitionEnd("main")}
-      >
-        {mainPanel}
-      </SidebarSlidePanel>
-      <SidebarSlidePanel
-        slideState={resolveSlideState("uc", settledPanel, outgoingPanel)}
-        isCollapsed={isCollapsed}
-        onTransitionEnd={handlePanelTransitionEnd("uc")}
-      >
-        <ConsoleSidebarSection {...panels.uc} />
-      </SidebarSlidePanel>
-      <SidebarSlidePanel
-        slideState={resolveSlideState("settings", settledPanel, outgoingPanel)}
-        isCollapsed={isCollapsed}
-        onTransitionEnd={handlePanelTransitionEnd("settings")}
-      >
-        <ConsoleSidebarSection {...panels.settings} />
-      </SidebarSlidePanel>
+      {SIDEBAR_PANELS.map((panel) => (
+        <SidebarSlidePanel
+          key={panel}
+          slideState={resolveSlideState(panel, settledPanel, outgoingPanel)}
+          isCollapsed={isCollapsed}
+          onTransitionEnd={handlePanelTransitionEnd(panel)}
+        >
+          {panelContent[panel]}
+        </SidebarSlidePanel>
+      ))}
     </div>
   );
 }

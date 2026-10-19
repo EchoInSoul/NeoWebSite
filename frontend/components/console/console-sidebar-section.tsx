@@ -33,7 +33,8 @@ export type ConsoleSidebarSectionGroup = {
 };
 
 export type ConsoleSidebarBack =
-  { kind: "link"; href: string } | { kind: "button"; onClick: () => void };
+  | { kind: "link"; href: string; onNavigate?: () => void }
+  | { kind: "button"; onClick: () => void };
 
 export type ConsoleSidebarSectionProps = {
   title: string;
@@ -52,7 +53,10 @@ export function ConsoleSidebarSection({
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
-  const backHref = back.kind === "link" ? back.href : undefined;
+  const backLink =
+    back.kind === "link" ? (
+      <Link href={back.href} onNavigate={back.onNavigate} />
+    ) : undefined;
   const onBackClick = back.kind === "button" ? back.onClick : undefined;
 
   return (
@@ -60,7 +64,7 @@ export function ConsoleSidebarSection({
       <SidebarMenu>
         <SidebarMenuItem className="mb-2">
           <SidebarMenuButton
-            render={backHref ? <Link href={backHref} /> : undefined}
+            render={backLink}
             onClick={onBackClick}
             tooltip={tooltip}
           >
