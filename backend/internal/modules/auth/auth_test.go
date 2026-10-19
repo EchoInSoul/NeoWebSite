@@ -105,6 +105,23 @@ func postRaw(t *testing.T, client *http.Client, endpoint, body string) *http.Res
 	return resp
 }
 
+func postRawWithHeaders(t *testing.T, client *http.Client, endpoint, body string, headers map[string]string) *http.Response {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("post %s: %v", endpoint, err)
+	}
+	return resp
+}
+
 func decodeError(t *testing.T, resp *http.Response) string {
 	t.Helper()
 	defer resp.Body.Close()
@@ -239,6 +256,131 @@ func TestLoginAcceptsMixedCaseEmail(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestLoginRejectsNonJSONContentType(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	base, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+
+	payload, err := json.Marshal(LoginRequest{Identifier: u.Email, Password: password})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	cases := []struct {
+		name        string
+		contentType string
+	}{
+		{"text plain", "text/plain"},
+		{"form urlencoded", "application/x-www-form-urlencoded"},
+		{"missing", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := testClient(t)
+			headers := map[string]string{"Origin": base.Scheme + "://" + base.Host}
+			if tc.contentType != "" {
+				headers["Content-Type"] = tc.contentType
+			}
+
+			resp := postRawWithHeaders(t, client, ts.URL+"/api/v1/sessions", string(payload), headers)
+			assertErrorCode(t, resp, http.StatusBadRequest, "invalid_request")
+			if cookie := sessionCookie(t, client.Jar, ts.URL); cookie != "" {
+				t.Fatalf("session cookie set by rejected login: %q", cookie)
+			}
+		})
+	}
+}
+
+func TestLoginChecksOrigin(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+	base, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	body := LoginRequest{Identifier: u.Email, Password: password}
+	sameOrigin := base.Scheme + "://" + base.Host
+
+	t.Run("cross origin rejected", func(t *testing.T) {
+		client := testClient(t)
+		resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", body, map[string]string{
+			"Origin": "https://evil.example",
+		})
+		assertErrorCode(t, resp, http.StatusBadRequest, "invalid_request")
+		if cookie := sessionCookie(t, client.Jar, ts.URL); cookie != "" {
+			t.Fatalf("session cookie set by cross-origin login: %q", cookie)
+		}
+	})
+
+	t.Run("opaque origin rejected", func(t *testing.T) {
+		client := testClient(t)
+		resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", body, map[string]string{
+			"Origin": "null",
+		})
+		assertErrorCode(t, resp, http.StatusBadRequest, "invalid_request")
+	})
+
+	t.Run("forwarded host mismatch rejected", func(t *testing.T) {
+		client := testClient(t)
+		resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", body, map[string]string{
+			"Origin":           sameOrigin,
+			"X-Forwarded-Host": "other.example",
+		})
+		assertErrorCode(t, resp, http.StatusBadRequest, "invalid_request")
+	})
+
+	t.Run("proxied same origin accepted", func(t *testing.T) {
+		client := testClient(t)
+		resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", body, map[string]string{
+			"Origin":           sameOrigin,
+			"X-Forwarded-Host": base.Host,
+		})
+		decodeJSON[UserResponse](t, resp, http.StatusOK)
+	})
+
+	t.Run("json charset accepted", func(t *testing.T) {
+		client := testClient(t)
+		resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", body, map[string]string{
+			"Content-Type": "application/json; charset=utf-8",
+		})
+		decodeJSON[UserResponse](t, resp, http.StatusOK)
+	})
+}
+
+func TestRegisterRejectsNonJSONContentType(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+
+	email := "csrf+" + tag + "@example.com"
+	cleanupUserByEmail(t, db, email)
+	payload, err := json.Marshal(RegisterRequest{Email: email, Nickname: "csrf" + tag, Password: "pass1234"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	resp := postRawWithHeaders(t, client, ts.URL+"/api/v1/users", string(payload), map[string]string{
+		"Content-Type": "text/plain",
+	})
+	assertErrorCode(t, resp, http.StatusBadRequest, "invalid_request")
+
+	count, err := db.Client.User.Query().Where(user.EmailEQ(email)).Count(context.Background())
+	if err != nil {
+		t.Fatalf("count user: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("non-JSON register created %d user(s)", count)
 	}
 }
 

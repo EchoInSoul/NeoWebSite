@@ -184,6 +184,7 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 规则：
 
 - 注册**公开**、不验证邮箱（邮件基础设施见「邮件」章节，注册流程尚未接入；也没有找回密码）。
+- **登录与注册只接受 `Content-Type: application/json`**：带 `Origin` 头的请求，Origin 的 host 必须与 `X-Forwarded-Host`（缺省用请求的 `Host`）一致；不满足一律 400 `invalid_request`。跨站表单发不出 `application/json`，跨站 fetch 会触发预检；非浏览器客户端不带 Origin 时不受影响。前端经 Next rewrite 转发时，`X-Forwarded-Host` 是浏览器访问的前端主机。
 - 邮箱：`net/mail` 可解析、≤254 字符、入库统一小写；昵称：trim 后 2–32 字符（按 rune）、不含空白（含全角空格）与 `@`；密码：≥8 字符（按 rune）、同时含 ASCII 字母与数字、≤72 字节（bcrypt 上限）；简介：trim 后 ≤1000 字符（按 rune）、允许换行、可为空。
 - 改自己的资料（`PATCH /users/me`）挂 `RequireAuth` + `LoadIdentity`、**不需要权限点**（改的是自己）；字段可选、只改给出的字段（缺省与 `null` 同义，都表示不修改）；昵称 / 邮箱 / 简介沿用注册那套归一与校验、同一批错误码；简介提交空串（或纯空白）即清空、库中存 `NULL`；**不校验当前密码**；会话只存 `userID`，因此改完无需重新登录，`/users/me` 与侧栏下次读取即是新值。
 - **更改密码保留当前设备、吊销该用户其他所有设备的会话**（用 scs 的 `IterableStore.All()` + `Codec` 按会话中的 `auth.user_id` 定位删除；失败即 500 且密码不落盘，可用旧密码重试）。

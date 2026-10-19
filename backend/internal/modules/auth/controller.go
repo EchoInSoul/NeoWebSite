@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 	"unicode/utf8"
 
@@ -43,6 +45,11 @@ func (c *controller) registerProtected(r *gin.RouterGroup) {
 }
 
 func (c *controller) login(ctx *gin.Context) {
+	if !requireJSONRequest(ctx) {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
 	var req LoginRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Identifier == "" || req.Password == "" {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
@@ -59,6 +66,11 @@ func (c *controller) login(ctx *gin.Context) {
 }
 
 func (c *controller) signup(ctx *gin.Context) {
+	if !requireJSONRequest(ctx) {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
 	var req RegisterRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Email == "" || req.Nickname == "" || req.Password == "" {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
@@ -306,4 +318,32 @@ func truncateHeader(value string, limit int) string {
 		cut--
 	}
 	return value[:cut]
+}
+
+func requireJSONRequest(c *gin.Context) bool {
+	mediaType, _, err := mime.ParseMediaType(c.GetHeader("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		return false
+	}
+
+	origin := c.GetHeader("Origin")
+	if origin == "" {
+		return true
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+
+	expected := c.GetHeader("X-Forwarded-Host")
+	if idx := strings.IndexByte(expected, ','); idx >= 0 {
+		expected = expected[:idx]
+	}
+	expected = strings.TrimSpace(expected)
+	if expected == "" {
+		expected = c.Request.Host
+	}
+
+	return strings.EqualFold(parsed.Host, expected)
 }
