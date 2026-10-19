@@ -42,6 +42,7 @@ func (s *Service) IdentityByUserID(ctx context.Context, userID string) (guard.Id
 	}
 	return guard.Identity{
 		UserID:      record.ID.String(),
+		AuthVersion: record.AuthVersion,
 		GroupID:     record.Group.ID.String(),
 		GroupKey:    record.Group.SystemKey,
 		GroupName:   record.Group.Name,

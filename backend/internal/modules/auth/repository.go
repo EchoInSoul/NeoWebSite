@@ -60,18 +60,22 @@ func (r *repository) createUser(ctx context.Context, email, nickname, passwordHa
 		Save(ctx)
 }
 
-func (r *repository) updatePasswordHash(ctx context.Context, id string, passwordHash string) error {
+func (r *repository) updatePasswordHash(ctx context.Context, id string, passwordHash string) (*ent.User, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
-		return errUserNotFound
+		return nil, errUserNotFound
 	}
-	if err := r.client.User.UpdateOneID(parsed).SetPasswordHash(passwordHash).Exec(ctx); err != nil {
+	updated, err := r.client.User.UpdateOneID(parsed).
+		SetPasswordHash(passwordHash).
+		AddAuthVersion(1).
+		Save(ctx)
+	if err != nil {
 		if ent.IsNotFound(err) {
-			return errUserNotFound
+			return nil, errUserNotFound
 		}
-		return err
+		return nil, err
 	}
-	return nil
+	return updated, nil
 }
 
 func (r *repository) updateProfile(ctx context.Context, id string, nickname, email, bio *string) (*ent.User, error) {
@@ -132,20 +136,27 @@ func (r *repository) claimTOTPSetup(ctx context.Context, id uuid.UUID, encrypted
 	return claimed == 1, nil
 }
 
-func (r *repository) enableTOTP(ctx context.Context, id uuid.UUID, enabledAt time.Time, codeHashes []string) error {
+func (r *repository) enableTOTP(ctx context.Context, id uuid.UUID, enabledAt time.Time, codeHashes []string) (int, error) {
 	tx, err := r.client.Tx(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := tx.User.UpdateOneID(id).SetTotpEnabledAt(enabledAt).Exec(ctx); err != nil {
-		return err
+	updated, err := tx.User.UpdateOneID(id).
+		SetTotpEnabledAt(enabledAt).
+		AddAuthVersion(1).
+		Save(ctx)
+	if err != nil {
+		return 0, err
 	}
 	if err := insertRecoveryCodes(ctx, tx, id, codeHashes); err != nil {
-		return err
+		return 0, err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return updated.AuthVersion, nil
 }
 
 func (r *repository) disableTOTP(ctx context.Context, id uuid.UUID) error {

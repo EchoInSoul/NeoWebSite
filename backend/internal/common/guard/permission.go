@@ -16,6 +16,7 @@ var ErrUserNotFound = errors.New("user not found")
 
 type Identity struct {
 	UserID      string
+	AuthVersion int
 	GroupID     string
 	GroupKey    string
 	GroupName   string
@@ -42,6 +43,12 @@ func LoadIdentity(resolver IdentityResolver, sessions *scs.SessionManager) gin.H
 				return
 			}
 			apierror.Abort(c, err)
+			return
+		}
+
+		if sessions.GetInt(c.Request.Context(), SessionAuthVersionKey) != identity.AuthVersion {
+			_ = sessions.Destroy(c.Request.Context())
+			apierror.Abort(c, apierror.ErrUnauthorized)
 			return
 		}
 

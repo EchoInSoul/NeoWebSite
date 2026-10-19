@@ -29,13 +29,14 @@ type Session struct {
 	ExpiresAt  string
 }
 
-func (s *Service) establishSession(ctx context.Context, userID string, meta SessionMeta) error {
+func (s *Service) establishSession(ctx context.Context, userID string, authVersion int, meta SessionMeta) error {
 	if err := s.sessions.RenewToken(ctx); err != nil {
 		return err
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	s.sessions.Put(ctx, guard.SessionUserIDKey, userID)
+	s.sessions.Put(ctx, guard.SessionAuthVersionKey, authVersion)
 	s.sessions.Put(ctx, guard.SessionUserAgentKey, meta.UserAgent)
 	s.sessions.Put(ctx, guard.SessionIPKey, meta.IP)
 	s.sessions.Put(ctx, guard.SessionCreatedAtKey, now)
@@ -61,6 +62,7 @@ func (s *Service) applySessionDeadline(ctx context.Context) {
 
 func (s *Service) enterPendingSession(ctx context.Context, userID string) {
 	s.sessions.Remove(ctx, guard.SessionUserIDKey)
+	s.sessions.Remove(ctx, guard.SessionAuthVersionKey)
 	s.sessions.Remove(ctx, guard.SessionUserAgentKey)
 	s.sessions.Remove(ctx, guard.SessionIPKey)
 	s.sessions.Remove(ctx, guard.SessionCreatedAtKey)

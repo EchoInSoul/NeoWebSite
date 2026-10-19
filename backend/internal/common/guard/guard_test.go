@@ -225,6 +225,36 @@ func TestLoadIdentityDestroysSessionWhenUserIsGone(t *testing.T) {
 	}
 }
 
+func TestLoadIdentityRejectsStaleAuthVersion(t *testing.T) {
+	ts := newPermissionTestServer(t, fakeResolver{identities: map[string]Identity{
+		"u1": {UserID: "u1", AuthVersion: 1},
+	}})
+	client := seededClient(t, ts)
+
+	resp, err := client.Get(ts.URL + "/identity")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+	if code := decodeErrorBody(t, resp); code != "unauthorized" {
+		t.Fatalf("error = %q, want unauthorized", code)
+	}
+
+	cleared := false
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "session" && cookie.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatalf("session cookie was not cleared; cookies: %v", resp.Cookies())
+	}
+}
+
 func TestLoadIdentityFailsOnResolverError(t *testing.T) {
 	ts := newPermissionTestServer(t, fakeResolver{err: errors.New("boom")})
 	client := seededClient(t, ts)

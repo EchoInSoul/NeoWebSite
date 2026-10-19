@@ -7,7 +7,10 @@ import (
 	"website/backend/internal/common/apierror"
 )
 
-const SessionUserIDKey = "auth.user_id"
+const (
+	SessionUserIDKey      = "auth.user_id"
+	SessionAuthVersionKey = "auth.version"
+)
 
 func RequireAuth(sm *scs.SessionManager) gin.HandlerFunc {
 	return func(c *gin.Context) {

@@ -407,6 +407,35 @@ func TestLoginRenewsSessionToken(t *testing.T) {
 	}
 }
 
+func TestStaleAuthVersionSessionRejected(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	ts := newTestApp(t, db)
+	client := testClient(t)
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	if status := meStatus(t, client, ts.URL); status != http.StatusOK {
+		t.Fatalf("me before bump = %d, want 200", status)
+	}
+
+	if err := db.Client.User.UpdateOneID(id).AddAuthVersion(1).Exec(context.Background()); err != nil {
+		t.Fatalf("bump auth version: %v", err)
+	}
+
+	assertErrorCode(t, doGET(t, client, ts.URL+"/api/v1/users/me"), http.StatusUnauthorized, "unauthorized")
+	if status := meStatus(t, client, ts.URL); status != http.StatusUnauthorized {
+		t.Fatalf("me after stale session destroyed = %d, want 401", status)
+	}
+
+	fresh := testClient(t)
+	loginOK(t, fresh, ts.URL, u.Email, password)
+	if status := meStatus(t, fresh, ts.URL); status != http.StatusOK {
+		t.Fatalf("fresh login me = %d, want 200", status)
+	}
+}
+
 func TestMeRequiresSessionAndReturnsUser(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
@@ -857,6 +886,14 @@ func TestChangePasswordSucceedsAndSwapsCredentials(t *testing.T) {
 	change.Body.Close()
 	if len(changeBody) != 0 {
 		t.Fatalf("change body = %v, want {}", changeBody)
+	}
+
+	row := userRow(t, db, uuid.MustParse(u.ID))
+	if row.AuthVersion != 1 {
+		t.Fatalf("auth_version = %d after change, want 1", row.AuthVersion)
+	}
+	if status := meStatus(t, client, ts.URL); status != http.StatusOK {
+		t.Fatalf("current session me = %d, want 200", status)
 	}
 
 	oldLogin := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: oldPassword})

@@ -184,13 +184,16 @@ func TestUpdatePasswordHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hash: %v", err)
 	}
-	if err := repo.updatePasswordHash(context.Background(), u.ID, string(newHash)); err != nil {
+	if _, err := repo.updatePasswordHash(context.Background(), u.ID, string(newHash)); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
 	found, err := repo.findUserByID(context.Background(), u.ID)
 	if err != nil {
 		t.Fatalf("find: %v", err)
+	}
+	if found.AuthVersion != 1 {
+		t.Fatalf("auth_version = %d, want 1", found.AuthVersion)
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte("new-pass-123")); err != nil {
 		t.Fatalf("new password does not verify: %v", err)
@@ -200,7 +203,7 @@ func TestUpdatePasswordHash(t *testing.T) {
 	}
 
 	missing := uuid.Must(uuid.NewV7()).String()
-	if err := repo.updatePasswordHash(context.Background(), missing, string(newHash)); !errors.Is(err, errUserNotFound) {
+	if _, err := repo.updatePasswordHash(context.Background(), missing, string(newHash)); !errors.Is(err, errUserNotFound) {
 		t.Fatalf("missing user: err = %v, want errUserNotFound", err)
 	}
 }

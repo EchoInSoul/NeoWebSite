@@ -140,7 +140,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 应用启动绝不自动迁移；`ATLAS_DEV_URL` 缺省指向空的 `neoblog_atlas_dev`（脚本内默认值）。迁移文件里含数据（预设组 seed）或手工改造过 SQL 时，必须重算校验和：`atlas migrate hash --dir "file://migrations"` 再 `atlas migrate validate`（用户组与权限迁移是第一个带 seed 的）。工具链细节与已验证事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节。
 
-当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）→ `totp_last_counter`（`users` 加一列可空 bigint：TOTP 已认领的窗号，用于重放防护，纯 DDL 零数据）→ `totp_setup_at`（`users` 加一列可空 timestamptz：当前待验证密钥的生成时刻，setup 复用窗口用，纯 DDL 零数据）→ `user_bio`（`users` 加一列可空 varchar：用户简介，纯 DDL 零数据）。
+当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）→ `totp_last_counter`（`users` 加一列可空 bigint：TOTP 已认领的窗号，用于重放防护，纯 DDL 零数据）→ `totp_setup_at`（`users` 加一列可空 timestamptz：当前待验证密钥的生成时刻，setup 复用窗口用，纯 DDL 零数据）→ `user_bio`（`users` 加一列可空 varchar：用户简介，纯 DDL 零数据）→ `auth_version`（`users` 加一列非空 bigint 默认 0：认证版本，改密与启用 2FA 时 +1，旧版本会话在受保护请求上被 401 并销毁，纯 DDL 零数据）。
 
 ## 测试
 
@@ -187,10 +187,11 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 - **登录与注册只接受 `Content-Type: application/json`**：带 `Origin` 头的请求，Origin 的 host 必须与 `X-Forwarded-Host`（缺省用请求的 `Host`）一致；不满足一律 400 `invalid_request`。跨站表单发不出 `application/json`，跨站 fetch 会触发预检；非浏览器客户端不带 Origin 时不受影响。前端经 Next rewrite 转发时，`X-Forwarded-Host` 是浏览器访问的前端主机。
 - 邮箱：`net/mail` 可解析、≤254 字符、入库统一小写；昵称：trim 后 2–32 字符（按 rune）、不含空白（含全角空格）与 `@`；密码：≥8 字符（按 rune）、同时含 ASCII 字母与数字、≤72 字节（bcrypt 上限）；简介：trim 后 ≤1000 字符（按 rune）、允许换行、可为空。
 - 改自己的资料（`PATCH /users/me`）挂 `RequireAuth` + `LoadIdentity`、**不需要权限点**（改的是自己）；字段可选、只改给出的字段（缺省与 `null` 同义，都表示不修改）；昵称 / 邮箱 / 简介沿用注册那套归一与校验、同一批错误码；简介提交空串（或纯空白）即清空、库中存 `NULL`；**不校验当前密码**；会话只存 `userID`，因此改完无需重新登录，`/users/me` 与侧栏下次读取即是新值。
-- **更改密码保留当前设备、吊销该用户其他所有设备的会话**（用 scs 的 `IterableStore.All()` + `Codec` 按会话中的 `auth.user_id` 定位删除；失败即 500 且密码不落盘，可用旧密码重试）。
-- **会话管理（`GET` / `DELETE /users/me/sessions`）**：会话元数据以四个会话数据键随建立写入——`auth.user_agent` / `auth.ip` / `auth.created_at` / `auth.last_seen_at`（RFC3339 UTC 字符串），**零迁移**（仍存 scs 的 `sessions` 表，元数据在 gob 编码的 `data` 里）；三处建立点（注册、单段登录、2FA verify）统一走 `auth.establishSession`，进入「待二段」改走 `enterPendingSession`（清身份与元数据，因此待验会话不进任何人的列表）。最后活跃由 `guard.TrackSessionActivity` 维护：**距上次写入不足 5 分钟不写库**（`Put` 不移动 scs 的 deadline，因此不产生滑动续期，7 天上限仍从登录时刻起算）。IP 取 `X-Forwarded-For` 首跳 → `X-Real-IP` → `RemoteAddr`，**仅供展示、不可用作鉴权或限流依据**（UA / IP 分别截断 512 / 64 字节）。列表与吊销共用 `eachSession` 迭代器（全表扫 + 逐条解码后按 `auth.user_id` 过滤）；删当前会话走 `Destroy`（避免本请求的节流写把已删的行提交回写）。
+- **更改密码保留当前设备、吊销该用户其他所有设备的会话**（用 scs 的 `IterableStore.All()` + `Codec` 按会话中的 `auth.user_id` 定位删除；失败即 500 且密码不落盘，可用旧密码重试）；密码哈希与 `auth_version` 在同一条 UPDATE 里写入，当前会话随后同步新版本。
+- **会话认证版本**：`users.auth_version` 在改密与启用 2FA 时 +1（与凭据写入同一条 UPDATE / 同一事务）；`establishSession` 把当时版本写进会话的 `auth.version`，`LoadIdentity` 每次请求与当前用户版本比对，不一致立即 401 并销毁会话。当前设备在改密 / 启用成功后同步写入新版本，不会踢掉自己；在途登录即使拿旧状态落了库，第一次访问受保护接口也会失效。
+- **会话管理（`GET` / `DELETE /users/me/sessions`）**：会话元数据以四个会话数据键随建立写入——`auth.user_agent` / `auth.ip` / `auth.created_at` / `auth.last_seen_at`（RFC3339 UTC 字符串），**零迁移**（仍存 scs 的 `sessions` 表，元数据在 gob 编码的 `data` 里）；两处建立点（单段登录、2FA verify）统一走 `auth.establishSession`，进入「待二段」改走 `enterPendingSession`（清身份、认证版本与元数据，因此待验会话不进任何人的列表）。最后活跃由 `guard.TrackSessionActivity` 维护：**距上次写入不足 5 分钟不写库**（`Put` 不移动 scs 的 deadline，因此不产生滑动续期，7 天上限仍从登录时刻起算）。IP 取 `X-Forwarded-For` 首跳 → `X-Real-IP` → `RemoteAddr`，**仅供展示、不可用作鉴权或限流依据**（UA / IP 分别截断 512 / 64 字节）。列表与吊销共用 `eachSession` 迭代器（全表扫 + 逐条解码后按 `auth.user_id` 过滤）；删当前会话走 `Destroy`（避免本请求的节流写把已删的行提交回写）。
 
-会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当解析出的环境为 `production`（发布构建默认即是，见「环境与构建」）；登录与注册成功都会换发会话 token（防会话固定）。受保护路由在 `app.go` 里经 `guard.RequireAuth → guard.TrackSessionActivity → guard.LoadIdentity` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
+会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当解析出的环境为 `production`（发布构建默认即是，见「环境与构建」）；登录成功会换发会话 token（注册只建号，不下发会话）。受保护路由在 `app.go` 里经 `guard.RequireAuth → guard.TrackSessionActivity → guard.LoadIdentity` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
 
 **已知缺口**：登录、注册与两步验证 verify **暂无限流**（防刷号 / 防撞库 / 防在线暴破，计划下一轮一起补）；部署时若前端经代理转发，需在 `app.go` 里用 `SetTrustedProxies` 配置真实代理 CIDR，否则 Go 看到的来源 IP 全是代理机、按 IP 限流会失效（会话列表里的 IP 同理只作展示）。另：`sessions.token` 列存**原始 token**（scs 默认），库可读即会话可伪造——scs 自带 `HashTokenInStore` 可改成只存哈希，代价是开启时存量会话全部失效（用户被登出一次），且**三处比较都要改成指纹口径**：① `revokeOtherSessions` 跳过当前会话比的是裸 token（哈希 vs 裸永不相等，会把自己也踢掉）；② 会话列表的 `current` 徽标永不亮；③ 吊销接口判不出「删的是当前会话」，会掉回裸 `Store.Delete` 的复活坑。待点名；会话列表**不保留历史**（吊销即删行，过期由存储层 5 分钟一轮清理），要状态筛选 / 历史需另设登记表（见 `docs/superpowers/specs/2026-10-14-neoblog-session-management-design.md` §9）。
 
@@ -202,7 +203,7 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 - **重放防护**：命中的时间窗号必须大于 `totp_last_counter`，并用单条条件 UPDATE 的「影响行数 = 1」原子认领（并发提交同一枚码恰一人成功）。代价：该码所在的 30 秒窗整窗作废——刚验完又登出再登录要等下一窗，启用那一刻也占掉当窗（RFC 6238 §5.2 的标准取舍）。
 - 二段限次：会话内计数，连错 5 次销毁会话并返回 `two_factor_locked`；重走登录即续杯，**所以它不是在线暴破防御**，真正的闸门在登录限流那一轮（login 与 verify 同做）。
 - 待验态用独立会话键 `auth.pending_2fa_user_id` / `auth.pending_2fa_attempts` 承载，**guard 包零改动**；进入待验态会清除 `auth.user_id`，因此待验会话打任何受保护接口都是 401；登录与 verify 各换发一次会话 token（防会话固定）。
-- enable（验证码 + 当前密码）/ disable（当前密码）**在通过之后、落库之前**吊销其它设备会话（复用改密在用的 `revokeOtherSessions`）：怀疑密码泄露才开 2FA 时，攻击者的旧会话必须立刻失效。吊销失败则本次动作整体不生效（500、库里不变），不留「已启用但没领到恢复码」的死角。
+- enable（验证码 + 当前密码）/ disable（当前密码）**在通过之后、落库之前**吊销其它设备会话（复用改密在用的 `revokeOtherSessions`）：怀疑密码泄露才开 2FA 时，攻击者的旧会话必须立刻失效。enable 在同一事务里把 `auth_version` +1，当前会话随后同步新版本；吊销失败则本次动作整体不生效（500、库里不变），不留「已启用但没领到恢复码」的死角。
 - 多写操作各自单事务：enable（置启用时间 + 插 10 码）、disable（清三列 + 删全部码行）、recovery-codes（删旧 + 插新）；setup 覆盖 secret 时一并清窗号。
 
 ### 用户组与权限

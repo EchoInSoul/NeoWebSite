@@ -125,7 +125,7 @@ func (s *Service) Login(ctx context.Context, identifier, password string, meta S
 		return User{}, apierror.ErrTwoFactorRequired
 	}
 
-	if err := s.establishSession(ctx, found.ID.String(), meta); err != nil {
+	if err := s.establishSession(ctx, found.ID.String(), found.AuthVersion, meta); err != nil {
 		return User{}, err
 	}
 
@@ -145,6 +145,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 		}
 		return err
 	}
+	currentVersion := s.sessions.GetInt(ctx, guard.SessionAuthVersionKey)
 
 	minLength, err := s.passwordMinLength(ctx)
 	if err != nil {
@@ -171,7 +172,14 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 		return err
 	}
 
-	return s.repo.updatePasswordHash(ctx, userID, string(hash))
+	updated, err := s.repo.updatePasswordHash(ctx, userID, string(hash))
+	if err != nil {
+		return err
+	}
+	if updated.AuthVersion == currentVersion+1 {
+		s.sessions.Put(ctx, guard.SessionAuthVersionKey, updated.AuthVersion)
+	}
+	return nil
 }
 
 func (s *Service) revokeOtherSessions(userID, currentToken string) error {
@@ -345,6 +353,7 @@ func (s *Service) EnableTOTP(ctx context.Context, userID, code, password, curren
 	if err != nil {
 		return RecoveryCodesResponse{}, err
 	}
+	currentVersion := s.sessions.GetInt(ctx, guard.SessionAuthVersionKey)
 	if err := verifyPassword(found, password); err != nil {
 		return RecoveryCodesResponse{}, err
 	}
@@ -385,8 +394,12 @@ func (s *Service) EnableTOTP(ctx context.Context, userID, code, password, curren
 	if err != nil {
 		return RecoveryCodesResponse{}, err
 	}
-	if err := s.repo.enableTOTP(ctx, found.ID, now, hashes); err != nil {
+	newVersion, err := s.repo.enableTOTP(ctx, found.ID, now, hashes)
+	if err != nil {
 		return RecoveryCodesResponse{}, err
+	}
+	if newVersion == currentVersion+1 {
+		s.sessions.Put(ctx, guard.SessionAuthVersionKey, newVersion)
 	}
 	return RecoveryCodesResponse{RecoveryCodes: codes}, nil
 }
@@ -505,7 +518,7 @@ func (s *Service) VerifySecondFactor(ctx context.Context, code string, meta Sess
 		return User{}, s.failSecondFactor(ctx)
 	}
 
-	if err := s.establishSession(ctx, found.ID.String(), meta); err != nil {
+	if err := s.establishSession(ctx, found.ID.String(), found.AuthVersion, meta); err != nil {
 		return User{}, err
 	}
 

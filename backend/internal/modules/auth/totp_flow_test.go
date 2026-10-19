@@ -311,8 +311,15 @@ func TestTwoFactorSetupEnableLifecycle(t *testing.T) {
 		}
 	}
 
-	if row := userRow(t, db, id); row.TotpEnabledAt == nil {
+	row := userRow(t, db, id)
+	if row.TotpEnabledAt == nil {
 		t.Fatal("totp_enabled_at = nil after enable, want set")
+	}
+	if row.AuthVersion != 1 {
+		t.Fatalf("auth_version = %d after enable, want 1", row.AuthVersion)
+	}
+	if status := meStatus(t, client, ts.URL); status != http.StatusOK {
+		t.Fatalf("current session me = %d, want 200", status)
 	}
 	stored := recoveryCodeHashes(t, db, id)
 	if len(stored) != recoveryCodesPerBatch {
