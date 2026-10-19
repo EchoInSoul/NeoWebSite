@@ -147,7 +147,17 @@ export function ConsoleSidebarNav({
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
+  const settingsFallbackHref = canViewSettings
+    ? SETTINGS_GENERAL_HREF
+    : canViewRegister
+      ? SETTINGS_REGISTER_HREF
+      : canViewUsers
+        ? SETTINGS_USERS_HREF
+        : SETTINGS_GROUPS_HREF;
+
   const settingsEntryRef = useRef<HTMLAnchorElement>(null);
+  const [lastSettingsHref, setLastSettingsHref] =
+    useState(settingsFallbackHref);
 
   const hasSettingsAccess =
     canViewSettings || canViewRegister || canViewGroups || canViewUsers;
@@ -167,6 +177,14 @@ export function ConsoleSidebarNav({
   if (displayedPanel !== settledPanel) {
     setOutgoingPanel(settledPanel);
     setSettledPanel(displayedPanel);
+  }
+
+  if (
+    routePanel === "settings" &&
+    pathname !== PANEL_PREFIXES.settings &&
+    pathname !== lastSettingsHref
+  ) {
+    setLastSettingsHref(pathname);
   }
 
   useEffect(() => {
@@ -296,6 +314,11 @@ export function ConsoleSidebarNav({
     },
   };
 
+  const settingsEntryHref =
+    routePanel === "settings" && pathname !== PANEL_PREFIXES.settings
+      ? pathname
+      : lastSettingsHref;
+
   const mainPanel = (
     <SidebarGroup>
       <SidebarMenu>
@@ -306,8 +329,13 @@ export function ConsoleSidebarNav({
               render={
                 <Link
                   ref={settingsEntryRef}
-                  href={SETTINGS_GENERAL_HREF}
-                  onClick={() => setDisplayedPanel("settings")}
+                  href={settingsEntryHref}
+                  onClick={(event) => {
+                    if (settingsEntryHref === pathname) {
+                      event.preventDefault();
+                    }
+                    setDisplayedPanel("settings");
+                  }}
                 />
               }
               tooltip={t("settings")}
