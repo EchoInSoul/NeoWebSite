@@ -6,7 +6,7 @@
 
 ## 2026-10-19 · 登录控制页接线（auth 组前端读写 + 会话有效期与 TOTP 站级开关生效）（0.21.0）
 
-**范围**：前端 9 文件（`app/console/settings/login/{page,login-control-form}.tsx`、`hooks/use-login-settings-save.ts`、`lib/login-settings.ts`、`lib/admin-settings.ts`、`app/console/uc/profile/{page,profile-form}.tsx` 与两份 message）；后端 6 文件（`settings/registry.go`、`auth/session.go`、`auth/service.go`、`common/apierror/apierror.go`、`totp_flow_test.go` 的 nil settings 修正、新增 `auth/settings_consumers_test.go`），外加 README / API 规范 / 本条目。零迁移、零新路由、零新依赖。版本 0.20.3 → **0.21.0**（minor）。
+**范围**：前端 9 文件（`app/console/settings/login/{page,login-control-form}.tsx`、`hooks/use-login-settings-save.ts`、`lib/login-settings.ts`、`lib/admin-settings.ts`、`app/console/uc/profile/{page,profile-form}.tsx` 与两份 message）；后端 10 文件（4 个生产文件：`settings/registry.go`、`auth/session.go`、`auth/service.go`、`common/apierror/apierror.go`；5 个测试文件：`auth/settings_consumers_test.go`（新增）、`auth/totp_flow_test.go`、`settings/registry_test.go`、`settings/controller_test.go`、`common/apierror/apierror_test.go`；以及 `version/version.go`），外加 README / API 规范 / 本条目。代码审查及其修复批次另动 12 个文件——后端 `settings/{types,registry,service}.go` 与 `settings/{registry,controller}_test.go`，前端 `lib/{admin-settings,login-settings}.ts`、`hooks/use-two-factor-setup.ts`、`app/console/uc/profile/two-factor-panel.tsx`、`app/console/settings/login/login-control-form.tsx` 与两份 message。零迁移、零新路由、零新依赖。版本 0.20.3 → **0.21.0**（minor）。
 
 **动机**：`/console/settings/login` 自上一轮建成起是纯 UI（六个本地 state、无保存、不读后端）；本轮按用户点名的范围接成真页面，并让 `auth` 组里成本最低的两个策略真正生效——会话有效期与两步验证总开关。密码重置与人机验证只接页面开关，行为留给各自独立轮次。
 
@@ -14,17 +14,18 @@
 
 - **页面读写**：`getLoginSettings()` 读 `GET /admin/settings/auth`；保存走 `PATCH` 且只发本页改过的键（`session_max_age_enabled` / `session_max_age_days` / `totp_enabled` / `password_reset_enabled` / `captcha_enabled` / `captcha_provider`）。与「用户注册」页共用 `auth` 组，但两边都只发自己的键，互不覆盖；权限继续沿用 `system.register.view/edit`（`settings/controller.go` 已按组分流）。
 - **会话有效期**：`auth.Service.establishSession` 在登录（含二段验证通过）时读 `session_max_age_enabled` / `session_max_age_days`，用 scs `SetDeadline` 设为「当前时间 + N 天」。**只影响之后新建的会话**，已登录会话不变；关闭时沿用 `SESSION_LIFETIME`（默认 168h = 7 天）。读设置失败按 fail-open 处理（沿用环境变量默认值），不阻断登录。
-- **天数范围 1–30**：`settings/registry.go` 的 `ValidateOn` 加入 `session_max_age_days` 与 `session_max_age_enabled`，越界返回 409 `setting_conflict`（param `session_max_age_days`）；加入 `enabled` 是为了在开启开关时也校验存量天数（库里可能有旧的越界值）。
-- **TOTP 总开关**：`totp_enabled` 默认值由 `false` 改为 `true`（保持「2FA 一直可用」的现状），并标 `Public`；`SetupTOTP` / `EnableTOTP` 在开关关闭时返回 403 `two_factor_disabled`（新增 token），`DisableTOTP` / 恢复码接口不受影响。登录是否要求二段仍只看用户自己的 `totp_enabled_at`，站级开关关闭不会让已开 2FA 的用户绕过验证。
+- **天数范围 1–30**：`settings/registry.go` 的 `ValidateOn` 加入 `session_max_age_days` 与 `session_max_age_enabled`，越界返回 409 `setting_conflict`（param `session_max_age_days`）。组校验器的签名带上了**本次写了哪些键**（`Validate(values, touched)`），天数只在「本次写了天数」或「把开关写成开启」时才校验——后者是为了开启时存量脏天数仍会被拦（库里可能有旧的越界值），前者之外不再误伤：关掉开关、或在注册页改密码长度，都不会被历史脏天数挡住。前端 `validateLoginSettings` 用同一条规则预校验（只有本次写了天数、或这次把开关打开才拦），不再拦下用户没碰过的存量值。
+- **TOTP 自助开关**：`totp_enabled` 默认值由 `false` 改为 `true`（保持「2FA 一直可用」的现状），并标 `Public`；`SetupTOTP` / `EnableTOTP` 在开关关闭时返回 403 `two_factor_disabled`（新增 token），`DisableTOTP` / 恢复码接口不受影响。登录是否要求二段仍只看用户自己的 `totp_enabled_at`，站级开关关闭不会让已开 2FA 的用户绕过验证。语义是「允许用户自助开启」而非「全站强制」，控制台标签随之改为「允许用户启用两步验证」，README / DEVLOG 一律称**自助开关**。
 - **用户中心**：个人设置页读公开设置，站级开关关闭且用户自己未开启 2FA 时隐藏整行；用户已开启 2FA 时仍显示，保留 `disable` 的退出口，避免被锁死。
-- **公开面**：`auth` 组因 `totp_enabled` 标公开而出现在 `/public/settings`，公开白名单从 6 项变 7 项；前台 `getPublicSettings` 仍是 60 秒 revalidate，后台改开关最多 60 秒后反映到用户中心，但后端接口立即生效。
-- **`captcha_provider` 映射**：后端默认 `""`，前端统一显示/提交 `builtin`（`CAPTCHA_PROVIDER_BUILTIN`）；解析只接受 `""` 或 `builtin`，其他值按读取失败处理。
+- **公开面**：`auth` 组因 `totp_enabled` 标公开而出现在 `/public/settings`，公开白名单从 7 项变 8 项；前台 `getPublicSettings` 仍是 60 秒 revalidate，后台改开关最多 60 秒后反映到用户中心，但后端接口立即生效。
+- **`captcha_provider` 映射**：后端默认 `""`，前端把空串显示为 `builtin`（`CAPTCHA_PROVIDER_BUILTIN`）；其他字符串原样保留并作为额外选项显示，不再让整组解析失败。保存时这个键**无条件带上当前显示值**（它是页面始终呈现的选择），所以任何一次真实保存都会把空串落成 `builtin`，消除「界面显示已设置、库里永远空」的错位；空串仍是合法的「未设置」读入形状，后端暂无消费方。
+- **站级关闭的 60 秒窗口**：前台公开设置是 60 秒 revalidate，后台刚关掉 TOTP 时，用户中心的入口可能还在，点进去 setup / enable 会拿 403 `two_factor_disabled`。`use-two-factor-setup.ts` 现在认这个码——不再显示「密钥生成失败」、不给无效的重试按钮，改为提示「本站当前未开放两步验证」并 `router.refresh()`；面板保留同一状态直到入口随缓存过期消失。
 
-**验证**：后端 `gofmt -l` 干净、`go vet ./...` 零输出、`bash scripts/test.sh` 全绿；变异自检三条——去掉 `applySessionDeadline` 调用、把两个 TOTP 门控改成 `if false`、把天数范围校验改成永不触发——分别实测变红后还原。前端 `tsc --noEmit`、ESLint、Prettier 通过。**运行期未验**：真实登录后改会话天数/关 TOTP 的行为归用户实机。
+**验证**：后端 `gofmt -l` 干净、`go vet ./...` 零输出、`bash scripts/test.sh` 全绿；变异自检三条——去掉 `applySessionDeadline` 调用、把两个 TOTP 门控改成 `if false`、把天数范围校验改成永不触发——分别实测变红后还原。另补四条行为测试——站级开关关闭时登录仍需二段、恢复码接口仍可用、二段验证通过路径应用有效期、设置读取失败 fail-open；前两条做了变异自检（登录跳过二段、恢复码加门控），均实测变红后还原。前端 `tsc --noEmit`、ESLint、Prettier 通过。审查修复批次另加：`settings` 包两条 PATCH 测试（关开关时脏天数不再拦、注册页写密码长度不再被脏天数连坐）与 `TestValidateAuthGroup` 扩成 12 条表驱动用例——把校验器改回方向不敏感，这三处同时变红，还原后全绿；`use-two-factor-setup` 的 403 分支属 UI 层（前端无测试框架），只过 `tsc` / ESLint / Prettier，**未做运行期验证**。**运行期未验**：真实登录后改会话天数/关 TOTP 的行为归用户实机。
 
-**已知缺口**：`password_reset_enabled` 与 `captcha_enabled` / `captcha_provider` 仍是纯数据（密码重置与人机验证后端零实现，各自单开 spec）；登录控制页与用户注册页仍共用 `system.register.*` 权限，未拆独立权限点；已登录会话不会被新有效期即时改写。
+**已知缺口**：`password_reset_enabled` 与 `captcha_enabled` / `captcha_provider` 仍是纯数据（密码重置与人机验证后端零实现，各自单开 spec）；登录控制页与用户注册页仍共用 `system.register.*` 权限，未拆独立权限点；已登录会话不会被新有效期即时改写；库里既有的越界天数不会被自动清洗——关掉开关时保存会成功但那一行仍是脏值，生效路径按 fail-open 走 `SESSION_LIFETIME`，直到有人写天数或开启开关才会被拦。
 
-**提交状态**：未提交。
+**提交状态**：主实现已分 4 批入库（`76d191f` / `4acf62e` / `33a67c9` / `14f2fc8`）；代码审查修复与其后续批次（16 个文件）未提交。
 
 ---
 
