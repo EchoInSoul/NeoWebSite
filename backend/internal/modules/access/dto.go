@@ -37,3 +37,22 @@ type UpdateUserInput struct {
 	GroupID          *string
 	ExtraPermissions *[]string
 }
+
+type permissionResponse struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
+}
+
+type groupRequest struct {
+	Name        *string   `json:"name"`
+	Permissions *[]string `json:"permissions"`
+}
+
+type userRequest struct {
+	GroupID          *string   `json:"group_id"`
+	ExtraPermissions *[]string `json:"extra_permissions"`
+}
+
+type userBatchRequest struct {
+	IDs []string `json:"ids"`
+}

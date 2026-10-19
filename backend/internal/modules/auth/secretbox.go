@@ -20,7 +20,7 @@ func sealSecret(key []byte, plaintext string) (string, error) {
 
 	nonce := make([]byte, secretboxNonceBytes)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", fmt.Errorf("generate nonce: %w", err)
+		return "", fmt.Errorf("auth: generate nonce: %w", err)
 	}
 
 	sealed := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
@@ -35,15 +35,15 @@ func openSecret(key []byte, ciphertext string) (string, error) {
 
 	raw, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
-		return "", fmt.Errorf("decode sealed secret: %w", err)
+		return "", fmt.Errorf("auth: decode sealed secret: %w", err)
 	}
 	if len(raw) < secretboxNonceBytes {
-		return "", errors.New("sealed secret is shorter than its nonce")
+		return "", errors.New("auth: sealed secret is shorter than its nonce")
 	}
 
 	plaintext, err := gcm.Open(nil, raw[:secretboxNonceBytes], raw[secretboxNonceBytes:], nil)
 	if err != nil {
-		return "", fmt.Errorf("open sealed secret: %w", err)
+		return "", fmt.Errorf("auth: open sealed secret: %w", err)
 	}
 	return string(plaintext), nil
 }
@@ -51,7 +51,7 @@ func openSecret(key []byte, ciphertext string) (string, error) {
 func newAESGCM(key []byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("create aes cipher: %w", err)
+		return nil, fmt.Errorf("auth: create aes cipher: %w", err)
 	}
 	return cipher.NewGCM(block)
 }

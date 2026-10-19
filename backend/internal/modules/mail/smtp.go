@@ -92,7 +92,7 @@ func newSMTPDeliveryError(err error) error {
 		if enhanced := sendErr.EnhancedStatusCode(); enhanced != "" {
 			status = status + " " + enhanced
 		}
-		return &deliveryError{err: fmt.Errorf("smtp status %s: %w", status, err), temporary: false}
+		return &deliveryError{err: fmt.Errorf("mail: smtp status %s: %w", status, err), temporary: false}
 	}
 
 	return &deliveryError{err: err, temporary: true}

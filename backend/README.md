@@ -30,13 +30,13 @@
 | `internal/modules/settings/*` | `@nestjs/config` + `config.controller.ts`（对照位） | 有路由模块：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；对外入口 `New(db) (*Module, error)`，能力挂 `m.Service`；管理侧 `GET / PATCH /admin/settings/:group`（按组挂权限点：`site` → `system.settings.view` / `.edit`，`register` / `auth` → `system.register.view` / `.edit`），公开侧 `GET /public/settings`（无鉴权，只出清单里标了 `Public` 的项）；响应统一为 `{group, values}` 记录、集合套 `items`；当前清单项 `site` 组六项（全公开）、`register` 组五项（`enabled` 公开；`email_domain_control_enabled` / `allowed_email_domains` 已有消费方）与 `auth` 组九项（`password_requirements_enabled` / `password_min_length` 已有消费方，其余非公开），加设置见「设置」章节配方 |
 | `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）+ `RequirePresetGroup`（预设组白名单，owner / admin 这类不入权限目录的服务器级操作用）；常量 `auth.user_id` / `auth.identity` |
 | `internal/common/rbac` | `src/common`（权限目录） | 权限点目录与预设组常量（固定 UUID）；纯 Go，不依赖 gin / DB |
-| `internal/common` 其余（待加） | `src/common` | pipes 校验 / interceptors / filters 统一错误（guards 已落地于 `internal/common/guard`） |
+| `internal/common` 其余 | `src/common` | `apierror` 统一错误注册与写出、`apiresponse` 共享响应信封；pipes 校验 / interceptors / filters 仍待加（guards 已落地于 `internal/common/guard`） |
 
 ## 硬性规则
 
 1. 一个功能一个模块目录 `internal/modules/<name>/`。**有路由的模块必须自包含 module / controller / service / dto；需要 DB 时同目录 `repository.go`。** 无路由的能力模块可省 controller / dto / module.go，只提供实现文件 + `New` 入口 + 测试，不要为凑形状建空文件。
 2. 依赖方向单向：controller → service → repository（需要 DB 时同目录 `repository.go`）。禁止反向调用，禁止跨层直连。**例外：`mail` 是无 service 的能力模块，controller 可直接调用注入的 `Mailer`。**
-3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app、`internal/common/guard`（中间件）和 `internal/common/apierror`（统一错误写出）；service 一律不 import gin。
+3. Gin 与 HTTP 细节只允许出现在 controller、module.go（挂载路由）、app、`internal/common/guard`（中间件）、`internal/common/apierror`（统一错误写出）和 `internal/common/apiresponse`（共享响应信封）；service 一律不 import gin。
 4. 路由由 controller 自己声明；全局前缀 `/api/v1` 只在 `app.go` 定义一次。
 5. 模块只通过 `New(...)` 返回的 `*Module` 对外暴露能力（如 service）；跨模块依赖只在 `app.go` 里显式注入，不允许直接构造或调用别的模块的内部实现。唯一例外：为测试提供的包级入口（当前仅 `auth.CreateAdminUser`），业务代码不得调用。**`settings.New(db) (*Module, error)` 仍是唯一返回 error 的模块构造器（清单自检不过启动即失败，错误沿启动链返回）；无状态的包级纯函数可直接导出（如 `mail.Render`）——不算对外暴露内部实现。**
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
@@ -146,7 +146,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 ## 测试
 
-静态检查（格式 / vet / 编译 / 空白）用 `bash scripts/check.sh`；它不是测试，不会替代下面的全仓测试。
+静态检查（格式 / vet / 编译 / 空白 / repository 错误分层门禁）用 `bash scripts/check.sh`；它不是测试，不会替代下面的全仓测试。
 
 ```bash
 bash scripts/check.sh                  # 静态检查

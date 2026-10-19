@@ -16,7 +16,7 @@ const (
 	maxAttempts = 3
 )
 
-var ErrClosed = errors.New("mailer closed")
+var ErrClosed = errors.New("mail: mailer closed")
 
 type Body struct {
 	Text string

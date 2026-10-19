@@ -8,21 +8,13 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"website/backend/internal/common/apierror"
+	"website/backend/internal/common/apiresponse"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/common/rbac"
 )
 
 type controller struct {
 	service *Service
-}
-
-type groupView struct {
-	Group  string         `json:"group"`
-	Values map[string]any `json:"values"`
-}
-
-type publicSettingsView struct {
-	Items []groupView `json:"items"`
 }
 
 func newController(service *Service) *controller {
@@ -56,11 +48,11 @@ func (c *controller) getPublic(ctx *gin.Context) {
 		return
 	}
 
-	items := make([]groupView, 0, len(groups))
+	items := make([]groupResponse, 0, len(groups))
 	for _, group := range groups {
-		items = append(items, groupView{Group: group.Group, Values: group.Values})
+		items = append(items, groupResponse{Group: group.Group, Values: group.Values})
 	}
-	ctx.JSON(http.StatusOK, publicSettingsView{Items: items})
+	ctx.JSON(http.StatusOK, apiresponse.ItemList[groupResponse]{Items: items})
 }
 
 func (c *controller) getGroup(ctx *gin.Context) {
@@ -70,7 +62,7 @@ func (c *controller) getGroup(ctx *gin.Context) {
 		writeSettingError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, groupView{Group: group, Values: values})
+	ctx.JSON(http.StatusOK, groupResponse{Group: group, Values: values})
 }
 
 func (c *controller) patchGroup(ctx *gin.Context) {
@@ -86,7 +78,7 @@ func (c *controller) patchGroup(ctx *gin.Context) {
 		writeSettingError(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, groupView{Group: group, Values: values})
+	ctx.JSON(http.StatusOK, groupResponse{Group: group, Values: values})
 }
 
 func writeSettingError(ctx *gin.Context, err error) {

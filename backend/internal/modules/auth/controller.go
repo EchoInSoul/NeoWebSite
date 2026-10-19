@@ -10,15 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"website/backend/internal/common/apierror"
+	"website/backend/internal/common/apiresponse"
 	"website/backend/internal/common/guard"
 )
 
 type controller struct {
 	service *Service
-}
-
-type itemList[T any] struct {
-	Items []T `json:"items"`
 }
 
 func newController(service *Service) *controller {
@@ -91,7 +88,7 @@ func (c *controller) logout(ctx *gin.Context) {
 		apierror.Write(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{})
+	ctx.JSON(http.StatusOK, apiresponse.Empty{})
 }
 
 func (c *controller) me(ctx *gin.Context) {
@@ -165,7 +162,7 @@ func (c *controller) changePassword(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{})
+	ctx.JSON(http.StatusOK, apiresponse.Empty{})
 }
 
 func (c *controller) setupTwoFactor(ctx *gin.Context) {
@@ -225,7 +222,7 @@ func (c *controller) disableTwoFactor(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{})
+	ctx.JSON(http.StatusOK, apiresponse.Empty{})
 }
 
 func (c *controller) regenerateRecoveryCodes(ctx *gin.Context) {
@@ -280,7 +277,7 @@ func (c *controller) listSessions(ctx *gin.Context) {
 		})
 	}
 
-	ctx.JSON(http.StatusOK, itemList[SessionResponse]{Items: items})
+	ctx.JSON(http.StatusOK, apiresponse.ItemList[SessionResponse]{Items: items})
 }
 
 func (c *controller) revokeSession(ctx *gin.Context) {
@@ -289,7 +286,7 @@ func (c *controller) revokeSession(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"id": ctx.Param("id"), "deleted": true})
+	ctx.JSON(http.StatusOK, apiresponse.Deleted{ID: ctx.Param("id"), Deleted: true})
 }
 
 const (

@@ -39,7 +39,7 @@ func generateTOTPSetup(accountName string) (totpSetup, error) {
 		Algorithm:   otp.AlgorithmSHA1,
 	})
 	if err != nil {
-		return totpSetup{}, fmt.Errorf("generate totp key: %w", err)
+		return totpSetup{}, fmt.Errorf("auth: generate totp key: %w", err)
 	}
 	return totpSetup{Secret: key.Secret(), OTPAuthURL: key.URL()}, nil
 }
@@ -47,10 +47,10 @@ func generateTOTPSetup(accountName string) (totpSetup, error) {
 func rebuildTOTPSetup(accountName, base32Secret string) (totpSetup, error) {
 	raw, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(base32Secret)
 	if err != nil {
-		return totpSetup{}, fmt.Errorf("decode totp secret: %w", err)
+		return totpSetup{}, fmt.Errorf("auth: decode totp secret: %w", err)
 	}
 	if len(raw) == 0 {
-		return totpSetup{}, fmt.Errorf("totp secret is empty")
+		return totpSetup{}, fmt.Errorf("auth: totp secret is empty")
 	}
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      totpIssuer,
@@ -61,7 +61,7 @@ func rebuildTOTPSetup(accountName, base32Secret string) (totpSetup, error) {
 		Secret:      raw,
 	})
 	if err != nil {
-		return totpSetup{}, fmt.Errorf("rebuild totp key: %w", err)
+		return totpSetup{}, fmt.Errorf("auth: rebuild totp key: %w", err)
 	}
 	return totpSetup{Secret: key.Secret(), OTPAuthURL: key.URL()}, nil
 }
@@ -77,7 +77,7 @@ func matchTOTPCounter(code string, base32Secret string, now time.Time) (int64, b
 		candidate := counter + offset
 		expected, err := totp.GenerateCode(base32Secret, time.Unix(candidate*totpPeriodSeconds, 0))
 		if err != nil {
-			return 0, false, fmt.Errorf("generate totp candidate: %w", err)
+			return 0, false, fmt.Errorf("auth: generate totp candidate: %w", err)
 		}
 		if subtle.ConstantTimeCompare([]byte(expected), []byte(trimmed)) == 1 {
 			return candidate, true, nil
@@ -105,7 +105,7 @@ func generateRecoveryCodes(count int) ([]string, error) {
 	for len(codes) < count {
 		raw := make([]byte, recoveryCodeBytes)
 		if _, err := rand.Read(raw); err != nil {
-			return nil, fmt.Errorf("generate recovery code: %w", err)
+			return nil, fmt.Errorf("auth: generate recovery code: %w", err)
 		}
 
 		code := hex.EncodeToString(raw)

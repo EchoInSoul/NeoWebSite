@@ -19,7 +19,7 @@
 - `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md`（不隔仓储接口层）
 - `backend/README.md`（硬性规则 1–8 与接口契约）
 
-**执行状态（2026-10-20）:** 用户裁定「先落规范与检查」。Task 1–2 已完成并验证；Task 3–6 未执行。`backend/STYLE.md` 已把 `apiresponse`、DTO 归位、access 错误分层写入 §9.2「已知差距」，而不是当作现行规则；执行 Task 3–5 时再把它们移入现行条款。
+**执行状态（2026-10-20）:** 规范与检查（Task 1–2）已入库（`5c2cdeb`）。Task 3–5 已实施并通过全仓测试；Task 6 的 DEVLOG 与版本进位未执行，提交在本轮后续请求中执行。实际实现把 `ItemList` / `Deleted` / `DeletedBatch` / `Empty` 放在 `apiresponse/response.go`，并把 `health.Status` 改名 `HealthResponse`、access 的 `permissionResponse` 移入 `dto.go`；这些比计划多出的项已同步进 STYLE 与工作区。
 
 ## Global Constraints
 
@@ -261,7 +261,7 @@ Expected: `check ok`。
 
 ---
 
-### Task 3: 提取共享集合信封 `apiresponse.ItemList[T]`
+### Task 3: 提取共享集合信封 `apiresponse.ItemList[T]`（已完成 2026-10-20）
 
 **Files:**
 - Create: `backend/internal/common/apiresponse/list.go`
@@ -375,7 +375,7 @@ Expected: `check ok`。
 
 ---
 
-### Task 4: 把散在 controller 的 DTO 归位到 `dto.go`
+### Task 4: 把散在 controller 的 DTO 归位到 `dto.go`（已完成 2026-10-20）
 
 **Files:**
 - Modify: `backend/internal/modules/access/controller.go:23-35`（移走三个 request 类型）
@@ -462,7 +462,7 @@ Expected: `check ok`。
 
 ---
 
-### Task 5: 让 access repository 不再依赖 `apierror`
+### Task 5: 让 access repository 不再依赖 `apierror`（已完成 2026-10-20）
 
 **Files:**
 - Modify: `backend/internal/modules/access/repository.go`（移除 `apierror` import，改为私有域哨兵）
@@ -631,7 +631,7 @@ Expected: 全仓 `ok`；`check ok`。
 
 ---
 
-### Task 6: DEVLOG、版本进位与最终验证
+### Task 6: DEVLOG、版本进位与最终验证（DEVLOG / 版本未执行；全仓测试已完成；提交随本轮入库）
 
 **Files:**
 - Modify: `docs/DEVLOG.md`（顶部新增本轮条目）

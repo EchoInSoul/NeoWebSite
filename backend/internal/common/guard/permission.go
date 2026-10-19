@@ -12,7 +12,7 @@ import (
 
 const SessionIdentityKey = "auth.identity"
 
-var ErrUserNotFound = errors.New("user not found")
+var ErrUserNotFound = errors.New("guard: user not found")
 
 type Identity struct {
 	UserID      string

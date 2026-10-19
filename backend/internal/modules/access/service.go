@@ -24,6 +24,21 @@ func newService(db *database.Database) *Service {
 	return &Service{repo: newRepository(db)}
 }
 
+func mapRepoError(err error) error {
+	switch {
+	case errors.Is(err, errRecordNotFound):
+		return apierror.ErrNotFound
+	case errors.Is(err, errGroupNameTaken):
+		return apierror.ErrGroupNameTaken
+	case errors.Is(err, errGroupNotEmpty):
+		return apierror.ErrGroupNotEmpty
+	case errors.Is(err, errLastOwner):
+		return apierror.ErrLastOwner
+	default:
+		return err
+	}
+}
+
 func (s *Service) IdentityByUserID(ctx context.Context, userID string) (guard.Identity, error) {
 	id, err := uuid.Parse(userID)
 	if err != nil {
@@ -31,10 +46,10 @@ func (s *Service) IdentityByUserID(ctx context.Context, userID string) (guard.Id
 	}
 	record, err := s.repo.findUser(ctx, id)
 	if err != nil {
-		if errors.Is(err, apierror.ErrNotFound) {
+		if errors.Is(err, errRecordNotFound) {
 			return guard.Identity{}, guard.ErrUserNotFound
 		}
-		return guard.Identity{}, err
+		return guard.Identity{}, mapRepoError(err)
 	}
 	permissions, err := s.effectivePermissions(ctx, record)
 	if err != nil {
@@ -53,7 +68,7 @@ func (s *Service) IdentityByUserID(ctx context.Context, userID string) (guard.Id
 func (s *Service) ListGroups(ctx context.Context) ([]Group, error) {
 	records, counts, permissionsByGroup, err := s.repo.listGroups(ctx)
 	if err != nil {
-		return nil, err
+		return nil, mapRepoError(err)
 	}
 	groups := make([]Group, 0, len(records))
 	for _, record := range records {
@@ -88,7 +103,7 @@ func (s *Service) CreateGroup(ctx context.Context, operator guard.Identity, name
 
 	record, err := s.repo.createGroup(ctx, normalizedName, normalizedPermissions)
 	if err != nil {
-		return Group{}, err
+		return Group{}, mapRepoError(err)
 	}
 	return s.groupDetail(ctx, record.ID)
 }
@@ -100,7 +115,7 @@ func (s *Service) UpdateGroup(ctx context.Context, operator guard.Identity, grou
 	}
 	record, err := s.repo.findGroup(ctx, id)
 	if err != nil {
-		return Group{}, err
+		return Group{}, mapRepoError(err)
 	}
 	if record.SystemKey != "" {
 		return Group{}, apierror.ErrPresetGroupLocked
@@ -127,7 +142,7 @@ func (s *Service) UpdateGroup(ctx context.Context, operator guard.Identity, grou
 	if nextPermissions != nil {
 		current, err := s.repo.groupPermissions(ctx, id)
 		if err != nil {
-			return Group{}, err
+			return Group{}, mapRepoError(err)
 		}
 		added := difference(rbac.Expand(*nextPermissions), rbac.Expand(current))
 		if err := assertGrantable(operator, added); err != nil {
@@ -137,12 +152,12 @@ func (s *Service) UpdateGroup(ctx context.Context, operator guard.Identity, grou
 
 	if nextName != nil {
 		if err := s.repo.updateGroupName(ctx, id, *nextName); err != nil {
-			return Group{}, err
+			return Group{}, mapRepoError(err)
 		}
 	}
 	if nextPermissions != nil {
 		if err := s.repo.replaceGroupPermissions(ctx, id, *nextPermissions); err != nil {
-			return Group{}, err
+			return Group{}, mapRepoError(err)
 		}
 	}
 	return s.groupDetail(ctx, id)
@@ -155,25 +170,25 @@ func (s *Service) DeleteGroup(ctx context.Context, groupID string) error {
 	}
 	record, err := s.repo.findGroup(ctx, id)
 	if err != nil {
-		return err
+		return mapRepoError(err)
 	}
 	if record.SystemKey != "" {
 		return apierror.ErrPresetGroupLocked
 	}
 	count, err := s.repo.memberCount(ctx, id)
 	if err != nil {
-		return err
+		return mapRepoError(err)
 	}
 	if count > 0 {
 		return apierror.ErrGroupNotEmpty
 	}
-	return s.repo.deleteGroup(ctx, id)
+	return mapRepoError(s.repo.deleteGroup(ctx, id))
 }
 
 func (s *Service) ListUsers(ctx context.Context) ([]UserSummary, error) {
 	records, permissionsByUser, err := s.repo.listUsers(ctx)
 	if err != nil {
-		return nil, err
+		return nil, mapRepoError(err)
 	}
 	users := make([]UserSummary, 0, len(records))
 	for _, record := range records {
@@ -195,11 +210,11 @@ func (s *Service) GetUser(ctx context.Context, userID string) (UserDetail, error
 	}
 	record, err := s.repo.findUser(ctx, id)
 	if err != nil {
-		return UserDetail{}, err
+		return UserDetail{}, mapRepoError(err)
 	}
 	extra, err := s.repo.userPermissions(ctx, id)
 	if err != nil {
-		return UserDetail{}, err
+		return UserDetail{}, mapRepoError(err)
 	}
 	permissions, err := s.effectivePermissions(ctx, record)
 	if err != nil {
@@ -232,7 +247,7 @@ func (s *Service) UpdateUser(ctx context.Context, operator guard.Identity, userI
 
 	target, err := s.repo.findUser(ctx, targetID)
 	if err != nil {
-		return UserDetail{}, err
+		return UserDetail{}, mapRepoError(err)
 	}
 
 	nextGroup := target.Group
@@ -244,7 +259,7 @@ func (s *Service) UpdateUser(ctx context.Context, operator guard.Identity, userI
 		}
 		record, err := s.repo.findGroup(ctx, groupID)
 		if err != nil {
-			return UserDetail{}, err
+			return UserDetail{}, mapRepoError(err)
 		}
 		nextGroup = record
 		groupChanged = record.ID != target.Group.ID
@@ -269,7 +284,7 @@ func (s *Service) UpdateUser(ctx context.Context, operator guard.Identity, userI
 
 	currentExtra, err := s.repo.userPermissions(ctx, targetID)
 	if err != nil {
-		return UserDetail{}, err
+		return UserDetail{}, mapRepoError(err)
 	}
 	currentGroupPermissions, err := s.permissionsOfGroup(ctx, target.Group)
 	if err != nil {
@@ -299,7 +314,7 @@ func (s *Service) UpdateUser(ctx context.Context, operator guard.Identity, userI
 		LockOwnerCount: target.Group.SystemKey == rbac.GroupKeyOwner && nextGroup.SystemKey != rbac.GroupKeyOwner,
 	}
 	if err := s.repo.updateUser(ctx, params); err != nil {
-		return UserDetail{}, err
+		return UserDetail{}, mapRepoError(err)
 	}
 	return s.GetUser(ctx, userID)
 }
@@ -336,7 +351,7 @@ func (s *Service) DeleteUsers(ctx context.Context, operator guard.Identity, ids 
 
 	rows, err := s.repo.findUsers(ctx, targets)
 	if err != nil {
-		return err
+		return mapRepoError(err)
 	}
 	if len(rows) != len(targets) {
 		return apierror.ErrNotFound
@@ -351,17 +366,17 @@ func (s *Service) DeleteUsers(ctx context.Context, operator guard.Identity, ids 
 			lockOwnerCount = true
 		}
 	}
-	return s.repo.deleteUsers(ctx, targets, lockOwnerCount)
+	return mapRepoError(s.repo.deleteUsers(ctx, targets, lockOwnerCount))
 }
 
 func (s *Service) groupDetail(ctx context.Context, id uuid.UUID) (Group, error) {
 	record, err := s.repo.findGroup(ctx, id)
 	if err != nil {
-		return Group{}, err
+		return Group{}, mapRepoError(err)
 	}
 	count, err := s.repo.memberCount(ctx, id)
 	if err != nil {
-		return Group{}, err
+		return Group{}, mapRepoError(err)
 	}
 	permissions, err := s.permissionsOfGroup(ctx, record)
 	if err != nil {
@@ -384,7 +399,7 @@ func (s *Service) effectivePermissions(ctx context.Context, record userRecord) (
 	}
 	extra, err := s.repo.userPermissions(ctx, record.ID)
 	if err != nil {
-		return nil, err
+		return nil, mapRepoError(err)
 	}
 	combined := make([]string, 0, len(groupPermissions)+len(extra))
 	combined = append(combined, groupPermissions...)
@@ -396,7 +411,11 @@ func (s *Service) permissionsOfGroup(ctx context.Context, group groupRecord) ([]
 	if group.SystemKey != "" {
 		return rbac.PresetPermissions(group.SystemKey), nil
 	}
-	return s.repo.groupPermissions(ctx, group.ID)
+	permissions, err := s.repo.groupPermissions(ctx, group.ID)
+	if err != nil {
+		return nil, mapRepoError(err)
+	}
+	return permissions, nil
 }
 
 func groupRef(group groupRecord) GroupRef {

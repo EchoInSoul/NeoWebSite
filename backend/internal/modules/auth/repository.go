@@ -14,7 +14,7 @@ import (
 	"website/backend/internal/database/ent/user"
 )
 
-var errUserNotFound = errors.New("user not found")
+var errUserNotFound = errors.New("auth: user not found")
 
 type repository struct {
 	client *ent.Client

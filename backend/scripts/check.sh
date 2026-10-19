@@ -14,6 +14,13 @@ if [ -n "$unformatted" ]; then
   exit 1
 fi
 
+import_violations="$(grep -R -l 'website/backend/internal/common/apierror' --include='repository.go' internal/modules || true)"
+if [ -n "$import_violations" ]; then
+  echo "repository must not import apierror:" >&2
+  printf '%s\n' "$import_violations" >&2
+  exit 1
+fi
+
 go vet ./...
 go build ./...
 git diff --check

@@ -83,7 +83,7 @@ func sessionString(values map[string]any, key string) string {
 func (s *Service) eachSession(fn func(token string, values map[string]any, deadline time.Time) error) error {
 	iterable, ok := s.sessions.Store.(scs.IterableStore)
 	if !ok {
-		return errors.New("session store does not support iteration")
+		return errors.New("auth: session store does not support iteration")
 	}
 
 	all, err := iterable.All()
@@ -139,7 +139,7 @@ func (s *Service) ListSessions(ctx context.Context, userID string) ([]Session, e
 	return sessions, nil
 }
 
-var errSessionFound = errors.New("session found")
+var errSessionFound = errors.New("auth: session found")
 
 func (s *Service) RevokeSession(ctx context.Context, userID, sessionID string) error {
 	var target string

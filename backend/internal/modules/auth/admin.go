@@ -15,16 +15,16 @@ const maxPasswordBytes = 72
 
 func CreateAdminUser(ctx context.Context, db *database.Database, email, nickname, password string) (User, error) {
 	if len(password) > maxPasswordBytes {
-		return User{}, errors.New("password must be at most 72 bytes")
+		return User{}, errors.New("auth: password must be at most 72 bytes")
 	}
 	if password == "" {
-		return User{}, errors.New("password is required")
+		return User{}, errors.New("auth: password is required")
 	}
 
 	email = strings.ToLower(strings.TrimSpace(email))
 	nickname = strings.TrimSpace(nickname)
 	if email == "" || nickname == "" {
-		return User{}, errors.New("email and nickname are required")
+		return User{}, errors.New("auth: email and nickname are required")
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -35,7 +35,7 @@ func CreateAdminUser(ctx context.Context, db *database.Database, email, nickname
 	created, err := newRepository(db).createUser(ctx, email, nickname, string(hash))
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			return User{}, errors.New("email or nickname already exists")
+			return User{}, errors.New("auth: email or nickname already exists")
 		}
 		return User{}, err
 	}

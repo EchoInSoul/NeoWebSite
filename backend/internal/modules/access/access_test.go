@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"website/backend/internal/common/apiresponse"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/common/rbac"
 	"website/backend/internal/database"
@@ -105,7 +106,7 @@ func decodeItems[T any](t *testing.T, resp *http.Response) []T {
 	t.Helper()
 	defer resp.Body.Close()
 
-	var body itemList[T]
+	var body apiresponse.ItemList[T]
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode items: %v", err)
 	}

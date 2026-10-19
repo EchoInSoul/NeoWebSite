@@ -27,11 +27,11 @@ func newService(cfg config.Config, db pinger) *Service {
 	}
 }
 
-func (s *Service) Check(ctx context.Context) Status {
+func (s *Service) Check(ctx context.Context) HealthResponse {
 	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
 
-	status := Status{
+	status := HealthResponse{
 		Status:      "ok",
 		Service:     s.cfg.ServiceName,
 		Version:     s.cfg.Version,

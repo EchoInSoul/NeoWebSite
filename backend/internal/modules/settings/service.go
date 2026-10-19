@@ -338,23 +338,23 @@ func decodeTyped(fieldType FieldType, raw json.RawMessage) (any, error) {
 	case FieldTypeString:
 		s, ok := out.(string)
 		if !ok {
-			return nil, fmt.Errorf("not a JSON string")
+			return nil, fmt.Errorf("settings: not a JSON string")
 		}
 		return s, nil
 	case FieldTypeNumber:
 		number, ok := out.(json.Number)
 		if !ok {
-			return nil, fmt.Errorf("not a JSON number")
+			return nil, fmt.Errorf("settings: not a JSON number")
 		}
 		return strconv.ParseInt(string(number), 10, 64)
 	case FieldTypeBool:
 		b, ok := out.(bool)
 		if !ok {
-			return nil, fmt.Errorf("not a JSON bool")
+			return nil, fmt.Errorf("settings: not a JSON bool")
 		}
 		return b, nil
 	}
-	return nil, fmt.Errorf("unknown field type %d", fieldType)
+	return nil, fmt.Errorf("settings: unknown field type %d", fieldType)
 }
 
 func decodeNumber(raw json.RawMessage) (int64, error) {

@@ -7,32 +7,10 @@ import (
 	"github.com/google/uuid"
 
 	"website/backend/internal/common/apierror"
+	"website/backend/internal/common/apiresponse"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/common/rbac"
 )
-
-type itemList[T any] struct {
-	Items []T `json:"items"`
-}
-
-type permissionResponse struct {
-	Key  string `json:"key"`
-	Name string `json:"name"`
-}
-
-type groupRequest struct {
-	Name        *string   `json:"name"`
-	Permissions *[]string `json:"permissions"`
-}
-
-type userRequest struct {
-	GroupID          *string   `json:"group_id"`
-	ExtraPermissions *[]string `json:"extra_permissions"`
-}
-
-type userBatchRequest struct {
-	IDs []string `json:"ids"`
-}
 
 type controller struct {
 	service *Service
@@ -61,7 +39,7 @@ func (c *controller) listPermissions(ctx *gin.Context) {
 	for _, permission := range catalog {
 		items = append(items, permissionResponse{Key: permission.Key, Name: permission.Name})
 	}
-	ctx.JSON(http.StatusOK, itemList[permissionResponse]{Items: items})
+	ctx.JSON(http.StatusOK, apiresponse.ItemList[permissionResponse]{Items: items})
 }
 
 func (c *controller) listGroups(ctx *gin.Context) {
@@ -70,7 +48,7 @@ func (c *controller) listGroups(ctx *gin.Context) {
 		apierror.Write(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, itemList[Group]{Items: groups})
+	ctx.JSON(http.StatusOK, apiresponse.ItemList[Group]{Items: groups})
 }
 
 func (c *controller) createGroup(ctx *gin.Context) {
@@ -125,7 +103,7 @@ func (c *controller) deleteGroup(ctx *gin.Context) {
 		apierror.Write(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"id": ctx.Param("id"), "deleted": true})
+	ctx.JSON(http.StatusOK, apiresponse.Deleted{ID: ctx.Param("id"), Deleted: true})
 }
 
 func (c *controller) listUsers(ctx *gin.Context) {
@@ -134,7 +112,7 @@ func (c *controller) listUsers(ctx *gin.Context) {
 		apierror.Write(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, itemList[UserSummary]{Items: users})
+	ctx.JSON(http.StatusOK, apiresponse.ItemList[UserSummary]{Items: users})
 }
 
 func (c *controller) getUser(ctx *gin.Context) {
@@ -191,7 +169,7 @@ func (c *controller) deleteUsers(ctx *gin.Context) {
 		apierror.Write(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"ids": request.IDs, "deleted": true})
+	ctx.JSON(http.StatusOK, apiresponse.DeletedBatch{IDs: request.IDs, Deleted: true})
 }
 
 func (c *controller) deleteUser(ctx *gin.Context) {
@@ -203,7 +181,7 @@ func (c *controller) deleteUser(ctx *gin.Context) {
 		apierror.Write(ctx, err)
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"id": ctx.Param("id"), "deleted": true})
+	ctx.JSON(http.StatusOK, apiresponse.Deleted{ID: ctx.Param("id"), Deleted: true})
 }
 
 func operatorFrom(ctx *gin.Context) (guard.Identity, bool) {
