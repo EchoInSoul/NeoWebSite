@@ -42,6 +42,7 @@ import { SidebarMenuButton } from "@/components/ui/sidebar";
 import { useSignout } from "@/hooks/use-signout";
 import { SUPPORTED_LOCALES, type Locale } from "@/i18n/config";
 import { setUserLocale } from "@/i18n/set-locale";
+import { requestSidebarPanel } from "@/lib/sidebar-panel";
 import { useThemeMode, type ThemeMode } from "@/lib/theme";
 
 const themeModeIcons = {
@@ -111,7 +112,14 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
           </DropdownMenuItem>
 
           {!isInUcPanel ? (
-            <DropdownMenuItem render={<Link href="/console/uc" />}>
+            <DropdownMenuItem
+              render={
+                <Link
+                  href="/console/uc/profile"
+                  onNavigate={() => requestSidebarPanel("uc")}
+                />
+              }
+            >
               <CircleUserRound />
               <span>{t("profile")}</span>
             </DropdownMenuItem>
