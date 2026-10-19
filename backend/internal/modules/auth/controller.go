@@ -74,7 +74,7 @@ func (c *controller) signup(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password)
+	user, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -295,20 +295,9 @@ const (
 )
 
 func requestSessionMeta(ctx *gin.Context) SessionMeta {
-	ip := ctx.GetHeader("X-Forwarded-For")
-	if idx := strings.IndexByte(ip, ','); idx >= 0 {
-		ip = ip[:idx]
-	}
-	ip = strings.TrimSpace(ip)
-	if ip == "" {
-		ip = strings.TrimSpace(ctx.GetHeader("X-Real-IP"))
-	}
-	if ip == "" {
-		ip = ctx.ClientIP()
-	}
 	return SessionMeta{
 		UserAgent: truncateHeader(ctx.GetHeader("User-Agent"), maxUserAgentLength),
-		IP:        truncateHeader(ip, maxIPLength),
+		IP:        truncateHeader(ctx.ClientIP(), maxIPLength),
 	}
 }
 

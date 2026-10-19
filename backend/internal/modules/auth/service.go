@@ -10,6 +10,7 @@ import (
 
 	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/guard"
+	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
 	"website/backend/internal/modules/settings"
@@ -29,9 +30,11 @@ type Service struct {
 	dummyHash []byte
 	totpKey   []byte
 	settings  *settings.Service
+	limiter   *ratelimit.Limiter
+	policies  rateLimitPolicies
 }
 
-func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service) *Service {
+func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies) *Service {
 	dummy, err := bcrypt.GenerateFromPassword([]byte("timing-defense-placeholder"), bcrypt.DefaultCost)
 	if err != nil {
 		dummy = nil
@@ -42,10 +45,16 @@ func newService(db *database.Database, sessions *scs.SessionManager, totpKey []b
 		dummyHash: dummy,
 		totpKey:   totpKey,
 		settings:  settingsService,
+		limiter:   limiter,
+		policies:  policies,
 	}
 }
 
-func (s *Service) Register(ctx context.Context, email, nickname, password string) (User, error) {
+func (s *Service) Register(ctx context.Context, email, nickname, password string, meta SessionMeta) (User, error) {
+	if err := s.allowWindow(s.policies.RegisterIP, ipKey("register", meta.IP)); err != nil {
+		return User{}, err
+	}
+
 	enabled, err := s.settings.GetBool(ctx, "register", "enabled")
 	if err != nil {
 		return User{}, err
@@ -59,6 +68,9 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 
 	if !validEmail(email) || !validNickname(nickname) {
 		return User{}, apierror.ErrInvalidRequest
+	}
+	if err := s.allowWindow(s.policies.RegisterEmail, registerEmailKey(email)); err != nil {
+		return User{}, err
 	}
 	minLength, err := s.passwordMinLength(ctx)
 	if err != nil {
@@ -100,6 +112,14 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 }
 
 func (s *Service) Login(ctx context.Context, identifier, password string, meta SessionMeta) (User, error) {
+	if err := s.allowWindow(s.policies.LoginIP, ipKey("login", meta.IP)); err != nil {
+		return User{}, err
+	}
+	accountKey := loginIdentifierKey(identifier)
+	if err := s.checkFailure(s.policies.LoginIdentifier, accountKey); err != nil {
+		return User{}, err
+	}
+
 	if len(password) > maxPasswordBytes {
 		return User{}, apierror.ErrInvalidCredentials
 	}
@@ -108,14 +128,17 @@ func (s *Service) Login(ctx context.Context, identifier, password string, meta S
 	if err != nil {
 		if errors.Is(err, errUserNotFound) {
 			_ = bcrypt.CompareHashAndPassword(s.dummyHash, []byte(password))
+			s.recordFailure(s.policies.LoginIdentifier, accountKey)
 			return User{}, apierror.ErrInvalidCredentials
 		}
 		return User{}, err
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(password)); err != nil {
+		s.recordFailure(s.policies.LoginIdentifier, accountKey)
 		return User{}, apierror.ErrInvalidCredentials
 	}
+	s.resetFailure(accountKey)
 
 	if found.TotpEnabledAt != nil {
 		if err := s.sessions.RenewToken(ctx); err != nil {
@@ -485,9 +508,18 @@ func issueRecoveryCodes() ([]string, []string, error) {
 }
 
 func (s *Service) VerifySecondFactor(ctx context.Context, code string, meta SessionMeta) (User, error) {
+	if err := s.allowWindow(s.policies.VerifyIP, ipKey("verify", meta.IP)); err != nil {
+		return User{}, err
+	}
+
 	pendingUserID := s.sessions.GetString(ctx, pendingUserIDKey)
 	if pendingUserID == "" {
 		return User{}, apierror.ErrUnauthorized
+	}
+
+	accountKey := verifyAccountKey(pendingUserID)
+	if err := s.checkFailure(s.policies.VerifyAccount, accountKey); err != nil {
+		return User{}, err
 	}
 
 	found, err := s.repo.findUserByID(ctx, pendingUserID)
@@ -515,8 +547,10 @@ func (s *Service) VerifySecondFactor(ctx context.Context, code string, meta Sess
 		verified = consumed
 	}
 	if !verified {
+		s.recordFailure(s.policies.VerifyAccount, accountKey)
 		return User{}, s.failSecondFactor(ctx)
 	}
+	s.resetFailure(accountKey)
 
 	if err := s.establishSession(ctx, found.ID.String(), found.AuthVersion, meta); err != nil {
 		return User{}, err

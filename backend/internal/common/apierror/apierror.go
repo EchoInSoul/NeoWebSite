@@ -4,8 +4,11 @@ import (
 	"database/sql/driver"
 	"errors"
 	"io"
+	"math"
 	"net"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -42,6 +45,7 @@ var (
 	ErrMethodNotAllowed        = &Error{Type: TypeInvalidRequest, Code: "method_not_allowed"}
 	ErrInvalidCredentials      = &Error{Type: TypeAuthentication, Code: "invalid_credentials"}
 	ErrUnauthorized            = &Error{Type: TypeAuthentication, Code: "unauthorized"}
+	ErrRateLimit               = &Error{Type: TypeRateLimit, Code: "rate_limited"}
 	ErrTwoFactorRequired       = &Error{Type: TypeAuthentication, Code: "two_factor_required"}
 	ErrTwoFactorInvalidCode    = &Error{Type: TypeAuthentication, Code: "two_factor_invalid_code", Param: strPtr("code")}
 	ErrTwoFactorLocked         = &Error{Type: TypeAuthentication, Code: "two_factor_locked"}
@@ -77,6 +81,7 @@ var statusByCode = map[string]int{
 	"method_not_allowed":         http.StatusMethodNotAllowed,
 	"invalid_credentials":        http.StatusUnauthorized,
 	"unauthorized":               http.StatusUnauthorized,
+	"rate_limited":               http.StatusTooManyRequests,
 	"two_factor_required":        http.StatusUnauthorized,
 	"two_factor_invalid_code":    http.StatusUnauthorized,
 	"two_factor_locked":          http.StatusUnauthorized,
@@ -159,6 +164,33 @@ func strPtr(value string) *string {
 	return &value
 }
 
+type rateLimitError struct {
+	retryAfter time.Duration
+}
+
+func (e *rateLimitError) Error() string {
+	return ErrRateLimit.Code
+}
+
+func (e *rateLimitError) Unwrap() error {
+	return ErrRateLimit
+}
+
+func RateLimited(retryAfter time.Duration) error {
+	if retryAfter < time.Second {
+		retryAfter = time.Second
+	}
+	return &rateLimitError{retryAfter: retryAfter}
+}
+
+func writeRateLimitHeader(ctx *gin.Context, err error) {
+	var limited *rateLimitError
+	if !errors.As(err, &limited) {
+		return
+	}
+	ctx.Header("Retry-After", strconv.Itoa(int(math.Ceil(limited.retryAfter.Seconds()))))
+}
+
 func WithParam(err error, param string) error {
 	switch target := err.(type) {
 	case *Error:
@@ -209,10 +241,12 @@ func statusOf(err error) int {
 
 func Write(ctx *gin.Context, err error) {
 	status, body := resolve(err)
+	writeRateLimitHeader(ctx, err)
 	ctx.JSON(status, gin.H{"error": body})
 }
 
 func Abort(ctx *gin.Context, err error) {
 	status, body := resolve(err)
+	writeRateLimitHeader(ctx, err)
 	ctx.AbortWithStatusJSON(status, gin.H{"error": body})
 }

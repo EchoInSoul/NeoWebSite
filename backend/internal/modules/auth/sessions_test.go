@@ -99,7 +99,7 @@ func TestLoginStoresSessionMetadata(t *testing.T) {
 
 	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"User-Agent":      "probe/1.0",
-		"X-Forwarded-For": "203.0.113.7, 10.0.0.1",
+		"X-Forwarded-For": "203.0.113.7",
 	})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -128,7 +128,7 @@ func TestLoginStoresSessionMetadata(t *testing.T) {
 	}
 }
 
-func TestLoginTruncatesOversizedHeaders(t *testing.T) {
+func TestLoginTruncatesOversizedUserAgent(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
 	u, password := createTestUser(t, db, tag)
@@ -136,8 +136,7 @@ func TestLoginTruncatesOversizedHeaders(t *testing.T) {
 	client := testClient(t)
 
 	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
-		"User-Agent":      strings.Repeat("a", 2000),
-		"X-Forwarded-For": strings.Repeat("b", 200),
+		"User-Agent": strings.Repeat("a", 2000),
 	})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -146,12 +145,29 @@ func TestLoginTruncatesOversizedHeaders(t *testing.T) {
 
 	_, _, values := sessionRow(t, sm, ts.URL, client)
 	gotUA, _ := values[guard.SessionUserAgentKey].(string)
-	gotIP, _ := values[guard.SessionIPKey].(string)
 	if len(gotUA) != 512 {
 		t.Fatalf("user_agent length = %d, want 512", len(gotUA))
 	}
-	if len(gotIP) != 64 {
-		t.Fatalf("ip length = %d, want 64", len(gotIP))
+}
+
+func TestClientIPIgnoresForwardedForFromUntrustedPeer(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts, sm, _ := newTestAppWithTrustedProxies(t, db, nil)
+	client := testClient(t)
+
+	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+		"X-Forwarded-For": "203.0.113.7",
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	_, _, values := sessionRow(t, sm, ts.URL, client)
+	if got, _ := values[guard.SessionIPKey].(string); got != "127.0.0.1" {
+		t.Fatalf("ip = %q, want 127.0.0.1", got)
 	}
 }
 

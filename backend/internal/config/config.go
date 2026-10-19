@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -44,6 +45,7 @@ type Config struct {
 	DBMaxIdleConns    int
 	DBConnMaxLifetime time.Duration
 	SessionLifetime   time.Duration
+	TrustedProxies    []string
 	SMTPHost          string
 	SMTPPort          int
 	SMTPTLS           SMTPTLSMode
@@ -89,6 +91,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	trustedProxies, err := getTrustedProxies()
+	if err != nil {
+		return Config{}, err
+	}
+
 	smtp, err := loadSMTP()
 	if err != nil {
 		return Config{}, err
@@ -113,6 +120,7 @@ func Load() (Config, error) {
 		DBMaxIdleConns:    maxIdle,
 		DBConnMaxLifetime: lifetime,
 		SessionLifetime:   sessionLifetime,
+		TrustedProxies:    trustedProxies,
 		SMTPHost:          smtp.Host,
 		SMTPPort:          smtp.Port,
 		SMTPTLS:           smtp.TLS,
@@ -212,6 +220,31 @@ func getEnv(key string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getTrustedProxies() ([]string, error) {
+	raw := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
+	if raw == "" {
+		return []string{"127.0.0.1/32", "::1/128"}, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	proxies := make([]string, 0, len(parts))
+	for _, part := range parts {
+		entry := strings.TrimSpace(part)
+		if entry == "" {
+			return nil, errors.New("TRUSTED_PROXIES contains an empty entry")
+		}
+		if strings.Contains(entry, "/") {
+			if _, _, err := net.ParseCIDR(entry); err != nil {
+				return nil, fmt.Errorf("TRUSTED_PROXIES entry %q is not a valid CIDR", entry)
+			}
+		} else if net.ParseIP(entry) == nil {
+			return nil, fmt.Errorf("TRUSTED_PROXIES entry %q is not a valid IP", entry)
+		}
+		proxies = append(proxies, entry)
+	}
+	return proxies, nil
 }
 
 func getEnvInt(key string, fallback int) (int, error) {

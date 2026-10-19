@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -34,6 +35,7 @@ func TestRegistryMatchesSpec(t *testing.T) {
 		{"email_domain_not_allowed", ErrEmailDomainNotAllowed, TypeInvalidRequest, "email_domain_not_allowed", http.StatusBadRequest, strPtr("email")},
 		{"invalid_credentials", ErrInvalidCredentials, TypeAuthentication, "invalid_credentials", http.StatusUnauthorized, nil},
 		{"unauthorized", ErrUnauthorized, TypeAuthentication, "unauthorized", http.StatusUnauthorized, nil},
+		{"rate_limited", ErrRateLimit, TypeRateLimit, "rate_limited", http.StatusTooManyRequests, nil},
 		{"forbidden", ErrForbidden, TypePermission, "forbidden", http.StatusForbidden, nil},
 		{"grant_forbidden", ErrGrantForbidden, TypePermission, "grant_forbidden", http.StatusForbidden, nil},
 		{"owner_protected", ErrOwnerProtected, TypePermission, "owner_protected", http.StatusForbidden, nil},
@@ -248,22 +250,77 @@ func TestDatabaseOutageMapsToServiceUnavailable(t *testing.T) {
 	}
 }
 
+func TestRateLimitedSetsRetryAfter(t *testing.T) {
+	cases := []struct {
+		name      string
+		err       error
+		wantDelay string
+	}{
+		{"rounds up", RateLimited(1500 * time.Millisecond), "2"},
+		{"minimum one second", RateLimited(0), "1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(rr)
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+			Write(ctx, tc.err)
+
+			if rr.Code != http.StatusTooManyRequests {
+				t.Fatalf("status = %d, want 429", rr.Code)
+			}
+			if got := rr.Header().Get("Retry-After"); got != tc.wantDelay {
+				t.Fatalf("Retry-After = %q, want %q", got, tc.wantDelay)
+			}
+
+			var m map[string]map[string]any
+			if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			inner := m["error"]
+			if inner["type"] != string(TypeRateLimit) || inner["code"] != "rate_limited" {
+				t.Fatalf("error = %v", inner)
+			}
+			if inner["param"] != nil {
+				t.Fatalf("param = %v, want null", inner["param"])
+			}
+			if _, exists := inner["message"]; exists {
+				t.Fatal("message field must not exist in the error envelope")
+			}
+		})
+	}
+}
+
+func TestAbortRateLimitedSetsRetryAfter(t *testing.T) {
+	rr := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rr)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+	Abort(ctx, RateLimited(2*time.Second))
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rr.Code)
+	}
+	if got := rr.Header().Get("Retry-After"); got != "2" {
+		t.Fatalf("Retry-After = %q, want 2", got)
+	}
+}
+
 func TestRegistryIntegrity(t *testing.T) {
 	all := []*Error{
 		ErrInvalidRequest, ErrWeakPassword, ErrPasswordUnchanged, ErrInvalidPermission, ErrEmailDomainNotAllowed,
 		ErrMethodNotAllowed,
-		ErrInvalidCredentials, ErrUnauthorized, ErrTwoFactorRequired, ErrTwoFactorInvalidCode,
+		ErrInvalidCredentials, ErrUnauthorized, ErrRateLimit, ErrTwoFactorRequired, ErrTwoFactorInvalidCode,
 		ErrTwoFactorLocked, ErrForbidden, ErrGrantForbidden,
 		ErrOwnerProtected, ErrCannotModifySelf, ErrRegistrationClosed, ErrTwoFactorDisabled, ErrNotFound, ErrPresetGroupLocked,
 		ErrEmailTaken, ErrNicknameTaken, ErrAlreadyTaken, ErrGroupNameTaken,
 		ErrGroupNotEmpty, ErrLastOwner, ErrSettingConflict, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
 		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrServiceUnavailable, ErrInternal,
 	}
-	if len(all) != 32 {
-		t.Fatalf("sentinel count = %d, want 32", len(all))
+	if len(all) != 33 {
+		t.Fatalf("sentinel count = %d, want 33", len(all))
 	}
-	if len(statusByCode) != 32 {
-		t.Fatalf("statusByCode entries = %d, want 32", len(statusByCode))
+	if len(statusByCode) != 33 {
+		t.Fatalf("statusByCode entries = %d, want 33", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,
@@ -272,6 +329,7 @@ func TestRegistryIntegrity(t *testing.T) {
 		http.StatusForbidden:           TypePermission,
 		http.StatusNotFound:            TypeNotFound,
 		http.StatusConflict:            TypeConflict,
+		http.StatusTooManyRequests:     TypeRateLimit,
 		http.StatusInternalServerError: TypeServer,
 		http.StatusServiceUnavailable:  TypeServer,
 	}

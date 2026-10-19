@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 
 	"website/backend/internal/common/guard"
+	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/modules/access"
@@ -32,15 +33,10 @@ func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Serv
 	return ts, sm
 }
 
+var testTrustedProxies = []string{"127.0.0.1/32", "::1/128"}
+
 func newTestAppWithSessionsAndSettings(t *testing.T, db *database.Database, overrideSettings ...*settings.Service) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
-
-	sm := scs.New()
-	sm.Lifetime = time.Hour
-
-	gin.SetMode(gin.TestMode)
-	engine := gin.New()
-	api := engine.Group("/api/v1")
 
 	var settingsService *settings.Service
 	if len(overrideSettings) > 0 {
@@ -53,7 +49,44 @@ func newTestAppWithSessionsAndSettings(t *testing.T, db *database.Database, over
 		settingsService = settingsModule.Service
 	}
 
-	module := New(db, sm, testTOTPKey, settingsService)
+	return newTestAppWithProxySettings(t, db, testTrustedProxies, settingsService, ratelimit.New(), disabledRateLimitPolicies())
+}
+
+func newTestAppWithTrustedProxies(t *testing.T, db *database.Database, proxies []string) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+	t.Helper()
+
+	settingsModule, err := settings.New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	return newTestAppWithProxySettings(t, db, proxies, settingsModule.Service, ratelimit.New(), disabledRateLimitPolicies())
+}
+
+func newTestAppWithRatePolicies(t *testing.T, db *database.Database, policies rateLimitPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+	t.Helper()
+
+	settingsModule, err := settings.New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	return newTestAppWithProxySettings(t, db, testTrustedProxies, settingsModule.Service, ratelimit.New(), policies)
+}
+
+func newTestAppWithProxySettings(t *testing.T, db *database.Database, proxies []string, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+	t.Helper()
+
+	sm := scs.New()
+	sm.Lifetime = time.Hour
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	if err := engine.SetTrustedProxies(proxies); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+	api := engine.Group("/api/v1")
+
+	service := newService(db, sm, testTOTPKey, settingsService, limiter, policies)
+	module := &Module{Service: service, controller: newController(service)}
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))

@@ -14,6 +14,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/google/uuid"
 
+	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
 	"website/backend/internal/database/ent/recoverycode"
@@ -1076,7 +1077,7 @@ func TestTwoFactorSetupConcurrentCallsShareSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
 	}
-	svc := newService(db, scs.New(), testTOTPKey, settingsModule.Service)
+	svc := newService(db, scs.New(), testTOTPKey, settingsModule.Service, ratelimit.New(), disabledRateLimitPolicies())
 
 	results := make([]TwoFactorSetupResponse, 8)
 	errs := make([]error, 8)

@@ -4,6 +4,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
 
+	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
 	"website/backend/internal/modules/settings"
 )
@@ -14,8 +15,8 @@ type Module struct {
 	controller *controller
 }
 
-func New(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service) *Module {
-	service := newService(db, sessions, totpKey, settingsService)
+func New(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter) *Module {
+	service := newService(db, sessions, totpKey, settingsService, limiter, defaultRateLimitPolicies())
 	return &Module{
 		Service:    service,
 		controller: newController(service),

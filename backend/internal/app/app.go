@@ -15,6 +15,7 @@ import (
 
 	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/guard"
+	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/config"
 	"website/backend/internal/database"
 	"website/backend/internal/modules/access"
@@ -51,7 +52,9 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	engine.Use(gin.Logger(), recoveryHandler())
 	engine.HandleMethodNotAllowed = true
 
-	_ = engine.SetTrustedProxies(nil)
+	if err := engine.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		return nil, err
+	}
 
 	sessions := newSessionManager(cfg, db)
 
@@ -62,7 +65,8 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 
 	mailModule := mail.New(cfg)
 
-	authModule := auth.New(db, sessions, cfg.TOTPEncryptionKey, settingsModule.Service)
+	limiter := ratelimit.New()
+	authModule := auth.New(db, sessions, cfg.TOTPEncryptionKey, settingsModule.Service, limiter)
 	authModule.Register(api)
 	settingsModule.Register(api)
 
