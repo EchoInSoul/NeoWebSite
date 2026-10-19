@@ -26,6 +26,8 @@ import { Switch } from "@/components/ui/switch";
 import { useLoginSettingsSave } from "@/hooks/use-login-settings-save";
 import {
   CAPTCHA_PROVIDER_BUILTIN,
+  SESSION_MAX_AGE_DAYS_MAX,
+  SESSION_MAX_AGE_DAYS_MIN,
   type LoginSettingsValues,
 } from "@/lib/login-settings";
 
@@ -56,6 +58,9 @@ export function LoginControlForm({
   };
   const captchaProviderItems = {
     [CAPTCHA_PROVIDER_BUILTIN]: t("captchaProviderBuiltin"),
+    ...(values.captchaProvider === CAPTCHA_PROVIDER_BUILTIN
+      ? {}
+      : { [values.captchaProvider]: values.captchaProvider }),
   };
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -82,8 +87,8 @@ export function LoginControlForm({
                   <Input
                     aria-label={t("sessionMaxAge")}
                     className="w-28"
-                    max={30}
-                    min={1}
+                    max={SESSION_MAX_AGE_DAYS_MAX}
+                    min={SESSION_MAX_AGE_DAYS_MIN}
                     onChange={(event) =>
                       updateSessionMaxAgeDays(event.target.value)
                     }
@@ -184,6 +189,12 @@ export function LoginControlForm({
                     <SelectItem value={CAPTCHA_PROVIDER_BUILTIN}>
                       {t("captchaProviderBuiltin")}
                     </SelectItem>
+                    {values.captchaProvider ===
+                    CAPTCHA_PROVIDER_BUILTIN ? null : (
+                      <SelectItem value={values.captchaProvider}>
+                        {values.captchaProvider}
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               }

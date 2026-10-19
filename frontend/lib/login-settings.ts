@@ -11,6 +11,9 @@ export type LoginSettingsIssue = "sessionMaxAgeDaysRange";
 
 export const CAPTCHA_PROVIDER_BUILTIN = "builtin";
 
+export const SESSION_MAX_AGE_DAYS_MIN = 1;
+export const SESSION_MAX_AGE_DAYS_MAX = 30;
+
 const LOGIN_PATCH_KEYS: Record<keyof LoginSettingsValues, string> = {
   sessionMaxAgeEnabled: "session_max_age_enabled",
   sessionMaxAgeDays: "session_max_age_days",
@@ -38,9 +41,7 @@ export function parseLoginGroupValues(
     typeof raw.totp_enabled !== "boolean" ||
     typeof raw.password_reset_enabled !== "boolean" ||
     typeof raw.captcha_enabled !== "boolean" ||
-    typeof raw.captcha_provider !== "string" ||
-    (raw.captcha_provider !== "" &&
-      raw.captcha_provider !== CAPTCHA_PROVIDER_BUILTIN)
+    typeof raw.captcha_provider !== "string"
   ) {
     return null;
   }
@@ -51,7 +52,10 @@ export function parseLoginGroupValues(
     totpEnabled: raw.totp_enabled,
     passwordResetEnabled: raw.password_reset_enabled,
     captchaEnabled: raw.captcha_enabled,
-    captchaProvider: CAPTCHA_PROVIDER_BUILTIN,
+    captchaProvider:
+      raw.captcha_provider === ""
+        ? CAPTCHA_PROVIDER_BUILTIN
+        : raw.captcha_provider,
   };
 }
 
@@ -67,16 +71,24 @@ export function hasLoginSettingsChanges(
 function sessionMaxAgeDaysInvalid(raw: string): boolean {
   const parsed = Number(raw);
 
-  return !Number.isInteger(parsed) || parsed < 1 || parsed > 30;
+  return (
+    !Number.isInteger(parsed) ||
+    parsed < SESSION_MAX_AGE_DAYS_MIN ||
+    parsed > SESSION_MAX_AGE_DAYS_MAX
+  );
 }
 
 export function validateLoginSettings(
   values: LoginSettingsValues,
   baseline: LoginSettingsValues,
 ): LoginSettingsIssue | null {
+  const daysWritten = values.sessionMaxAgeDays !== baseline.sessionMaxAgeDays;
+  const enabledTurnedOn =
+    values.sessionMaxAgeEnabled !== baseline.sessionMaxAgeEnabled &&
+    values.sessionMaxAgeEnabled;
+
   if (
-    (values.sessionMaxAgeEnabled ||
-      values.sessionMaxAgeDays !== baseline.sessionMaxAgeDays) &&
+    (daysWritten || enabledTurnedOn) &&
     sessionMaxAgeDaysInvalid(values.sessionMaxAgeDays)
   ) {
     return "sessionMaxAgeDaysRange";
@@ -103,6 +115,8 @@ export function buildLoginSettingsPatch(
       patch[LOGIN_PATCH_KEYS[field]] = values[field];
     }
   }
+
+  patch[LOGIN_PATCH_KEYS.captchaProvider] = values.captchaProvider;
 
   return patch;
 }
