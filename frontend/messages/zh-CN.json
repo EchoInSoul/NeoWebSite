@@ -105,6 +105,7 @@
     "twoFactorSetupLoading": "正在生成密钥…",
     "twoFactorSetupFailed": "密钥生成失败",
     "twoFactorSiteDisabled": "本站当前未开放两步验证",
+    "twoFactorContinue": "继续",
     "twoFactorVerifying": "正在验证…",
     "twoFactorVerifyFailed": "验证失败，请稍后重试",
     "twoFactorInvalidCode": "验证码不正确，请重新输入",

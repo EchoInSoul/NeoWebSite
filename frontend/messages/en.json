@@ -105,6 +105,7 @@
     "twoFactorSetupLoading": "Generating secret…",
     "twoFactorSetupFailed": "Could not generate the secret",
     "twoFactorSiteDisabled": "Two-factor authentication is currently disabled on this site",
+    "twoFactorContinue": "Continue",
     "twoFactorVerifying": "Verifying…",
     "twoFactorVerifyFailed": "Verification failed, please try again later",
     "twoFactorInvalidCode": "That code is not correct, try again",

@@ -1,15 +1,29 @@
 "use client";
 
-import { type ChangeEvent, type KeyboardEvent } from "react";
-import { Check, Copy, ExternalLink, LoaderCircle } from "lucide-react";
+import { useState, type ChangeEvent, type KeyboardEvent } from "react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  KeyRound,
+  LoaderCircle,
+} from "lucide-react";
 import { cn } from "cn";
 import { QRCodeSVG } from "qrcode.react";
 import { useTranslations } from "next-intl";
 
+import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useTwoFactorSetup } from "@/hooks/use-two-factor-setup";
 
@@ -26,8 +40,10 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
   const t = useTranslations("uc");
   const tCommon = useTranslations("common");
   const { isCopied, copy } = useCopyToClipboard();
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const {
     setup,
+    password,
     isLoading,
     isLoadFailed,
     isDisabledBySite,
@@ -36,6 +52,8 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
     recoveryCodes,
     isBusy,
     retrySetup,
+    startSetup,
+    changePassword,
     submitCode,
     changeCode,
     finishRecovery,
@@ -52,9 +70,93 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
     }
   }
 
+  function handlePasswordKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void startSetup();
+    }
+  }
+
   function finishSetup() {
     finishRecovery();
     onDone();
+  }
+
+  if (setup === null) {
+    const passwordStatusText = isLoading
+      ? t("twoFactorSetupLoading")
+      : isDisabledBySite
+        ? t("twoFactorSiteDisabled")
+        : isLoadFailed
+          ? t("twoFactorSetupFailed")
+          : "";
+
+    return (
+      <ConsoleSettingsRow
+        control={
+          <div className="flex w-70 flex-col items-start gap-2">
+            <div className="flex w-full items-center gap-2">
+              <InputGroup className="min-w-0 flex-1">
+                <InputGroupInput
+                  aria-label={t("currentPassword")}
+                  autoComplete="current-password"
+                  disabled={isLoading}
+                  onChange={(event) => changePassword(event.target.value)}
+                  onKeyDown={handlePasswordKeyDown}
+                  type={isPasswordVisible ? "text" : "password"}
+                  value={password}
+                />
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    aria-label={
+                      isPasswordVisible
+                        ? tCommon("hidePassword")
+                        : tCommon("showPassword")
+                    }
+                    disabled={isLoading}
+                    onClick={() => setIsPasswordVisible((visible) => !visible)}
+                    size="icon-xs"
+                  >
+                    {isPasswordVisible ? <EyeOff /> : <Eye />}
+                  </InputGroupButton>
+                </InputGroupAddon>
+              </InputGroup>
+              <Button
+                disabled={password === "" || isLoading}
+                onClick={() => void startSetup()}
+                type="button"
+              >
+                {t("twoFactorContinue")}
+              </Button>
+            </div>
+            <p
+              aria-live="polite"
+              className={cn(
+                "flex min-h-4 items-center gap-1.5 text-xs leading-4",
+                isLoadFailed ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {isLoading ? (
+                <LoaderCircle className="size-3 animate-spin" />
+              ) : null}
+              {passwordStatusText}
+              {isLoadFailed ? (
+                <Button
+                  onClick={retrySetup}
+                  size="xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  {tCommon("retry")}
+                </Button>
+              ) : null}
+            </p>
+          </div>
+        }
+        icon={<KeyRound />}
+        label={t("currentPassword")}
+      />
+    );
   }
 
   const isPending = isLoading || submitState === "verifying";
@@ -74,18 +176,14 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
     <>
       <div className="flex items-center gap-8 px-5 pt-4 pb-[18px]">
         <div className="relative w-48 shrink-0 p-2">
-          {setup === null ? (
-            <Skeleton className="size-44 rounded-sm" />
-          ) : (
-            <QRCodeSVG
-              bgColor="#ffffff"
-              fgColor="#000000"
-              level="M"
-              marginSize={2}
-              size={176}
-              value={setup.otpauthUrl}
-            />
-          )}
+          <QRCodeSVG
+            bgColor="#ffffff"
+            fgColor="#000000"
+            level="M"
+            marginSize={2}
+            size={176}
+            value={setup.otpauthUrl}
+          />
           <span className="absolute top-0 left-0 size-4 border-t border-l border-border" />
           <span className="absolute top-0 right-0 size-4 border-t border-r border-border" />
           <span className="absolute bottom-0 left-0 size-4 border-b border-l border-border" />
@@ -101,18 +199,14 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
               <div className="flex w-full items-center gap-2">
                 <Input
                   className={valueInputClassName}
-                  disabled={setup === null}
                   id="two-factor-secret"
                   readOnly
-                  value={setup === null ? "" : groupSecret(setup.secret)}
+                  value={groupSecret(setup.secret)}
                 />
                 <Button
                   aria-label={t("twoFactorCopySecret")}
-                  disabled={setup === null}
                   onClick={() => {
-                    if (setup !== null) {
-                      void copy(setup.secret);
-                    }
+                    void copy(setup.secret);
                   }}
                   size="icon"
                   title={t("twoFactorCopySecret")}
@@ -127,14 +221,13 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
                 <Input
                   aria-label={t("twoFactorOpenAuthenticator")}
                   className={valueInputClassName}
-                  disabled={setup === null}
                   readOnly
-                  value={setup?.otpauthUrl ?? ""}
+                  value={setup.otpauthUrl}
                 />
                 <Button
                   aria-label={t("twoFactorOpenAuthenticator")}
                   nativeButton={false}
-                  render={<a href={setup?.otpauthUrl} />}
+                  render={<a href={setup.otpauthUrl} />}
                   size="icon"
                   title={t("twoFactorOpenAuthenticator")}
                   variant="outline"
@@ -152,7 +245,7 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
                 aria-invalid={submitState === "invalid"}
                 autoComplete="one-time-code"
                 className="w-70"
-                disabled={isBusy || setup === null}
+                disabled={isBusy}
                 id="two-factor-code"
                 inputMode="numeric"
                 maxLength={6}

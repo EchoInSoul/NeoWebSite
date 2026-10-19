@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -28,16 +28,22 @@ export function useTwoFactorSetup() {
   const tCommon = useTranslations("common");
   const router = useRouter();
   const [setup, setSetup] = useState<TwoFactorSetup | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [isLoadFailed, setIsLoadFailed] = useState(false);
   const [isDisabledBySite, setIsDisabledBySite] = useState(false);
   const [code, setCode] = useState("");
   const [submitState, setSubmitState] = useState<TwoFactorSubmitState>("idle");
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
-  const hasRequestedSetup = useRef(false);
+  const isStarting = useRef(false);
   const isSubmitting = useRef(false);
 
-  const loadSetup = useCallback(async () => {
+  const startSetup = useCallback(async () => {
+    if (password === "" || isStarting.current) {
+      return;
+    }
+
+    isStarting.current = true;
     setIsLoading(true);
     setIsLoadFailed(false);
     setIsDisabledBySite(false);
@@ -45,7 +51,7 @@ export function useTwoFactorSetup() {
     try {
       const payload = await apiRequest<TwoFactorSetupPayload>(
         "/api/v1/users/me/2fa/setup",
-        { method: "POST" },
+        { method: "POST", body: { password } },
       );
       setSetup({
         secret: payload.secret,
@@ -53,6 +59,10 @@ export function useTwoFactorSetup() {
       });
     } catch (error) {
       if (error instanceof ApiError) {
+        if (error.code === "invalid_credentials") {
+          toast.error(t("invalidPassword"));
+          return;
+        }
         if (error.status === 401) {
           return;
         }
@@ -75,28 +85,27 @@ export function useTwoFactorSetup() {
           : t("twoFactorSetupFailed"),
       );
     } finally {
+      isStarting.current = false;
       setIsLoading(false);
     }
-  }, [router, t, tCommon]);
+  }, [password, router, t, tCommon]);
 
-  useEffect(() => {
-    if (hasRequestedSetup.current) {
-      return;
-    }
-    hasRequestedSetup.current = true;
-    void loadSetup();
-  }, [loadSetup]);
+  const changePassword = useCallback((value: string) => {
+    setPassword(value);
+    setIsLoadFailed(false);
+  }, []);
 
   const retrySetup = useCallback(() => {
-    void loadSetup();
-  }, [loadSetup]);
+    void startSetup();
+  }, [startSetup]);
 
   const submitCode = useCallback(
     async (submittedCode: string) => {
       if (
         setup === null ||
         isSubmitting.current ||
-        submittedCode.length !== codeLength
+        submittedCode.length !== codeLength ||
+        password === ""
       ) {
         return;
       }
@@ -107,14 +116,22 @@ export function useTwoFactorSetup() {
       try {
         const payload = await apiRequest<RecoveryCodesPayload>(
           "/api/v1/users/me/2fa/enable",
-          { method: "POST", body: { code: submittedCode } },
+          { method: "POST", body: { code: submittedCode, password } },
         );
         setSubmitState("idle");
+        setPassword("");
         setRecoveryCodes(payload.recovery_codes);
       } catch (error) {
         if (error instanceof ApiError) {
           if (error.code === "two_factor_invalid_code") {
             setSubmitState("invalid");
+            return;
+          }
+          if (error.code === "invalid_credentials") {
+            setSubmitState("idle");
+            setSetup(null);
+            setPassword("");
+            toast.error(t("invalidPassword"));
             return;
           }
           if (error.status === 401) {
@@ -134,7 +151,7 @@ export function useTwoFactorSetup() {
           }
           if (error.code === "two_factor_not_setup") {
             setSubmitState("idle");
-            void loadSetup();
+            void startSetup();
             return;
           }
         }
@@ -149,7 +166,7 @@ export function useTwoFactorSetup() {
         isSubmitting.current = false;
       }
     },
-    [loadSetup, router, setup, t, tCommon],
+    [password, router, setup, startSetup, t, tCommon],
   );
 
   const changeCode = useCallback(
@@ -167,6 +184,7 @@ export function useTwoFactorSetup() {
 
   const finishRecovery = useCallback(() => {
     setRecoveryCodes(null);
+    setPassword("");
     router.refresh();
   }, [router]);
 
@@ -174,6 +192,7 @@ export function useTwoFactorSetup() {
 
   return {
     setup,
+    password,
     isLoading,
     isLoadFailed,
     isDisabledBySite,
@@ -182,6 +201,8 @@ export function useTwoFactorSetup() {
     recoveryCodes,
     isBusy,
     retrySetup,
+    startSetup,
+    changePassword,
     submitCode,
     changeCode,
     finishRecovery,
