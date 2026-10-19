@@ -34,6 +34,15 @@ type TwoFactorCodeRequest struct {
 	Code string `json:"code"`
 }
 
+type TwoFactorSetupRequest struct {
+	Password string `json:"password"`
+}
+
+type TwoFactorEnableRequest struct {
+	Code     string `json:"code"`
+	Password string `json:"password"`
+}
+
 type TwoFactorDisableRequest struct {
 	Password string `json:"password"`
 }

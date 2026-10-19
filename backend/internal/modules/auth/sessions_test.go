@@ -574,8 +574,8 @@ func TestTwoFactorLoginClearsSessionMetadata(t *testing.T) {
 	client := testClient(t)
 
 	loginOK(t, client, ts.URL, u.Email, password)
-	setup := setup2FA(t, client, ts.URL)
-	enable2FA(t, client, ts.URL, setup.Secret)
+	setup := setup2FA(t, client, ts.URL, password)
+	enable2FA(t, client, ts.URL, setup.Secret, password)
 
 	resp := loginRaw(t, client, ts.URL, u.Email, password)
 	defer resp.Body.Close()

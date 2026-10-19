@@ -154,8 +154,8 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 		return apierror.ErrWeakPassword
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(currentPassword)); err != nil {
-		return apierror.ErrInvalidCredentials
+	if err := verifyPassword(found, currentPassword); err != nil {
+		return err
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(newPassword)); err == nil {
@@ -273,12 +273,15 @@ func isFreshTOTPSetup(row *ent.User, now time.Time) bool {
 	return row.TotpSecret != nil && row.TotpSetupAt != nil && now.Sub(*row.TotpSetupAt) < totpSetupReuseWindow
 }
 
-func (s *Service) SetupTOTP(ctx context.Context, userID string) (TwoFactorSetupResponse, error) {
+func (s *Service) SetupTOTP(ctx context.Context, userID, password string) (TwoFactorSetupResponse, error) {
 	if !s.twoFactorAvailable(ctx) {
 		return TwoFactorSetupResponse{}, apierror.ErrTwoFactorDisabled
 	}
 	found, err := s.activeUser(ctx, userID)
 	if err != nil {
+		return TwoFactorSetupResponse{}, err
+	}
+	if err := verifyPassword(found, password); err != nil {
 		return TwoFactorSetupResponse{}, err
 	}
 	if found.TotpEnabledAt != nil {
@@ -334,12 +337,15 @@ func (s *Service) reuseTOTPSetup(accountName, sealed string) (TwoFactorSetupResp
 	return TwoFactorSetupResponse{Secret: setup.Secret, OTPAuthURL: setup.OTPAuthURL}, nil
 }
 
-func (s *Service) EnableTOTP(ctx context.Context, userID, code, currentToken string) (RecoveryCodesResponse, error) {
+func (s *Service) EnableTOTP(ctx context.Context, userID, code, password, currentToken string) (RecoveryCodesResponse, error) {
 	if !s.twoFactorAvailable(ctx) {
 		return RecoveryCodesResponse{}, apierror.ErrTwoFactorDisabled
 	}
 	found, err := s.activeUser(ctx, userID)
 	if err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+	if err := verifyPassword(found, password); err != nil {
 		return RecoveryCodesResponse{}, err
 	}
 	if found.TotpSecret == nil {
@@ -393,8 +399,8 @@ func (s *Service) DisableTOTP(ctx context.Context, userID, password, currentToke
 	if found.TotpSecret == nil {
 		return apierror.ErrTwoFactorNotSetup
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(password)); err != nil {
-		return apierror.ErrInvalidCredentials
+	if err := verifyPassword(found, password); err != nil {
+		return err
 	}
 
 	if err := s.revokeOtherSessions(userID, currentToken); err != nil {
@@ -411,8 +417,8 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID, password 
 	if found.TotpEnabledAt == nil {
 		return RecoveryCodesResponse{}, apierror.ErrTwoFactorNotEnabled
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(password)); err != nil {
-		return RecoveryCodesResponse{}, apierror.ErrInvalidCredentials
+	if err := verifyPassword(found, password); err != nil {
+		return RecoveryCodesResponse{}, err
 	}
 
 	codes, hashes, err := issueRecoveryCodes()
@@ -443,6 +449,13 @@ func (s *Service) activeUser(ctx context.Context, userID string) (*ent.User, err
 		return nil, err
 	}
 	return found, nil
+}
+
+func verifyPassword(found *ent.User, password string) error {
+	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(password)); err != nil {
+		return apierror.ErrInvalidCredentials
+	}
+	return nil
 }
 
 func issueRecoveryCodes() ([]string, []string, error) {

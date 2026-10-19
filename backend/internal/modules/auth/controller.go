@@ -169,7 +169,13 @@ func (c *controller) changePassword(ctx *gin.Context) {
 }
 
 func (c *controller) setupTwoFactor(ctx *gin.Context) {
-	resp, err := c.service.SetupTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey))
+	var req TwoFactorSetupRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Password == "" {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	resp, err := c.service.SetupTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Password)
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -179,8 +185,8 @@ func (c *controller) setupTwoFactor(ctx *gin.Context) {
 }
 
 func (c *controller) enableTwoFactor(ctx *gin.Context) {
-	var req TwoFactorCodeRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil || req.Code == "" {
+	var req TwoFactorEnableRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Code == "" || req.Password == "" {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
@@ -191,7 +197,7 @@ func (c *controller) enableTwoFactor(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.service.EnableTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Code, currentToken)
+	resp, err := c.service.EnableTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Code, req.Password, currentToken)
 	if err != nil {
 		apierror.Write(ctx, err)
 		return

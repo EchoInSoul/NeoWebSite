@@ -103,7 +103,7 @@ func TestSetupTOTPBlockedWhenGloballyDisabled(t *testing.T) {
 	client := testClient(t)
 	loginOK(t, client, ts.URL, user.Email, password)
 
-	resp := postRaw(t, client, ts.URL+"/api/v1/users/me/2fa/setup", "")
+	resp := post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password})
 	if resp.StatusCode != http.StatusForbidden {
 		resp.Body.Close()
 		t.Fatalf("setup status = %d, want 403", resp.StatusCode)
@@ -122,13 +122,13 @@ func TestEnableTOTPBlockedWhenGloballyDisabled(t *testing.T) {
 
 	client := testClient(t)
 	loginOK(t, client, ts.URL, user.Email, password)
-	setup := setup2FA(t, client, ts.URL)
+	setup := setup2FA(t, client, ts.URL, password)
 
 	if err := svc.SetBool(context.Background(), "auth", "totp_enabled", false); err != nil {
 		t.Fatalf("disable totp: %v", err)
 	}
 
-	resp := post2FA(t, client, ts.URL, "enable", TwoFactorCodeRequest{Code: codeAt(t, setup.Secret, currentWindow())})
+	resp := post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: codeAt(t, setup.Secret, currentWindow()), Password: password})
 	if resp.StatusCode != http.StatusForbidden {
 		resp.Body.Close()
 		t.Fatalf("enable status = %d, want 403", resp.StatusCode)
@@ -147,8 +147,8 @@ func TestLoginStillRequiresSecondFactorWhenSiteSwitchOff(t *testing.T) {
 
 	client := testClient(t)
 	loginOK(t, client, ts.URL, user.Email, password)
-	setup := setup2FA(t, client, ts.URL)
-	enable2FA(t, client, ts.URL, setup.Secret)
+	setup := setup2FA(t, client, ts.URL, password)
+	enable2FA(t, client, ts.URL, setup.Secret, password)
 
 	if err := svc.SetBool(context.Background(), "auth", "totp_enabled", false); err != nil {
 		t.Fatalf("disable totp: %v", err)
@@ -166,8 +166,8 @@ func TestRecoveryCodesStillWorkWhenSiteSwitchOff(t *testing.T) {
 
 	client := testClient(t)
 	loginOK(t, client, ts.URL, user.Email, password)
-	setup := setup2FA(t, client, ts.URL)
-	enable2FA(t, client, ts.URL, setup.Secret)
+	setup := setup2FA(t, client, ts.URL, password)
+	enable2FA(t, client, ts.URL, setup.Secret, password)
 
 	if err := svc.SetBool(context.Background(), "auth", "totp_enabled", false); err != nil {
 		t.Fatalf("disable totp: %v", err)
@@ -198,8 +198,8 @@ func TestSecondFactorVerifyAppliesConfiguredSessionMaxAge(t *testing.T) {
 
 	client := testClient(t)
 	loginOK(t, client, ts.URL, user.Email, password)
-	setup := setup2FA(t, client, ts.URL)
-	enable2FA(t, client, ts.URL, setup.Secret)
+	setup := setup2FA(t, client, ts.URL, password)
+	enable2FA(t, client, ts.URL, setup.Secret, password)
 	logoutOK(t, client, ts.URL)
 
 	pending := testClient(t)
@@ -252,7 +252,7 @@ func TestLoginAndTOTPSetupFailOpenWhenSettingsUnavailable(t *testing.T) {
 		t.Fatalf("session lifetime = %v, want about %v (fail-open)", remaining, sm.Lifetime)
 	}
 
-	setup2FA(t, client, ts.URL)
+	setup2FA(t, client, ts.URL, password)
 }
 
 func TestDisableTOTPStillWorksWhenGloballyDisabled(t *testing.T) {
@@ -264,8 +264,8 @@ func TestDisableTOTPStillWorksWhenGloballyDisabled(t *testing.T) {
 
 	client := testClient(t)
 	loginOK(t, client, ts.URL, user.Email, password)
-	setup := setup2FA(t, client, ts.URL)
-	enable2FA(t, client, ts.URL, setup.Secret)
+	setup := setup2FA(t, client, ts.URL, password)
+	enable2FA(t, client, ts.URL, setup.Secret, password)
 
 	if err := svc.SetBool(context.Background(), "auth", "totp_enabled", false); err != nil {
 		t.Fatalf("disable totp: %v", err)
