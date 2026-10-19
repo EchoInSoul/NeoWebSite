@@ -4,13 +4,13 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  CircleUserRound,
   ExternalLink,
   Languages,
   LogOut,
   Monitor,
   Moon,
   Sun,
+  UserCog,
   UserRound,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -120,7 +120,7 @@ export function ConsoleUserMenu({ displayName }: { displayName?: string }) {
                 />
               }
             >
-              <CircleUserRound />
+              <UserCog />
               <span>{t("profile")}</span>
             </DropdownMenuItem>
           ) : null}

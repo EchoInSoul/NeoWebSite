@@ -11,7 +11,7 @@ export function sidebarLabelFade(isCollapsed: boolean) {
 }
 
 export const SIDEBAR_SLIDE_TRANSITION =
-  "transition-[translate,visibility] duration-[360ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none";
+  "transition-[translate] duration-[360ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none";
 
 export const SIDEBAR_SLIDE_DURATION_MS = 360;
 

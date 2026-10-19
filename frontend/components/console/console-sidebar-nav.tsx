@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -46,8 +47,6 @@ import {
 
 import {
   ConsoleSidebarSection,
-  type ConsoleSidebarBack,
-  type ConsoleSidebarSectionGroup,
   type ConsoleSidebarSectionItem,
 } from "./console-sidebar-section";
 
@@ -65,13 +64,6 @@ const SETTINGS_USERS_HREF = `${PANEL_PREFIXES.settings}/users`;
 const SLIDE_FALLBACK_MS = SIDEBAR_SLIDE_DURATION_MS + 80;
 
 type PanelKey = SidebarPanel;
-
-type ConsoleSidebarPanelContent = {
-  title: string;
-  tooltip: string;
-  back: ConsoleSidebarBack;
-  groups: ConsoleSidebarSectionGroup[];
-};
 
 type SidebarSlideState = {
   offset: SidebarSlideOffset;
@@ -127,7 +119,9 @@ function SidebarSlidePanel({
       onTransitionEnd={onTransitionEnd}
       className={cn(
         "absolute inset-0 no-scrollbar overflow-y-auto bg-white dark:bg-neutral-950",
-        slideState.isVisible ? "visible" : "invisible",
+        slideState.isVisible
+          ? "visible"
+          : "invisible [content-visibility:hidden]",
         slideState.isSettled ? "z-10" : "pointer-events-none z-0",
         slideState.isVisible ? SIDEBAR_SLIDE_TRANSITION : "transition-none",
         sidebarSlideOffsetClass(slideState.offset, isCollapsed),
@@ -226,157 +220,162 @@ export function ConsoleSidebarNav({
     };
   }
 
-  const panels: Record<
-    Exclude<PanelKey, "main">,
-    ConsoleSidebarPanelContent
-  > = {
-    uc: {
-      title: t("profile"),
-      tooltip: t("backToConsole"),
-      back: {
-        kind: "link",
-        href: "/console",
-        onNavigate: () => {
-          flushSync(() => {
-            setDisplayedPanel("main");
-          });
-        },
-      },
-      groups: [
-        {
-          label: t("account"),
-          items: [
-            {
-              href: "/console/uc/profile",
-              label: t("personalInfo"),
-              icon: <CircleUserRound />,
-              className: "mb-1",
+  const subPanels = useMemo<Record<Exclude<PanelKey, "main">, ReactNode>>(
+    () => ({
+      uc: (
+        <ConsoleSidebarSection
+          title={t("profile")}
+          tooltip={t("backToConsole")}
+          back={{
+            kind: "link",
+            href: "/console",
+            onNavigate: () => {
+              flushSync(() => {
+                setDisplayedPanel("main");
+              });
             },
+          }}
+          groups={[
             {
-              href: "/console/uc/session",
-              label: t("sessions"),
-              icon: <MonitorSmartphone />,
-            },
-          ],
-        },
-      ],
-    },
-    settings: {
-      title: t("settings"),
-      tooltip: t("backToConsole"),
-      back: {
-        kind: "button",
-        onClick: () => {
-          flushSync(() => {
-            setDisplayedPanel("main");
-          });
-          settingsEntryRef.current?.focus();
-        },
-      },
-      groups: [
-        {
-          label: t("settings"),
-          items: canViewSettings
-            ? [
+              label: t("account"),
+              items: [
                 {
-                  href: SETTINGS_GENERAL_HREF,
-                  label: ts("general"),
-                  icon: <SlidersHorizontal />,
-                } satisfies ConsoleSidebarSectionItem,
-              ]
-            : [],
-        },
-        {
-          label: t("signInAndRegister"),
-          items: canViewRegister
-            ? [
-                {
-                  href: SETTINGS_REGISTER_HREF,
-                  label: ts("register"),
-                  icon: <UserRoundPlus />,
+                  href: "/console/uc/profile",
+                  label: t("personalInfo"),
+                  icon: <CircleUserRound />,
                   className: "mb-1",
-                } satisfies ConsoleSidebarSectionItem,
+                },
                 {
-                  href: SETTINGS_LOGIN_HREF,
-                  label: ts("loginControl"),
-                  icon: <LogIn />,
-                } satisfies ConsoleSidebarSectionItem,
-              ]
-            : [],
-        },
-        {
-          label: t("users"),
-          items: [
-            ...(canViewUsers
-              ? [
-                  {
-                    href: SETTINGS_USERS_HREF,
-                    label: ts("users"),
-                    icon: <UserRoundCog />,
-                    className: canViewGroups ? "mb-1" : undefined,
-                  } satisfies ConsoleSidebarSectionItem,
-                ]
-              : []),
-            ...(canViewGroups
-              ? [
-                  {
-                    href: SETTINGS_GROUPS_HREF,
-                    label: ts("groups"),
-                    icon: <Users />,
-                  } satisfies ConsoleSidebarSectionItem,
-                ]
-              : []),
-          ],
-        },
-      ].filter((group) => group.items.length > 0),
-    },
-  };
+                  href: "/console/uc/session",
+                  label: t("sessions"),
+                  icon: <MonitorSmartphone />,
+                },
+              ],
+            },
+          ]}
+        />
+      ),
+      settings: (
+        <ConsoleSidebarSection
+          title={t("settings")}
+          tooltip={t("backToConsole")}
+          back={{
+            kind: "button",
+            onClick: () => {
+              flushSync(() => {
+                setDisplayedPanel("main");
+              });
+              settingsEntryRef.current?.focus();
+            },
+          }}
+          groups={[
+            {
+              label: t("settings"),
+              items: canViewSettings
+                ? [
+                    {
+                      href: SETTINGS_GENERAL_HREF,
+                      label: ts("general"),
+                      icon: <SlidersHorizontal />,
+                    } satisfies ConsoleSidebarSectionItem,
+                  ]
+                : [],
+            },
+            {
+              label: t("signInAndRegister"),
+              items: canViewRegister
+                ? [
+                    {
+                      href: SETTINGS_REGISTER_HREF,
+                      label: ts("register"),
+                      icon: <UserRoundPlus />,
+                      className: "mb-1",
+                    } satisfies ConsoleSidebarSectionItem,
+                    {
+                      href: SETTINGS_LOGIN_HREF,
+                      label: ts("loginControl"),
+                      icon: <LogIn />,
+                    } satisfies ConsoleSidebarSectionItem,
+                  ]
+                : [],
+            },
+            {
+              label: t("users"),
+              items: [
+                ...(canViewUsers
+                  ? [
+                      {
+                        href: SETTINGS_USERS_HREF,
+                        label: ts("users"),
+                        icon: <UserRoundCog />,
+                        className: canViewGroups ? "mb-1" : undefined,
+                      } satisfies ConsoleSidebarSectionItem,
+                    ]
+                  : []),
+                ...(canViewGroups
+                  ? [
+                      {
+                        href: SETTINGS_GROUPS_HREF,
+                        label: ts("groups"),
+                        icon: <Users />,
+                      } satisfies ConsoleSidebarSectionItem,
+                    ]
+                  : []),
+              ],
+            },
+          ].filter((group) => group.items.length > 0)}
+        />
+      ),
+    }),
+    [canViewGroups, canViewRegister, canViewSettings, canViewUsers, t, ts],
+  );
 
   const settingsEntryHref =
     routePanel === "settings" && pathname !== PANEL_PREFIXES.settings
       ? pathname
       : lastSettingsHref;
 
-  const mainPanel = (
-    <SidebarGroup>
-      <SidebarMenu>
-        {hasSettingsAccess ? (
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={displayedPanel === "main" && routePanel === "settings"}
-              render={
-                <Link
-                  ref={settingsEntryRef}
-                  href={settingsEntryHref}
-                  onNavigate={(event) => {
-                    if (settingsEntryHref === pathname) {
-                      event.preventDefault();
-                    }
-                    setDisplayedPanel("settings");
-                  }}
-                />
-              }
-              tooltip={t("settings")}
-            >
-              <Settings />
-              <span>{t("settings")}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ) : null}
-      </SidebarMenu>
-    </SidebarGroup>
+  const settingsEntryActive =
+    displayedPanel === "main" && routePanel === "settings";
+
+  const mainPanel = useMemo(
+    () => (
+      <SidebarGroup>
+        <SidebarMenu>
+          {hasSettingsAccess ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={settingsEntryActive}
+                render={
+                  <Link
+                    ref={settingsEntryRef}
+                    href={settingsEntryHref}
+                    onNavigate={(event) => {
+                      if (settingsEntryHref === pathname) {
+                        event.preventDefault();
+                      }
+                      setDisplayedPanel("settings");
+                    }}
+                  />
+                }
+                tooltip={t("settings")}
+              >
+                <Settings />
+                <span>{t("settings")}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
+        </SidebarMenu>
+      </SidebarGroup>
+    ),
+    [hasSettingsAccess, pathname, settingsEntryActive, settingsEntryHref, t],
   );
 
-  const panelContent = Object.fromEntries(
-    SIDEBAR_PANELS.map((panel) => [
-      panel,
-      panel === "main" ? (
-        mainPanel
-      ) : (
-        <ConsoleSidebarSection {...panels[panel]} />
-      ),
-    ]),
-  ) as Record<PanelKey, ReactNode>;
+  const panelContent: Record<PanelKey, ReactNode> = {
+    main: mainPanel,
+    settings: subPanels.settings,
+    uc: subPanels.uc,
+  };
 
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">
