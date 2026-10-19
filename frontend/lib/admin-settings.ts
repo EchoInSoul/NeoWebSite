@@ -16,44 +16,61 @@ import {
   type SiteSettingsValues,
 } from "@/lib/site-settings";
 
-export type SiteSettingsRead =
-  | { status: "ok"; values: SiteSettingsValues }
+type AdminSettingsRead<T> =
+  { status: "ok"; values: T } | { status: "forbidden" } | { status: "failed" };
+
+type AdminPayload =
+  | { status: "ok"; payload: unknown }
   | { status: "forbidden" }
   | { status: "failed" };
 
-export async function getSiteSettings(): Promise<SiteSettingsRead> {
+async function fetchAdminPayload(path: string): Promise<AdminPayload> {
   const session = (await cookies()).get("session")?.value;
 
   if (!session) {
     return { status: "failed" };
   }
 
-  let response: Response;
   try {
-    response = await fetch(`${backendUrl}/api/v1/admin/settings/site`, {
+    const response = await fetch(`${backendUrl}${path}`, {
       headers: { cookie: `session=${session}` },
       cache: "no-store",
     });
+
+    if (response.status === 403) {
+      return { status: "forbidden" };
+    }
+
+    if (!response.ok) {
+      return { status: "failed" };
+    }
+
+    return { status: "ok", payload: await response.json().catch(() => null) };
   } catch {
     return { status: "failed" };
   }
+}
 
-  if (response.status === 403) {
-    return { status: "forbidden" };
+function toAdminSettingsRead<T>(
+  read: AdminPayload,
+  parse: (payload: unknown) => T | null,
+): AdminSettingsRead<T> {
+  if (read.status !== "ok") {
+    return { status: read.status };
   }
 
-  if (!response.ok) {
-    return { status: "failed" };
-  }
+  const values = parse(read.payload);
 
-  const payload = await response.json().catch(() => null);
-  const values = parseSiteSettingsValues(payload);
+  return values === null ? { status: "failed" } : { status: "ok", values };
+}
 
-  if (values === null) {
-    return { status: "failed" };
-  }
+export type SiteSettingsRead = AdminSettingsRead<SiteSettingsValues>;
 
-  return { status: "ok", values };
+export async function getSiteSettings(): Promise<SiteSettingsRead> {
+  return toAdminSettingsRead(
+    await fetchAdminPayload("/api/v1/admin/settings/site"),
+    parseSiteSettingsValues,
+  );
 }
 
 export type RegisterSettingsRead =
@@ -62,94 +79,42 @@ export type RegisterSettingsRead =
   | { status: "failed" };
 
 export async function getRegisterSettings(): Promise<RegisterSettingsRead> {
-  const session = (await cookies()).get("session")?.value;
+  const [register, auth, groups] = await Promise.all([
+    fetchAdminPayload("/api/v1/admin/settings/register"),
+    fetchAdminPayload("/api/v1/admin/settings/auth"),
+    fetchAdminPayload("/api/v1/admin/groups"),
+  ]);
 
-  if (!session) {
+  if (
+    register.status !== "ok" ||
+    auth.status !== "ok" ||
+    groups.status !== "ok"
+  ) {
+    return {
+      status:
+        register.status === "forbidden" ||
+        auth.status === "forbidden" ||
+        groups.status === "forbidden"
+          ? "forbidden"
+          : "failed",
+    };
+  }
+
+  const values = parseRegisterSettingsValues(register.payload, auth.payload);
+  const adminGroups = parseAdminGroups(groups.payload);
+
+  if (values === null || adminGroups === null) {
     return { status: "failed" };
   }
 
-  try {
-    const [registerResponse, authResponse, groupsResponse] = await Promise.all([
-      fetch(`${backendUrl}/api/v1/admin/settings/register`, {
-        headers: { cookie: `session=${session}` },
-        cache: "no-store",
-      }),
-      fetch(`${backendUrl}/api/v1/admin/settings/auth`, {
-        headers: { cookie: `session=${session}` },
-        cache: "no-store",
-      }),
-      fetch(`${backendUrl}/api/v1/admin/groups`, {
-        headers: { cookie: `session=${session}` },
-        cache: "no-store",
-      }),
-    ]);
-
-    if (
-      registerResponse.status === 403 ||
-      authResponse.status === 403 ||
-      groupsResponse.status === 403
-    ) {
-      return { status: "forbidden" };
-    }
-
-    if (!registerResponse.ok || !authResponse.ok) {
-      return { status: "failed" };
-    }
-
-    const [registerPayload, authPayload, groupsPayload] = await Promise.all([
-      registerResponse.json().catch(() => null),
-      authResponse.json().catch(() => null),
-      groupsResponse.json().catch(() => null),
-    ]);
-    const values = parseRegisterSettingsValues(registerPayload, authPayload);
-    const groups = parseAdminGroups(groupsPayload);
-
-    if (values === null || groups === null) {
-      return { status: "failed" };
-    }
-
-    return { status: "ok", values, groups };
-  } catch {
-    return { status: "failed" };
-  }
+  return { status: "ok", values, groups: adminGroups };
 }
 
-export type LoginSettingsRead =
-  | { status: "ok"; values: LoginSettingsValues }
-  | { status: "forbidden" }
-  | { status: "failed" };
+export type LoginSettingsRead = AdminSettingsRead<LoginSettingsValues>;
 
 export async function getLoginSettings(): Promise<LoginSettingsRead> {
-  const session = (await cookies()).get("session")?.value;
-
-  if (!session) {
-    return { status: "failed" };
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(`${backendUrl}/api/v1/admin/settings/auth`, {
-      headers: { cookie: `session=${session}` },
-      cache: "no-store",
-    });
-  } catch {
-    return { status: "failed" };
-  }
-
-  if (response.status === 403) {
-    return { status: "forbidden" };
-  }
-
-  if (!response.ok) {
-    return { status: "failed" };
-  }
-
-  const payload = await response.json().catch(() => null);
-  const values = parseLoginGroupValues(payload);
-
-  if (values === null) {
-    return { status: "failed" };
-  }
-
-  return { status: "ok", values };
+  return toAdminSettingsRead(
+    await fetchAdminPayload("/api/v1/admin/settings/auth"),
+    parseLoginGroupValues,
+  );
 }
