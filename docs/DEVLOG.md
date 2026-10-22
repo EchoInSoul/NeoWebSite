@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-10-23 · 邮件设置 UI 轮（侧栏入口 + 纯 UI 页面）
+
+**范围**：前端 6 文件——`components/console/console-sidebar-nav.tsx`（新增「邮件」分组与菜单项）、`app/console/settings/mail/{page,mail-settings-form}.tsx`（新建）、`messages/{zh-CN,en}.json`（新增 22 个文案键）、`components/console/console-settings-row.tsx`（新增 `expandLabel` 属性）；另加本条目。零后端、零迁移、零依赖，新增一个纯前端页面路由；版本保持 0.21.2（纯前端 UI，不单独进位）。
+
+**动机**：用户点名在设置侧栏底部新增「邮件」分组与同名菜单项，并参照 D 盘 HaoBlog 的「邮件与通知」页做一张纯 UI 的邮件设置页。口径是「纯前端的更改，纯 UI 的更改」：不接接口、不存库、不加保存按钮；随后按用户逐轮截图迭代——第一行改为启用开关、补认证与发件人、补邮件模板并可展开、去掉模板编辑区 280px 宽度限制。
+
+**口径**：
+
+- 侧栏：分组小标题与菜单项都叫「邮件」，入口 `/console/settings/mail`，可见条件与「常规」一致（`system.settings.view`）；无权限时整组小标题一起不渲染（沿用空组剔除）。
+- 页面：「SMTP 服务器」组第一行是「是否启用」开关（默认关，折叠行、默认展开），其下依次是服务器地址、端口（默认 `465`，输入时过滤非数字）、加密方式（`Select`，默认 `ssl`，选项 SSL / STARTTLS / 不加密）。
+- 「认证与发件人」组：用户名、密码或授权码、发件人地址、发件人显示名。密码按用户要求使用普通 `Input type="password"`，不移植对照项目的专用密钥输入组件。
+- 「邮件模板」组：注册验证码、密码重置验证码两行，默认收起；展开后是邮件主题输入框、HTML 正文文本域（等宽字体、最小高度 320px）与占位符提示（`{{code}}`、`{{expiresMinutes}}`、`{{siteTitle}}`、`{{siteUrl}}`、`{{username}}`、`{{sentAt}}`）。编辑区按用户要求撑满卡片宽度（对照项目原为 `max-w-[280px]`）。
+- 所有值只存在组件本地 state，无校验、无保存、无接口；刷新恢复初始值。
+- 审查后修三项：共享行组件新增 `expandLabel`，避免开关行的展开按钮与开关本身共用「是否启用」这一可访问名称；正文文本域用 `aria-describedby` 关联占位符提示；模板文案键统一为 `mailTemplate*` 前缀（原 `templateSignupCode` / `templatePasswordReset` 改名）。
+
+**验证**：`npx tsc --noEmit`、ESLint（改动文件）、`npx prettier --check` 均通过；中英文键集合逐项比对无缺漏。运行期视觉未另起 dev server 复现，归用户实机确认。
+
+**已知缺口**：
+
+- **页面本身没有权限检查**。侧栏入口对无 `system.settings.view` 的用户隐藏，但只要登录后手动输入 `/console/settings/mail` 仍能看到整张表单；其他设置页在同一情况下会显示「无权查看设置」。当前表单无真实数据、无保存，不构成泄露，但接后端前必须补。建议修法：页面内用 `getAuthenticatedUser()`（React `cache` 已缓存，不增加请求）读一次用户，无 `system.settings.view` 时渲染 `t("noPermission")`。
+- 登录控制、用户注册两页的开关行仍沿用「展开按钮名称 = 行标题」的旧行为；`expandLabel` 已可复用，待后续轮次顺手补齐。
+
+**提交状态**：未提交（全部改动留在工作区；提交批次由用户点名）。
+
+---
+
 ## 2026-10-23 · 六个免缓存页面补 `instant = false`（消除导航期未缓存数据告警）
 
 **范围**：前端 6 文件——`app/console/settings/{general,groups,login,register,users}/page.tsx` 与 `app/console/uc/session/page.tsx`，每页新增一行 `export const instant = false;`。零后端、零迁移、零依赖、零路由与接口变化；版本保持 0.21.2（纯前端告警收口，不单独进位）。
