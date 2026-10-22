@@ -4,6 +4,52 @@
 
 ---
 
+## 2026-10-23 · Turnstile 密钥设置落库（只接线，不改登录/注册）
+
+**范围**：后端 5 文件——`internal/modules/settings/registry.go`、`registry_test.go`、`controller_test.go`、`README.md`、`internal/version/version.go`；前端 3 文件——`lib/login-settings.ts`、`hooks/use-login-settings-save.ts`、`app/console/settings/login/login-control-form.tsx`；另加本条目。零迁移、零依赖、零路由变化；版本 `0.21.2` → `0.22.0`（minor）。
+
+**动机**：上一轮把「验证服务」下拉加了 Cloudflare Turnstile，但两把密钥只是组件本地 state，刷新即丢。本轮让它们真正进 `auth` 设置组，登录/注册的校验留到下一轮（用户裁定「只接线，不做登录注册」）。
+
+**口径**：
+
+- registry：`auth` 组新增 `turnstile_site_key` / `turnstile_secret_key`（均为文字、默认空串），9 项 → 11 项。**不**标 `Public`、**不**加 `ValidateOn`、**不**加密——按用户裁定私钥明文入库、管理接口原样返回。
+- 前端：两个键进 `LoginSettingsValues` 与 `LOGIN_PATCH_KEYS`，脏值判断与悬浮保存按钮自然生效；保存时与 `captcha_provider` 一样**无条件**回写当前显示值，避免「界面有、库里没有」的错位。
+- 密钥两行仍是「验证服务选 Turnstile 才出现」，切回自研只是收起输入，库里的值不删。
+- 读回：`GET /admin/settings/auth` 返回 11 项，其中两把密钥原样返回；能读 `auth` 组的账号（`system.register.view`）即可读到私钥，与「无 secret 打码机制」的现状一致。
+
+**未做**：`/public/settings` 不加任何 captcha 键（当前无消费方）；登录、注册、两步验证零改动；无 secret 打码；无「启用前必须填 Site Key」的写入拦截。
+
+**验证**：`gofmt -l` 干净、`go build ./...` 通过；`go test ./internal/modules/settings/...` 与 `./internal/app/...`（串行，需 `DATABASE_URL_TEST`）通过。三条变异实测变红——① 把 `turnstile_secret_key` 默认值改成 `"x"` → shape 测试报 `default = "x", want ""`；② 删掉 registry 里那一行 → shape 计数 10≠11、admin 回读 10 项、PATCH 两把密钥 400；③ 把 `turnstile_site_key` 类型改成 Number → 临时用例期望 400 拿到 200（临时用例已删，改回后主测试全绿）。新增 `TestSettingsPatchTurnstileKeysRoundtrip` 覆盖「写入两把密钥 → GET 原样读回」。前端 `npx tsc --noEmit`、ESLint、Prettier 全通过。运行期（填两把密钥保存后刷新仍在）归用户实机确认。
+
+**下一轮（真正拦截）已定口径**：入口为登录 + 注册；照参考项目做 `PASSED / REJECTED / UNAVAILABLE / DISABLED` 四态，`REJECTED` 报 400 `captcha_failed`「人机验证未通过」，超时 / CF 5xx / 密钥配错一律 `UNAVAILABLE` 放行；siteverify 超时 2.5s、带 `remoteip`；captcha 失败不消耗登录失败锁定与频率预算；公开面加 `captcha_enabled` / `captcha_provider` / `turnstile_site_key`，私钥永不公开。
+
+**提交状态**：未提交。
+
+---
+
+## 2026-10-23 · 登录控制「人机验证」新增 Cloudflare Turnstile 选项与密钥输入
+
+**范围**：前端 3 文件——`app/console/settings/login/login-control-form.tsx`、`lib/login-settings.ts`、`messages/{zh-CN,en}.json`；另加本条目。零后端、零迁移、零依赖、零路由变化；版本保持 0.21.2（纯前端，不单独进位）。
+
+**动机**：人机验证要接入 Cloudflare 的方案，先只做界面——用户明确本轮纯 UI，后端消费不接。
+
+**口径**：
+
+- 取值：新增 `CAPTCHA_PROVIDER_TURNSTILE = "turnstile"`，与既有 `builtin`（自研）并列；后端 `auth.captcha_provider` 是无枚举约束的字符串（默认 `""`），这个值能直接存下，无需动注册表。
+- 文案：`settings.captchaProviderTurnstile` =「Cloudflare Turnstile」，中英同文（官方产品名不译），紧跟 `captchaProviderBuiltin`。
+- 未知值回退：原逻辑是「只要不是 `builtin` 就追加一条原始值」，加了第二个已知项后会把 `turnstile` 再重复一条；改为按 `KNOWN_CAPTCHA_PROVIDERS` 判断，清单外的历史值才原样追加，`items` 与下拉项共用同一个 `unknownCaptchaProvider`。
+- 宽度：`SelectTrigger` 由 `w-45`（180px）加宽到 `w-50`（200px）——「Cloudflare Turnstile」比「自研人机验证」宽，180px 装不下；触发条是 `whitespace-nowrap`，只会溢出不会换行。
+- 密钥两行：`captcha_provider` 选中 `turnstile` 时，同一折叠区内多出「站点密钥」/「私钥」两行输入（图标 `Globe` / `LockKeyhole`，宽度 `w-64`，私钥用裸 `Input type="password"`，不另做专用组件；两格照 SMTP 两格的既有写法关掉自动填充与拼写检查——`autoComplete="off"` / `"new-password"` 加 `spellCheck={false}`，免得浏览器把私钥格当登录密码框自动填）。值放在表单本地的 `turnstileSiteKey` / `turnstileSecretKey` 两个 state 里，**不进 `LoginSettingsValues`、不发 PATCH**——后端 `auth` 组没有这两项，发了会撞未知键；切回自研再切回来已填内容不丢（state 在父组件）。本条「本地 state」的结论已被下一轮推翻，现在由后端设置组承载，见上方「Turnstile 密钥设置落库」条目。
+- 折叠区结构：原来 `expandedContent` 只有一个 `ConsoleSettingsRow`，现在改成 fragment 包三行，靠 `CollapsibleContent` 上既有的 `divide-y` 出分隔线，未改组件与样式。
+
+**未做**：密钥两项未落库（后端清单没有、也没有 secret 类型机制），刷新即丢，所以本轮它们只是形状——落库已在下一轮完成，见上方条目；后端仍零消费方，选了不会真的出验证；`captcha_provider` 仍无枚举校验。
+
+**验证**：`npx tsc --noEmit` 全项目通过；ESLint 对两个改动文件 0 error；Prettier 对四个改动文件全部通过。
+
+**提交状态**：未提交。
+
+---
+
 ## 2026-10-23 · 退出登录后提示「已退出登录」
 
 **范围**：前端 6 文件——新增 `lib/signout-notice.ts`、`hooks/use-signout-notice.ts`；`hooks/use-signout.ts`、`app/signin/signin-view.tsx`、`messages/{zh-CN,en}.json`；另加本条目。零后端、零迁移、零依赖、零路由变化；版本保持 0.21.2（纯前端，不单独进位）。
