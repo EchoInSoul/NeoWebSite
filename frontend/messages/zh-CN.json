@@ -32,7 +32,7 @@
     "mail": "邮件"
   },
   "settings": {
-    "general": "常规",
+    "general": "信息",
     "noPermission": "无权查看设置",
     "loadFailed": "设置读取失败，请刷新重试",
     "save": "保存",

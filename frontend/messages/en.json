@@ -32,7 +32,7 @@
     "mail": "Mail"
   },
   "settings": {
-    "general": "General",
+    "general": "Information",
     "noPermission": "You do not have permission to view settings",
     "loadFailed": "Failed to load settings. Please refresh and try again.",
     "save": "Save",
