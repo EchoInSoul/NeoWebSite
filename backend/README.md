@@ -12,12 +12,12 @@
 | --- | --- | --- |
 | `main.go` | `main.ts` | 启动引导：加载配置、创建应用、启动 |
 | `internal/app/app.go` | `app.module.ts` + `setGlobalPrefix` | 组装模块、全局前缀 `/api/v1`、HTTP 服务器（超时 / 优雅关闭） |
-| `internal/config` | `ConfigModule` | 读环境变量，产出 `Config`；`.env` 不存在时先自动生成一份（`EnsureDotEnv`，含随机 2FA 钥匙；**仅开发态 / `test`**，`production` 不自举） |
+| `internal/config` | `ConfigModule` | 读环境变量，产出 `Config`，并在启动时加载工作目录下的 `.env` |
 | `internal/database` | `core/data`（Neo 项目对照） | 数据连接的注入点与迁移入口：`Open` / `Ping` / `Close` / `Client`（ent）/ `SQL` / `StartupError`（首次探测失败原因，不致命） |
 | `internal/version` | `package.json` 的 `version` | 后端版本号唯一来源 |
 | `scripts/bump-version.sh` | `npm version` | 版本号进位工具 |
-| `scripts/db-up.sh` / `scripts/dev.sh` | — | 起本地 Postgres 容器（等到 healthy） / 启动后端（先定位到 `backend/` 再 `go run .`，可在任意目录执行） |
-| `scripts/build.sh` | `npm run build` | 发布构建：`CGO_ENABLED=0` + `-trimpath` + `-ldflags "-s -w -X website/backend/internal/config.DefaultEnvironment=production"`，把默认环境编译成 `production`；产物落 `bin/neoblog-<版本>-<GOOS>-<GOARCH>[.exe]` |
+| `scripts/db-up.sh` / `scripts/dev.sh` | — | 起本地 Postgres 容器（等到 healthy） / 启动后端（先定位到 `backend/`、把 `APP_ENV` 默认成 `development` 再 `go run .`，可在任意目录执行） |
+| `scripts/build.sh` | `npm run build` | 发布构建：`CGO_ENABLED=0` + `-trimpath` + `-ldflags "-s -w"`；产物落 `bin/neoblog-<版本>-<GOOS>-<GOARCH>[.exe]`，默认环境即 `production` |
 | `docker-compose.yml` + `deploy/postgres/` | — | 本地 Postgres 容器定义与首次初始化（建 `neoblog_test`、`neoblog_atlas_dev`） |
 | `migrations/` + `scripts/db-generate.sh` / `db-migrate-diff.sh` / `db-migrate-apply.sh` | — | 版本化迁移：ent 代码生成、生成迁移（diff）、应用到 `neoblog` 与 `neoblog_test` |
 | `internal/modules/health/module.go` | `health.module.ts` | 装配本模块，`New` 返回 `*Module` 并暴露对外能力 |
@@ -57,10 +57,10 @@ postsModule.Register(api)
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
 | `ADDR` | `:5732` | 监听地址（本机 8080 被 Steam 的 CEF 调试接口占用，默认改用 5732） |
-| `APP_ENV` | 编译期注入（见「环境与构建」） | 只接受 `development` / `production` / `test`（首尾空白会 trim），其它值含空串**启动即失败**。决定 Gin 模式（`production`/`test` 走 release/test，不打 debug 横幅与路由表）与会话 cookie 的 `Secure`；出现在健康检查响应的 `environment` 字段 |
+| `APP_ENV` | `production`（见「环境与构建」） | 只接受 `development` / `production`（首尾空白会 trim），其它值含空串**启动即失败**。决定 Gin 模式（`development` 走 debug 并打印路由表，`production` 走 release）与会话 cookie 的 `Secure`（仅 `production`）；出现在健康检查响应的 `environment` 字段 |
 | `APP_VERSION` | 编译进二进制的版本号 | 仅作运行时临时覆盖（本地调试），常规部署不设置 |
 | `SERVICE_NAME` | `website-backend` | 服务名 |
-| `DATABASE_URL` | 无（必需） | Postgres 连接串；可写在 `backend/.env`（启动时自动加载，环境变量优先）；`.env` 整个不存在且环境为开发态 / `test` 时首次启动会自动生成一份（见「运行」）；有了文件仍取不到值时**启动即失败**，串本身不可达时照常启动、进降级态（见「运行」的降级启动） |
+| `DATABASE_URL` | 无（必需） | Postgres 连接串；可写在 `backend/.env`（启动时自动加载，环境变量优先；文件不存在时**不会**自动生成，见「运行」）；取不到值时**启动即失败**，串本身不可达时照常启动、进降级态（见「运行」的降级启动） |
 | `DATABASE_URL_TEST` | 无 | 集成测试专用连接串；不设置时集成用例自动 skip |
 | `DB_MAX_OPEN_CONNS` | `10` | 连接池最大连接数 |
 | `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
@@ -74,17 +74,17 @@ postsModule.Register(api)
 | `SMTP_FROM` | 无 | 发件地址；`SMTP_HOST` 非空时必填 |
 | `SMTP_FROM_NAME` | `NeoBlog` | 发件人显示名 |
 | `MAIL_TEST_RECIPIENT` | 空 | 仅测试用：与 `SMTP_*` 齐备时真实投递用例会向它发一封自检邮件 |
-| `TOTP_ENCRYPTION_KEY` | 无（必需） | 两步验证密钥的 AES-256-GCM 加密钥匙；base64 且解码后恰 32 字节；**开发态 / `test` 下 `.env` 缺失时由后端随机生成并写进新建的 `.env`**（`production` 不自举，缺了就启动即失败），给了但非法仍启动即失败；丢失后已启用 2FA 的用户验码报 500，只能清列重置 |
+| `TOTP_ENCRYPTION_KEY` | 无（必需） | 两步验证密钥的 AES-256-GCM 加密钥匙；base64 且解码后恰 32 字节；缺失或非法都**启动即失败**；丢失后已启用 2FA 的用户验码报 500，只能清列重置 |
 | `POSTGRES_PASSWORD` | `neoblog` | 本地容器密码（compose 读 `.env`）；改动需同步 `DATABASE_URL` |
 
 ## 环境与构建
 
-口径：**构建出来的产物一律是生产环境，只有本地开发才是开发环境**。环境不是构建出两份代码，而是编译期注入一个默认值——`internal/config` 里的 `var DefaultEnvironment`（源码值 `development`），`scripts/build.sh` 用 `-X website/backend/internal/config.DefaultEnvironment=production` 覆盖它。所以源码只有一份，差异全在编译命令。
+口径：**默认就是生产环境，只有显式设 `APP_ENV=development` 才是开发环境**。环境不是构建出两份代码，而是 `internal/config` 里的一个常量 `DefaultEnvironment`（值 `production`），`APP_ENV` 显式设置时覆盖它；`scripts/dev.sh` 为本地开发注入 `development`。所以源码只有一份，差异全在启动命令。
 
 | 入口 | 解析出的环境 | 启动日志 |
 | --- | --- | --- |
-| `go run .` / `bash scripts/dev.sh` / 裸 `go build` | `development` | 打印 `[GIN-debug]` 路由表（每条路由一行） |
-| `bash scripts/build.sh` | `production` | 只有 `listening on :5732` 一行 |
+| `bash scripts/dev.sh` | `development` | 打印 `[GIN-debug]` 路由表（每条路由一行） |
+| `go run .` / 裸 `go build` | `production` | 只有 `listening on :5732` 一行 |
 
 ```bash
 bash scripts/build.sh                                  # 本机平台
@@ -92,9 +92,7 @@ GOOS=linux GOARCH=amd64 bash scripts/build.sh          # 交叉构建
 bash scripts/build.sh bin/mynote.exe                   # 指定输出路径
 ```
 
-产物开箱即生产态：不打路由表、会话 cookie 带 `Secure`、`GET /api/v1/healthy` 的 `environment` 为 `production`。`APP_ENV` 显式设置时**覆盖**编译期默认值（拿发布二进制本地调试就设 `development`），值非法（含空串）则启动失败并点名 `APP_ENV`。**`APP_ENV` 约定不写进 `.env` 与 `.env.example`**：写进 `.env` 会让同一目录下的发布二进制静默退回开发态，这正是环境开关最不该待的地方（代码仍会读，想在加载层硬拦是后续可选项）。
-
-生产态还关掉了 `.env` 自举：解析出的环境为 `production` 时**不生成**任何配置形状文件，缺 `DATABASE_URL` / `TOTP_ENCRYPTION_KEY` 就按「启动即失败」报错，而不是凭空多出一份带全新随机 2FA 钥匙的开发版 `.env`。开发态与 `test` 保持原自举行为。
+默认形态就是生产态：不打路由表、会话 cookie 带 `Secure`、`GET /api/v1/healthy` 的 `environment` 为 `production`。本地开发用 `bash scripts/dev.sh`（它先把 `APP_ENV` 默认成 `development`），或自己写 `APP_ENV=development go run .`；`APP_ENV` 值非法（含空串）则启动失败并点名 `APP_ENV`。**`APP_ENV` 约定不写进 `.env` 与 `.env.example`**：写进 `.env` 会让同一目录下的发布二进制静默退回开发态，这正是环境开关最不该待的地方（代码仍会读，想在加载层硬拦是后续可选项）。
 
 两条实测口径，免得再拿日志猜环境：`[GIN-debug]` 路由表**只在启动那一刻打印、且永不上色**；`[GIN] 时间 | 状态码 | 耗时 | IP | 方法 "路径"` 是每条请求都打的访问日志，**debug 与 release 都打**，带不带颜色只取决于 stdout 是不是终端（gin 用 isatty 判，与 `APP_ENV` 无关）。要确认某实例的环境，问 `/api/v1/healthy`。
 
@@ -356,17 +354,17 @@ var builtinRegistry = []Group{
 
 ## 运行
 
-在 `backend/` 目录下（`go run .` 与 `dev.sh` 解析出的都是**开发环境**，发布产物见「环境与构建」）：
+在 `backend/` 目录下（`bash scripts/dev.sh` 解析出的是**开发环境**；`go run .` 与发布产物默认都是**生产环境**，见「环境与构建」）：
 
 ```bash
-go run .                # 启动时自动加载工作目录下的 .env；默认 :5732（推荐）
-bash scripts/dev.sh     # 同上（先定位到 backend/，可在任意目录执行）
-ADDR=:9090 go run .     # 自定义端口
+bash scripts/dev.sh             # 开发环境（自动注入 APP_ENV=development）；先定位到 backend/，可在任意目录执行（推荐）
+APP_ENV=development go run .    # 同上，不经过脚本；启动时自动加载工作目录下的 .env；默认 :5732
+ADDR=:9090 bash scripts/dev.sh  # 自定义端口
 ```
 
-**首次启动自动建 `.env`（仅开发态 / `test`）**：`main.go` 在读配置之前先调 `config.EnsureDotEnv()`——工作目录没有 `.env` 就写一份（`DATABASE_URL` / `DATABASE_URL_TEST` 按 compose 的本地库、`POSTGRES_PASSWORD`、以及随机生成的 32 字节 `TOTP_ENCRYPTION_KEY`），并打一条 `created .env …` 日志。创建用 `O_EXCL`，**已有文件绝不覆盖**，第二次启动只是照常加载。所以「忘了配 `.env`」不再让进程退出：`go run .` / `bash scripts/dev.sh` 开箱即跑。文件按 0600 请求创建，Windows 上由 ACL 决定实际权限（本机显示为 644）。**发布产物（默认 `production`）不自举**：没有 `.env` 就不造文件，缺配置按「启动即失败」报错，避免在运行目录里凭空长出一份带全新随机 2FA 钥匙的开发配置（见「环境与构建」）。
+**启动前先准备 `.env`**：`cp .env.example .env`，把 `TOTP_ENCRYPTION_KEY` 填上（`.env.example` 里写了 `openssl rand -base64 32`）。程序**不会**自动生成这个文件：工作目录没有 `.env`、环境变量里也没有对应值时，启动直接报 `DATABASE_URL is required (add it to .env or export it)`。已有文件只管加载、**绝不改写**；环境变量里的同名键优先于文件。
 
-两件事要跟着一并记住：生成的那把 2FA 钥匙只活在这份文件里，文件没了等于钥匙丢了（已启用 2FA 的账号验码一律 500），所以开发 / 测试容器每次重建都会换新钥匙（发布产物不自举，不会凭空长出新钥匙）。生产的配置只能来自持久化的 `.env`（已存在就照常加载、绝不覆盖）或显式环境变量；自动写入的连接串是本地 compose 的形状，只适合本机，串本身不可达时不会退出，而是按下面的降级启动跑。
+那把 2FA 钥匙只活在这份文件里，文件没了等于钥匙丢了（已启用 2FA 的账号验码一律 500），换机器或清目录前记得备份。生产的配置只能来自持久化的 `.env` 或显式环境变量；连接串指到不可达的库时不会退出，而是按下面的降级启动跑。
 
 健康检查：`GET /api/v1/healthy` → `{"status":"ok","service":"website-backend","version":"<当前版本>","environment":"development","database":"ok","uptime":"3s","time":"2026-10-11T01:35:12+08:00"}`。数据库 Ping 不通时返回 HTTP 503，`status` 为 `degraded`、`database` 为 `error`。
 

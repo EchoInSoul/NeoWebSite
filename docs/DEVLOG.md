@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-10-23 · 环境开关收成两值，移除 .env 自举
+
+**范围**：后端 10 文件——`internal/config/{config.go,config_test.go,dotenv.go,dotenv_test.go}`、`internal/app/{app.go,app_test.go}`、`main.go`、`scripts/{build.sh,dev.sh}`、`README.md`；另加本条目。零迁移、零依赖、零新接口、零前端、零版本进位。
+
+**动机**：
+
+1. 原来的三值里 `test` 没有真实用途：它唯一的效果是让 gin 不打路由表、让 `/healthy` 报 `test`——而 `production` 也不打路由表。生产代码里只有 `ginMode()` 一个 switch 分支和 `.env` 自举的同一分支会看到它，没有任何测试或路径依赖这个模式。用户裁定删掉 `test`，只留 `development` / `production`。
+2. 默认值的来源不对：源码 `var DefaultEnvironment = development`，靠 `build.sh` 的 `-X ...=production` 覆盖。结果是裸 `go build` / `go run .` 出来的东西默认是开发态（cookie 不带 `Secure`、自动生成 `.env`、打印路由表），而 `build.sh` 里那句 `echo "APP_ENV default: production"` 只是硬写的一句打印，不校验 `-X` 是否真的生效。用户裁定：默认值直接改成 `production`，`-X` 整套删掉。
+3. 自举 `.env` 只剩“新克隆省一步”这点价值，代价是往工作目录里凭空写一个文件，里面带一枚随机 TOTP 钥匙——文件一丢，所有开过两步验证的账号验码报 500。用户裁定整体移除。
+
+**口径**：
+
+- `EnvironmentTest` 删除；`APP_ENV` 只接受 `development` / `production`（首尾空白仍 trim），`test` 现在按非法值启动即失败。
+- `DefaultEnvironment` 由 `var ... = development` 改为 `const ... = production`；`scripts/build.sh` 的 `-X` 与那句 echo 一起删除，ldflags 只剩 `-s -w`。
+- `ginMode()` 删掉 `test → gin.TestMode` 分支；未知值仍兜底 `release`（`TestGinModeFollowsEnvironment` 里 `"test"` 与 `"bogus"` 都断言 release）。
+- `scripts/dev.sh` 新增 `export APP_ENV="${APP_ENV:-development}"`，`APP_ENV=production bash scripts/dev.sh` 仍可覆盖。它是仓库里唯一的开发态入口——`go run .` 现在默认生产态。
+- `.env` 自举整体移除：`EnsureDotEnv` / `EnsureDotEnvFile` / `generateTOTPEncryptionKey` 与 `generatedDotEnvTemplate` 删除，`main.go` 只保留 `LoadDotEnv()`，启动不再打 `created .env …`。工作目录没有 `.env`、环境变量里也没有对应值时，直接报 `DATABASE_URL is required (add it to .env or export it)`。
+- `LoadDotEnv` 语义不变：已有文件只加载、绝不改写，进程环境变量优先。`APP_ENV` 仍会被 `.env` 里的同名键覆盖（加载层过滤仍是未做的可选项）。
+
+| 入口 | 解析出的环境 | 启动日志 |
+| --- | --- | --- |
+| `bash scripts/dev.sh` | `development` | 打印 `[GIN-debug]` 路由表 |
+| `go run .` / 裸 `go build` / `build.sh` 产物 | `production` | 只有 `listening on :5732` 一行 |
+
+**未做**：没有引入“`APP_ENV` 必填”（用户选的是默认 production，不是必填，未设仍静默取默认值）；没有在加载层过滤 `.env` 里的 `APP_ENV`；没有给 `dev.sh` 补“缺 `.env` 时提示 cp”，缺配置的报错本身已点名 `.env`；没有删 `DATABASE_URL_TEST` / `POSTGRES_PASSWORD` 这两个 `.env` 键（仍由 `.env.example` 提供，compose 也读）。
+
+**验证**：
+
+- 变异自检四条（改坏 → 确认红 → 还原）：`DefaultEnvironment` 改回 development → `TestLoadDefaultsToProductionWhenEnvironmentUnset` 与 `TestEnsureDotEnvSkipsDefaultEnvironment` 双双红；把 `"test"` 塞回 `EffectiveEnvironment` 的 case → `TestLoadRejectsUnknownEnvironment/test` 红；把 `case "test": return gin.TestMode` 塞回 `ginMode` → `TestGinModeFollowsEnvironment/test` 红（`gin mode = "test", want "release"`）。
+- `bash scripts/test.sh`（`-p 1` 串行，`DATABASE_URL_TEST` 已导出）全仓绿；`bash scripts/check.sh` 输出 `check ok`；`bash scripts/build.sh` 产物正常（35287552 B，ldflags 无 `-X`）。
+- 活体三条：裸 `go build` 产物不设 `APP_ENV` → `/api/v1/healthy` 报 `production`、`[GIN-debug]` 0 行；`bash scripts/dev.sh` → `development`、`[GIN-debug]` 29 行；`APP_ENV=test` → 启动失败并点名 `APP_ENV`。
+- 自举移除：空目录里跑产物，退出码 1、执行后目录里没有 `.env`；`backend/` 下（`.env` 已存在）仍正常起，`/api/v1/healthy` 的 `database` 为 `ok`、`environment` 为 `development`。
+
+**已知影响**：本地开发态入口从 `go run .` 变为 `bash scripts/dev.sh`；新机器上第一次起后端要先 `cp .env.example .env` 并填 `TOTP_ENCRYPTION_KEY`。cookie `Secure` 仅在 `production`，用局域网 IP 访问本地 dev 时若忘设 `APP_ENV=development` 会被浏览器丢弃该 cookie。
+
+**提交状态**：随本次提交入库。
+
+---
+
 ## 2026-10-23 · 确认弹窗改为方案 B（图标内联 + 整卡）
 
 **范围**：前端 3 文件——`components/ui/alert-dialog.tsx`、`app/console/settings/users/users-panel.tsx`、`app/console/settings/groups/groups-panel.tsx`；另加本条目。零后端、零接口、零文案、零依赖、零版本进位。
