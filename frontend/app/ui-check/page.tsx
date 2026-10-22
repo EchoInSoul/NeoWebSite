@@ -235,7 +235,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
-import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -398,9 +397,6 @@ export default function UiCheckPage() {
             <Button size="icon">
               <PlusIcon />
             </Button>
-            <Button disabled>
-              <Spinner /> 处理中
-            </Button>
           </div>
         </Demo>
         <Demo label="badge">
@@ -429,12 +425,6 @@ export default function UiCheckPage() {
           <div className="flex flex-col gap-2">
             <Skeleton className="h-4 w-48" />
             <Skeleton className="h-4 w-32" />
-          </div>
-        </Demo>
-        <Demo label="spinner">
-          <div className="flex items-center gap-3">
-            <Spinner />
-            <Spinner className="size-6" />
           </div>
         </Demo>
         <Demo label="marker">
@@ -635,14 +625,6 @@ export default function UiCheckPage() {
                   <TrashIcon />
                 </AttachmentAction>
               </AttachmentActions>
-            </Attachment>
-            <Attachment state="uploading" size="sm">
-              <AttachmentMedia>
-                <Spinner />
-              </AttachmentMedia>
-              <AttachmentContent>
-                <AttachmentTitle>封面.png</AttachmentTitle>
-              </AttachmentContent>
             </Attachment>
           </div>
         </Demo>

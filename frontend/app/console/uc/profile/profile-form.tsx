@@ -5,7 +5,6 @@ import {
   Eye,
   EyeOff,
   KeyRound,
-  LoaderCircle,
   Mail,
   ShieldCheck,
   TextInitial,
@@ -83,17 +82,15 @@ export function ProfileForm({
   const isPasswordFilled = currentPassword !== "" && newPassword !== "";
 
   const passwordStatusText =
-    passwordState === "submitting"
-      ? t("passwordChanging")
-      : passwordState === "invalidPassword"
-        ? t("invalidPassword")
-        : passwordState === "weak"
-          ? t("passwordWeak", { minLength: PASSWORD_MIN_LENGTH })
-          : passwordState === "tooLong"
-            ? t("passwordTooLong", { maxBytes: PASSWORD_MAX_BYTES })
-            : passwordState === "unchanged"
-              ? t("passwordUnchanged")
-              : "";
+    passwordState === "invalidPassword"
+      ? t("invalidPassword")
+      : passwordState === "weak"
+        ? t("passwordWeak", { minLength: PASSWORD_MIN_LENGTH })
+        : passwordState === "tooLong"
+          ? t("passwordTooLong", { maxBytes: PASSWORD_MAX_BYTES })
+          : passwordState === "unchanged"
+            ? t("passwordUnchanged")
+            : "";
 
   function handlePasswordKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
@@ -283,9 +280,6 @@ export function ProfileForm({
                           : "text-muted-foreground",
                       )}
                     >
-                      {passwordState === "submitting" ? (
-                        <LoaderCircle className="size-3 animate-spin" />
-                      ) : null}
                       {passwordStatusText}
                     </p>
                   </div>

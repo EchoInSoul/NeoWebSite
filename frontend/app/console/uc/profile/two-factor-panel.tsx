@@ -8,7 +8,6 @@ import {
   Eye,
   EyeOff,
   KeyRound,
-  LoaderCircle,
 } from "lucide-react";
 import { cn } from "cn";
 import { QRCodeSVG } from "qrcode.react";
@@ -83,13 +82,11 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
   }
 
   if (setup === null) {
-    const passwordStatusText = isLoading
-      ? t("twoFactorSetupLoading")
-      : isDisabledBySite
-        ? t("twoFactorSiteDisabled")
-        : isLoadFailed
-          ? t("twoFactorSetupFailed")
-          : "";
+    const passwordStatusText = isDisabledBySite
+      ? t("twoFactorSiteDisabled")
+      : isLoadFailed
+        ? t("twoFactorSetupFailed")
+        : "";
 
     return (
       <ConsoleSettingsRow
@@ -136,9 +133,6 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
                 isLoadFailed ? "text-destructive" : "text-muted-foreground",
               )}
             >
-              {isLoading ? (
-                <LoaderCircle className="size-3 animate-spin" />
-              ) : null}
               {passwordStatusText}
               {isLoadFailed ? (
                 <Button
@@ -159,18 +153,13 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
     );
   }
 
-  const isPending = isLoading || submitState === "verifying";
-  const statusText = isLoading
-    ? t("twoFactorSetupLoading")
-    : isDisabledBySite
-      ? t("twoFactorSiteDisabled")
-      : isLoadFailed
-        ? t("twoFactorSetupFailed")
-        : submitState === "verifying"
-          ? t("twoFactorVerifying")
-          : submitState === "invalid"
-            ? t("twoFactorInvalidCode")
-            : "";
+  const statusText = isDisabledBySite
+    ? t("twoFactorSiteDisabled")
+    : isLoadFailed
+      ? t("twoFactorSetupFailed")
+      : submitState === "invalid"
+        ? t("twoFactorInvalidCode")
+        : "";
 
   return (
     <>
@@ -263,9 +252,6 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
                     : "text-muted-foreground",
                 )}
               >
-                {isPending ? (
-                  <LoaderCircle className="size-3 animate-spin" />
-                ) : null}
                 {statusText}
                 {isLoadFailed ? (
                   <Button

@@ -11,7 +11,6 @@ import {
   InfoIcon,
   TriangleAlertIcon,
   OctagonXIcon,
-  Loader2Icon,
 } from "lucide-react";
 
 const toast = ToastPrimitive.createToastManager();
@@ -154,10 +153,6 @@ function ToastIcon({ type }: { type: string | undefined }) {
 
   if (type === "error") {
     icon = <OctagonXIcon className="text-destructive" aria-hidden="true" />;
-  }
-
-  if (type === "loading") {
-    icon = <Loader2Icon className="animate-spin" aria-hidden="true" />;
   }
 
   if (!icon) {

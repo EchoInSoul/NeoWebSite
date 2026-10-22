@@ -71,10 +71,7 @@ export function ConsoleListToolbar({
             aria-label={refreshLabel}
             title={refreshLabel}
           >
-            <RefreshCw
-              aria-hidden="true"
-              className={isRefreshing ? "animate-spin" : undefined}
-            />
+            <RefreshCw aria-hidden="true" />
           </Button>
         )}
       </span>
