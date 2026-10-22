@@ -201,3 +201,38 @@ export function buildRegisterSettingsPatch(
 
   return patch;
 }
+
+export function normalizeEmailDomain(raw: string): string {
+  let value = raw.trim().toLowerCase();
+  const at = value.lastIndexOf("@");
+
+  if (at >= 0) {
+    value = value.slice(at + 1);
+  }
+
+  return value.replace(/[，,]+$/, "").trim();
+}
+
+export function isValidEmailDomain(domain: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(
+    domain,
+  );
+}
+
+export function parseEmailDomainList(value: string): string[] {
+  const domains = new Set<string>();
+
+  for (const part of value.split(/[,，]/)) {
+    const domain = normalizeEmailDomain(part);
+
+    if (domain !== "") {
+      domains.add(domain);
+    }
+  }
+
+  return [...domains];
+}
+
+export function serializeEmailDomainList(domains: string[]): string {
+  return domains.join(",");
+}

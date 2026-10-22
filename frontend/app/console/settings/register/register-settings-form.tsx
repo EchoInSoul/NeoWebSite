@@ -33,6 +33,9 @@ import {
   type RegisterSettingsValues,
 } from "@/lib/register-settings";
 
+import { AllowedEmailDomainsField } from "./allowed-email-domains-field";
+import { PasswordComplexityField } from "./password-complexity-field";
+
 const inputClassName = "w-70";
 
 export function RegisterSettingsForm({
@@ -141,22 +144,15 @@ export function RegisterSettingsForm({
           expanded={emailDomainExpansion.expanded}
           expandedContent={
             <ConsoleSettingsRow
+              className="items-start"
               control={
-                <Input
-                  aria-label={t("allowedEmailDomains")}
-                  className={inputClassName}
-                  onChange={(event) =>
-                    updateAllowedEmailDomains(event.target.value)
-                  }
+                <AllowedEmailDomainsField
                   disabled={isSaving}
-                  placeholder={
-                    values.emailDomainControlEnabled
-                      ? t("allowedEmailDomainsEmptyHint")
-                      : undefined
-                  }
+                  onChange={updateAllowedEmailDomains}
                   value={values.allowedEmailDomains}
                 />
               }
+              controlClassName="group-data-[size=lg]/item:max-w-none"
               icon={<AtSign />}
               label={t("allowedEmailDomains")}
             />
@@ -200,13 +196,9 @@ export function RegisterSettingsForm({
               />
               <ConsoleSettingsRow
                 control={
-                  <Input
-                    aria-label={t("passwordComplexity")}
-                    className={inputClassName}
-                    onChange={(event) =>
-                      updatePasswordComplexity(event.target.value)
-                    }
+                  <PasswordComplexityField
                     disabled={isSaving}
+                    onChange={updatePasswordComplexity}
                     value={values.passwordComplexity}
                   />
                 }
