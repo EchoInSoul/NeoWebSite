@@ -4,6 +4,66 @@
 
 ---
 
+## 2026-10-23 · 确认弹窗改为方案 B（图标内联 + 整卡）
+
+**范围**：前端 3 文件——`components/ui/alert-dialog.tsx`、`app/console/settings/users/users-panel.tsx`、`app/console/settings/groups/groups-panel.tsx`；另加本条目。零后端、零接口、零文案、零依赖、零版本进位。
+
+**动机**：上一轮盘点指出破坏性确认弹窗有三个问题：头部在窄屏居中、标题与描述排版松散；图标是 40px 灰底方块；底部按钮区靠 `border-t` + `bg-muted/50` 被切成上下两块。用户在三个 HTML 方案中选定方案 B：图标与标题同一行、描述缩进对齐标题文字、整张卡片无分隔。
+
+**口径**：
+
+- Content：内边距 `p-4` → `p-5`，块间距 `gap-4` → `gap-5`；宽度档位不变（`sm` 及以上 `max-w-sm`，即 384px）。
+- Header：去掉 `place-items-center` / `text-center` 及窄屏居中分支，固定 `text-left`；存在 `AlertDialogMedia` 时改为 `grid-cols-[1.25rem_1fr] gap-x-2`，图标与标题同排垂直居中。
+- Media：40px（`size-10`）灰底方块改为 20px 无底色内联图标（`size-5`），默认 `text-muted-foreground`；三个删除弹窗在调用点加 `text-destructive` 变红。
+- Title / Description：仅在存在 media 时 `col-start-2`，描述因此缩进 28px 对齐标题文字；描述由 `text-balance` 改为 `text-pretty`。
+- Footer：删掉 `-mx-4 -mb-4`、`border-t`、`bg-muted/50`、`rounded-b-xl` 与自身 `p-4`，变成卡片内的普通按钮行；右对齐与 8px 间距不变。
+- 影响面：共享组件改动让 8 个 `AlertDialog` 统一生效（4 个破坏性确认 + 2 个普通确认 + 2 个提示）；新建 / 编辑用户组用 `Dialog`，不受影响。
+
+**未做**：未抽公共确认框组件；未改按钮尺寸与 `destructive` 按钮配色；未调整 `session-expiry` / `recovery-codes` 等无图标弹窗的信息结构；未同步 `.scratch/dialogs` 演示页（该目录被 Git 忽略）。
+
+**验证**：`npx tsc --noEmit`、ESLint（3 个改动文件）、Prettier 全部通过；在本机 dev server 的 `/ui-check` 打开真实 `AlertDialog` 截图确认图标内联、描述缩进、按钮右对齐、分隔线消失。登录后的真实删除页归用户实机确认。
+
+**提交状态**：随本次提交入库。
+
+---
+
+## 2026-10-23 · 前端弹窗盘点（只盘点，零代码改动）
+
+**范围**：仅本条目。代码零改动、零依赖、零路由、零版本进位。盘点对象含控制台与登录 / 注册页；其中 `components/auth/captcha-dialog.tsx` 为并行会话新增的文件，本条只记录其存在与分类。
+
+**动机**：用户要求梳理「项目里有哪些 diag（dialog）弹窗」，并按删除、确定等用途分类，作为后续统一交互与文案的底账。
+
+**口径（产品内共 10 个，分 4 类）**：
+
+1. **破坏性确认**（确认按钮 `variant="destructive"`，红色，4 个）
+   - 删除单个用户：`app/console/settings/users/users-panel.tsx:190`，触发为列表行内删除；文案键 `users.deleteConfirmTitle` / `users.deleteConfirmDescription`（「「{name}」将立即退出登录并被删除，无法恢复。」）。
+   - 批量删除用户：`app/console/settings/users/users-panel.tsx:214`，触发为工具栏批量删除；文案键 `users.batchDeleteConfirmTitle`（带 `{count}` 复数）/ `users.batchDeleteConfirmDescription`。
+   - 删除用户组：`app/console/settings/groups/groups-panel.tsx:282`，触发为组列表行内删除；文案键 `groups.deleteConfirmTitle` / `groups.deleteConfirmDescription`。
+   - 放弃未保存的修改：`app/console/settings/groups/group-dialog.tsx:269`，触发为组表单有脏值（`isDirty`）时关闭；文案键 `groups.discardTitle` / `groups.discardDescription`。
+2. **普通操作确认**（默认按钮，2 个）
+   - 退出单个会话：`app/console/uc/session/sessions-panel.tsx:301`，触发为会话列表行内「退出」；文案键 `sessions.revokeConfirmTitle` / `sessions.revokeConfirmDescription`（带 `{device}`）。
+   - 退出登录：`components/console/console-user-menu.tsx:186`，触发为用户菜单 → 退出登录；文案键 `userMenu.signOutConfirmTitle` / `userMenu.signOutConfirmDescription` / `userMenu.signOutConfirm`。
+3. **提示 / 告知**（2 个，不是「确定要做吗」）
+   - 登录会话已失效：`components/console/session-expiry-dialog.tsx:33`，挂在 `app/console/layout.tsx:42`，由 401 `unauthorized` 的全局信号触发；出口为「留在此页」/「重新登录」；文案键 `sessionExpiry.*`。
+   - 两步验证恢复码：`app/console/uc/profile/recovery-codes-dialog.tsx:29`，由 `two-factor-panel.tsx:205` 在开启成功后打开；展示 10 个恢复码 + 复制，只有「我已保存」一个动作；文案键 `uc.twoFactorRecovery*`。
+4. **表单 / 操作弹窗**（2 个，非确认框）
+   - 新建 / 编辑用户组：`app/console/settings/groups/group-dialog.tsx:120`，标准 `Dialog`，标题按 `group === null` 切换 `groups.dialogCreateTitle` / `groups.dialogEditTitle`。
+   - 人机验证（Turnstile）：`components/auth/captcha-dialog.tsx:57`（并行会话新增），登录 `app/signin/signin-form.tsx:166` 与注册 `app/signup/signup-form.tsx:169` 各挂一个；表单提交时若已配置 captcha 就打开，`Dialog` + `disablePointerDismissal`（点遮罩不关），内含 `TurnstileCaptcha`，拿到 token 后延迟 1618ms 自动关闭并回填；文案键 `auth.captchaDialogTitle`（「人机验证」/「Human verification」），只有标题、无描述、无底部按钮。
+
+**实现共性**：确认类全部基于 `components/ui/alert-dialog.tsx`（Base UI `AlertDialog`），破坏性操作的按钮统一用 `variant="destructive"`；带图标的确认框统一把图标放进 `AlertDialogMedia`（删除用 `Trash2`、退出用 `LogOut`）；表单 / 操作类共 2 个，均用 `components/ui/dialog.tsx`；确认框的取消按钮统一取 `common.cancel`。
+
+**非产品弹窗**：`app/ui-check/page.tsx:1114`（Dialog）与 `:1130`（AlertDialog）仅为组件预览；`components/ui/command.tsx` 内的 `CommandDialog` 全站无真实调用（ui-check 只用了普通 `Command`）。
+
+**观察（未改动，供后续裁定）**：`session-expiry-dialog` 与 `recovery-codes-dialog` 没有 `AlertDialogMedia` 图标，与其余确认框观感不一致；`recovery-codes-dialog` 用 `AlertDialog` 承载纯展示内容，语义上更接近信息弹窗；「放弃未保存修改」用了红色危险按钮，与删除类同色，但它的后果只是丢草稿；各弹窗文案分散在 `users` / `groups` / `sessions` / `userMenu` / `uc` / `sessionExpiry` / `auth` 七个命名空间；`captcha-dialog` 没有描述与手动关闭按钮，只能点右上角 X（`disablePointerDismissal` 已关掉点遮罩），且关闭前有 1618ms 固定延迟。
+
+**未做**：未改任何弹窗的样式、图标、按钮变体或文案；未抽公共确认框组件；未补 ui-check 演示。
+
+**验证**：逐文件静态核对（`grep` 全仓 `Dialog` / `AlertDialog` 引用，排除 `components/ui` 与 `.next`），确认产品代码中 10 个实例（8 个 `AlertDialog` + 2 个 `Dialog`）、无遗漏；分类依据为 `variant="destructive"` 与触发语义。中途复扫发现并行会话新增了 `captcha-dialog.tsx`，条目数字已由 9 修正为 10。运行期观感归用户实机确认。
+
+**提交状态**：随本次提交入库。
+
+---
+
 ## 2026-10-23 · 人机验证接入 Cloudflare Turnstile（登录 / 注册真拦截）
 
 **范围**：后端 16 文件——`common/apierror/apierror.go` 与 `apierror_test.go`；`modules/settings/{registry.go,registry_test.go,controller_test.go}`；`modules/auth/captcha.go`（新）、`captcha_test.go`（新）、`captcha_flow_test.go`（新）、`service.go`、`controller.go`、`dto.go`、`module.go`、`auth_test.go`、`totp_flow_test.go`；`README.md`、`internal/version/version.go`。前端 13 文件——`lib/public-settings.ts`、`components/auth/turnstile-captcha.tsx`（新）、`components/auth/captcha-dialog.tsx`（新）、`hooks/{use-signin.ts,use-signup.ts}`、`app/signin/{page,signin-view,signin-form}.tsx`、`app/signup/{page,signup-view,signup-form}.tsx`、`messages/{zh-CN,en}.json`。另加本条目。零迁移、零依赖、零新路由；版本 `0.22.0` → `0.23.0`。
