@@ -30,8 +30,8 @@ export function SignupForm() {
   } = useSignupForm();
 
   const formRef = useRef<HTMLFormElement>(null);
-  const emailFieldId = useId();
   const nameFieldId = useId();
+  const emailFieldId = useId();
   const passwordFieldId = useId();
   const confirmFieldId = useId();
 
@@ -57,19 +57,6 @@ export function SignupForm() {
     >
       <fieldset className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <Label htmlFor={emailFieldId}>{t("email")}</Label>
-          <Input
-            id={emailFieldId}
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={values.email}
-            onChange={(event) => changeField("email", event.target.value)}
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
           <Label htmlFor={nameFieldId}>{t("name")}</Label>
           <Input
             id={nameFieldId}
@@ -79,6 +66,19 @@ export function SignupForm() {
             required
             value={values.name}
             onChange={(event) => changeField("name", event.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={emailFieldId}>{t("email")}</Label>
+          <Input
+            id={emailFieldId}
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={values.email}
+            onChange={(event) => changeField("email", event.target.value)}
           />
         </div>
 

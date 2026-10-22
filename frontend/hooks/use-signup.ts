@@ -11,6 +11,7 @@ import { markSignupSuccess } from "@/lib/signup-notice";
 
 const NAME_MIN_LENGTH = 2;
 const NAME_MAX_LENGTH = 32;
+const NAME_PATTERN = /^[\p{L}\p{N}_-]+$/u;
 const EMAIL_MAX_LENGTH = 254;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -32,7 +33,7 @@ function isValidName(value: string) {
   return (
     length >= NAME_MIN_LENGTH &&
     length <= NAME_MAX_LENGTH &&
-    !/[\s@]/.test(value)
+    NAME_PATTERN.test(value)
   );
 }
 
@@ -107,22 +108,37 @@ export function useSignupForm() {
     const email = values.email.trim();
     const nickname = values.name.trim();
 
-    if (!isValidEmail(email)) {
-      toast.error(t("invalidEmail"));
-      return "email";
+    if (nickname === "") {
+      toast.error(t("requiredName"));
+      return "name";
     }
     if (!isValidName(nickname)) {
       toast.error(
         t("invalidName", {
           minLength: NAME_MIN_LENGTH,
-          maxLength: NAME_MAX_LENGTH,
         }),
       );
       return "name";
     }
+    if (email === "") {
+      toast.error(t("requiredEmail"));
+      return "email";
+    }
+    if (!isValidEmail(email)) {
+      toast.error(t("invalidEmail"));
+      return "email";
+    }
+    if (values.password === "") {
+      toast.error(t("requiredPassword"));
+      return "password";
+    }
     if (!isStrongPassword(values.password)) {
       toast.error(t("weakPassword"));
       return "password";
+    }
+    if (values.confirmPassword === "") {
+      toast.error(t("requiredConfirmPassword"));
+      return "confirmPassword";
     }
     if (values.confirmPassword !== values.password) {
       toast.error(t("mismatch"));
