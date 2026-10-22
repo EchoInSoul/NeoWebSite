@@ -290,6 +290,7 @@
       "rateLimited": "Too many requests.",
       "retryIn": "{duration}",
       "failed": "Sign in failed, please try again later",
+      "success": "Signed in successfully",
       "prompt": "No account yet?",
       "link": "Sign up"
     },

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { ConsoleServiceToast } from "@/components/console/console-service-toast";
 import { ConsoleSidebar } from "@/components/console/console-sidebar";
+import { ConsoleSigninNotice } from "@/components/console/console-signin-notice";
 import { ConsoleTopBanner } from "@/components/console/console-top-banner";
 import { SessionExpiryDialog } from "@/components/console/session-expiry-dialog";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -39,6 +40,7 @@ function ConsoleShell({
         <SidebarInset className="overflow-y-auto">{children}</SidebarInset>
       </div>
       <SessionExpiryDialog />
+      <ConsoleSigninNotice />
     </SidebarProvider>
   );
 }

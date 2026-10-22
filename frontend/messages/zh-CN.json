@@ -290,6 +290,7 @@
       "rateLimited": "请求过于频繁",
       "retryIn": "{duration}",
       "failed": "登录失败，请稍后重试",
+      "success": "登录成功",
       "prompt": "没有账号？",
       "link": "去注册"
     },

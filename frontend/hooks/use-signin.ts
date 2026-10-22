@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useServiceHealth } from "@/hooks/use-service-health";
 import { ApiError, apiRequest } from "@/lib/api";
 import { formatRetryDuration } from "@/lib/rate-limit";
+import { markSigninSuccess } from "@/lib/signin-notice";
 
 export type SigninField = "identifier" | "password";
 
@@ -107,6 +108,7 @@ export function useSigninForm() {
         method: "POST",
         body: { identifier, password },
       });
+      markSigninSuccess();
       router.push("/console");
       return undefined;
     } catch (error) {
@@ -146,6 +148,7 @@ export function useSigninForm() {
         method: "POST",
         body: { code: trimmedCode },
       });
+      markSigninSuccess();
       router.push("/console");
       return undefined;
     } catch (error) {
