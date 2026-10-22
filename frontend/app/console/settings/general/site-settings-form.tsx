@@ -5,6 +5,7 @@ import {
   AppWindow,
   Baseline,
   CirclePlus,
+  Download,
   FileText,
   Globe,
   SearchX,
@@ -65,6 +66,10 @@ export function SiteSettingsForm({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void save();
+  }
+
+  function fillCurrentSiteUrl() {
+    updateText("url", window.location.origin);
   }
 
   return (
@@ -233,13 +238,26 @@ export function SiteSettingsForm({
           />
           <ConsoleSettingsRow
             control={
-              <Input
-                aria-label={t("siteUrl")}
-                className={inputClassName}
-                disabled={isSaving}
-                onChange={(event) => updateText("url", event.target.value)}
-                value={values.url}
-              />
+              <div className="flex shrink-0 items-center gap-2">
+                <Input
+                  aria-label={t("siteUrl")}
+                  className={inputClassName}
+                  disabled={isSaving}
+                  onChange={(event) => updateText("url", event.target.value)}
+                  value={values.url}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label={t("useCurrentSiteUrl")}
+                  title={t("useCurrentSiteUrl")}
+                  disabled={isSaving}
+                  onClick={fillCurrentSiteUrl}
+                >
+                  <Download aria-hidden="true" />
+                </Button>
+              </div>
             }
             icon={<Globe />}
             label={t("siteUrl")}

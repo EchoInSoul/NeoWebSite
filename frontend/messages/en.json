@@ -74,6 +74,7 @@
     "siteDescription": "Site description",
     "siteKeywords": "Site keywords",
     "siteUrl": "Site URL",
+    "useCurrentSiteUrl": "Use current address",
     "blockSearchEngines": "Block search engines",
     "siteLogo": "Logo",
     "siteIcon": "Icon",
