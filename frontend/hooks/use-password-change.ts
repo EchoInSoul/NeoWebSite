@@ -75,6 +75,7 @@ export function usePasswordChange() {
           return;
         }
         if (error.status === 401) {
+          setState("idle");
           return;
         }
       }
