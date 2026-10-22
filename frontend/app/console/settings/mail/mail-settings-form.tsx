@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
 
 const ENCRYPTION_SSL = "ssl";
 const ENCRYPTION_STARTTLS = "starttls";
@@ -66,6 +67,7 @@ export function MailSettingsForm() {
     signupCode: { subject: "", body: "" },
     passwordReset: { subject: "", body: "" },
   });
+  const smtpExpansion = useSwitchRowExpansion(enabled);
 
   function updateTemplateValue(
     templateKey: MailTemplateKey,
@@ -105,10 +107,14 @@ export function MailSettingsForm() {
             <Switch
               aria-label={t("smtpEnabled")}
               checked={enabled}
-              onCheckedChange={setEnabled}
+              onCheckedChange={(checked) => {
+                setEnabled(checked);
+                smtpExpansion.expandOnEnable(checked);
+              }}
             />
           }
           expandLabel={t("smtpExpandSettings")}
+          expanded={smtpExpansion.expanded}
           expandedContent={
             <>
               <ConsoleSettingsRow
@@ -179,6 +185,7 @@ export function MailSettingsForm() {
           }
           icon={<Power />}
           label={t("smtpEnabled")}
+          onExpandedChange={smtpExpansion.setExpanded}
         />
       </ConsoleSettingsGroup>
       <ConsoleSettingsGroup title={t("smtpCredentialsGroup")}>

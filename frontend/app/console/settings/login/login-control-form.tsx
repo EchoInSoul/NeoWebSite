@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useLoginSettingsSave } from "@/hooks/use-login-settings-save";
+import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
 import {
   CAPTCHA_PROVIDER_BUILTIN,
   SESSION_MAX_AGE_DAYS_MAX,
@@ -52,6 +53,10 @@ export function LoginControlForm({
     save,
   } = useLoginSettingsSave(settings);
   const [sessionMaxAgeUnit, setSessionMaxAgeUnit] = useState(SESSION_UNIT_DAY);
+  const sessionMaxAgeExpansion = useSwitchRowExpansion(
+    values.sessionMaxAgeEnabled,
+  );
+  const captchaExpansion = useSwitchRowExpansion(values.captchaEnabled);
 
   const sessionUnitItems = {
     [SESSION_UNIT_DAY]: t("sessionMaxAgeUnitDay"),
@@ -76,10 +81,14 @@ export function LoginControlForm({
             <Switch
               aria-label={t("sessionMaxAgeEnabled")}
               checked={values.sessionMaxAgeEnabled}
-              onCheckedChange={setSessionMaxAgeEnabled}
+              onCheckedChange={(checked) => {
+                setSessionMaxAgeEnabled(checked);
+                sessionMaxAgeExpansion.expandOnEnable(checked);
+              }}
               disabled={isSaving}
             />
           }
+          expanded={sessionMaxAgeExpansion.expanded}
           expandedContent={
             <ConsoleSettingsRow
               control={
@@ -127,6 +136,7 @@ export function LoginControlForm({
           }
           icon={<Hourglass />}
           label={t("sessionMaxAgeEnabled")}
+          onExpandedChange={sessionMaxAgeExpansion.setExpanded}
         />
       </ConsoleSettingsGroup>
       <ConsoleSettingsGroup title={t("identityGroup")}>
@@ -161,10 +171,14 @@ export function LoginControlForm({
             <Switch
               aria-label={t("captchaEnabled")}
               checked={values.captchaEnabled}
-              onCheckedChange={setCaptchaEnabled}
+              onCheckedChange={(checked) => {
+                setCaptchaEnabled(checked);
+                captchaExpansion.expandOnEnable(checked);
+              }}
               disabled={isSaving}
             />
           }
+          expanded={captchaExpansion.expanded}
           expandedContent={
             <ConsoleSettingsRow
               control={
@@ -204,6 +218,7 @@ export function LoginControlForm({
           }
           icon={<Fingerprint />}
           label={t("captchaEnabled")}
+          onExpandedChange={captchaExpansion.setExpanded}
         />
       </ConsoleSettingsGroup>
       <ConsoleFloatingSaveButton

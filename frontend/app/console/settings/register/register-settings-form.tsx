@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useRegisterSettingsSave } from "@/hooks/use-register-settings-save";
+import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
 import type { AdminGroup } from "@/lib/groups";
 import {
   groupSelectionMap,
@@ -56,6 +57,14 @@ export function RegisterSettingsForm({
     save,
   } = useRegisterSettingsSave(settings);
 
+  const registrationExpansion = useSwitchRowExpansion(values.enabled);
+  const emailDomainExpansion = useSwitchRowExpansion(
+    values.emailDomainControlEnabled,
+  );
+  const passwordRequirementsExpansion = useSwitchRowExpansion(
+    values.passwordRequirementsEnabled,
+  );
+
   const defaultGroupOptions = selectableGroups(groups);
   const defaultGroupItems = groupSelectionMap(defaultGroupOptions);
   const defaultGroupKnown = Object.hasOwn(
@@ -76,10 +85,14 @@ export function RegisterSettingsForm({
             <Switch
               aria-label={t("allowPublicRegistration")}
               checked={values.enabled}
-              onCheckedChange={setEnabled}
+              onCheckedChange={(checked) => {
+                setEnabled(checked);
+                registrationExpansion.expandOnEnable(checked);
+              }}
               disabled={isSaving}
             />
           }
+          expanded={registrationExpansion.expanded}
           expandedContent={
             <ConsoleSettingsRow
               control={
@@ -111,16 +124,21 @@ export function RegisterSettingsForm({
           }
           icon={<Unlock />}
           label={t("allowPublicRegistration")}
+          onExpandedChange={registrationExpansion.setExpanded}
         />
         <ConsoleSettingsRow
           control={
             <Switch
               aria-label={t("emailDomainControl")}
               checked={values.emailDomainControlEnabled}
-              onCheckedChange={setEmailDomainControlEnabled}
+              onCheckedChange={(checked) => {
+                setEmailDomainControlEnabled(checked);
+                emailDomainExpansion.expandOnEnable(checked);
+              }}
               disabled={isSaving}
             />
           }
+          expanded={emailDomainExpansion.expanded}
           expandedContent={
             <ConsoleSettingsRow
               control={
@@ -145,6 +163,7 @@ export function RegisterSettingsForm({
           }
           icon={<Mail />}
           label={t("emailDomainControl")}
+          onExpandedChange={emailDomainExpansion.setExpanded}
         />
       </ConsoleSettingsGroup>
       <ConsoleSettingsGroup title={t("passwordGroup")}>
@@ -153,10 +172,14 @@ export function RegisterSettingsForm({
             <Switch
               aria-label={t("passwordRequirements")}
               checked={values.passwordRequirementsEnabled}
-              onCheckedChange={setPasswordRequirementsEnabled}
+              onCheckedChange={(checked) => {
+                setPasswordRequirementsEnabled(checked);
+                passwordRequirementsExpansion.expandOnEnable(checked);
+              }}
               disabled={isSaving}
             />
           }
+          expanded={passwordRequirementsExpansion.expanded}
           expandedContent={
             <>
               <ConsoleSettingsRow
@@ -194,6 +217,7 @@ export function RegisterSettingsForm({
           }
           icon={<KeyRound />}
           label={t("passwordRequirements")}
+          onExpandedChange={passwordRequirementsExpansion.setExpanded}
         />
       </ConsoleSettingsGroup>
       <ConsoleFloatingSaveButton
