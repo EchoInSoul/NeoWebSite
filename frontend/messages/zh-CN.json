@@ -12,6 +12,7 @@
     "localeEn": "English",
     "signOut": "退出登录",
     "signOutFailed": "退出失败，请稍后重试",
+    "signedOut": "已退出登录",
     "signOutConfirmTitle": "确定退出登录？",
     "signOutConfirmDescription": "退出后需要重新登录才能进入控制台。",
     "signOutConfirm": "确认"

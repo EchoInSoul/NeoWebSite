@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { AuthFrame } from "@/components/auth/auth-frame";
+import { useSignoutNotice } from "@/hooks/use-signout-notice";
 import { useSignupNotice } from "@/hooks/use-signup-notice";
 import { SigninForm } from "./signin-form";
 
@@ -11,6 +12,7 @@ export function SigninView({ signupOpen }: { signupOpen: boolean }) {
   const t = useTranslations("auth.signin");
 
   useSignupNotice();
+  useSignoutNotice();
 
   return (
     <AuthFrame
