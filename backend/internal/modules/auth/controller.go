@@ -297,7 +297,7 @@ const (
 func requestSessionMeta(ctx *gin.Context) SessionMeta {
 	return SessionMeta{
 		UserAgent: truncateHeader(ctx.GetHeader("User-Agent"), maxUserAgentLength),
-		IP:        truncateHeader(ctx.ClientIP(), maxIPLength),
+		IP:        truncateHeader(ctx.RemoteIP(), maxIPLength),
 	}
 }
 

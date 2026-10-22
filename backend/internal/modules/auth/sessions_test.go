@@ -98,8 +98,7 @@ func TestLoginStoresSessionMetadata(t *testing.T) {
 	client := testClient(t)
 
 	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
-		"User-Agent":      "probe/1.0",
-		"X-Forwarded-For": "203.0.113.7",
+		"User-Agent": "probe/1.0",
 	})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -113,8 +112,8 @@ func TestLoginStoresSessionMetadata(t *testing.T) {
 	if got, _ := values[guard.SessionUserAgentKey].(string); got != "probe/1.0" {
 		t.Fatalf("user_agent = %q, want probe/1.0", got)
 	}
-	if got, _ := values[guard.SessionIPKey].(string); got != "203.0.113.7" {
-		t.Fatalf("ip = %q, want 203.0.113.7", got)
+	if got, _ := values[guard.SessionIPKey].(string); got != "127.0.0.1" {
+		t.Fatalf("ip = %q, want 127.0.0.1", got)
 	}
 	created, ok := values[guard.SessionCreatedAtKey].(string)
 	if !ok {
@@ -150,11 +149,11 @@ func TestLoginTruncatesOversizedUserAgent(t *testing.T) {
 	}
 }
 
-func TestClientIPIgnoresForwardedForFromUntrustedPeer(t *testing.T) {
+func TestSessionIPIgnoresForwardedFor(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
 	u, password := createTestUser(t, db, tag)
-	ts, sm, _ := newTestAppWithTrustedProxies(t, db, nil)
+	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
 	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
@@ -285,8 +284,7 @@ func TestSessionsListIncludesCurrentWithMetadata(t *testing.T) {
 	client := testClient(t)
 
 	login := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
-		"User-Agent":      "probe/1.0",
-		"X-Forwarded-For": "203.0.113.7",
+		"User-Agent": "probe/1.0",
 	})
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
@@ -307,8 +305,8 @@ func TestSessionsListIncludesCurrentWithMetadata(t *testing.T) {
 	if item.UserAgent != "probe/1.0" {
 		t.Fatalf("user_agent = %q, want probe/1.0", item.UserAgent)
 	}
-	if item.IP != "203.0.113.7" {
-		t.Fatalf("ip = %q, want 203.0.113.7", item.IP)
+	if item.IP != "127.0.0.1" {
+		t.Fatalf("ip = %q, want 127.0.0.1", item.IP)
 	}
 	if item.ID == "" || item.ID == sessionCookie(t, client.Jar, ts.URL) {
 		t.Fatalf("id = %q, want an opaque fingerprint different from the session token", item.ID)

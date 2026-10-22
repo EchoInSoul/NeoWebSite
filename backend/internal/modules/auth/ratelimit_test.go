@@ -109,7 +109,7 @@ func TestLoginRateLimitIPWindow(t *testing.T) {
 	other := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: "missing-3+" + tag + "@example.com", Password: "wrong-password-1"}, map[string]string{
 		"X-Forwarded-For": "203.0.113.8",
 	})
-	assertErrorCode(t, other, http.StatusUnauthorized, "invalid_credentials")
+	assertErrorCode(t, other, http.StatusTooManyRequests, "rate_limited")
 }
 
 func TestRegisterRateLimitIP(t *testing.T) {
@@ -135,11 +135,7 @@ func TestRegisterRateLimitIP(t *testing.T) {
 	other := postJSONWithHeaders(t, client, ts.URL+"/api/v1/users", RegisterRequest{Email: "limit-ip-other+" + tag + "@example.com", Nickname: "ipother" + tag, Password: "short"}, map[string]string{
 		"X-Forwarded-For": "203.0.113.8",
 	})
-	if other.StatusCode != http.StatusBadRequest {
-		other.Body.Close()
-		t.Fatalf("other ip status = %d, want 400", other.StatusCode)
-	}
-	other.Body.Close()
+	assertErrorCode(t, other, http.StatusTooManyRequests, "rate_limited")
 }
 
 func TestRegisterRateLimitEmail(t *testing.T) {
