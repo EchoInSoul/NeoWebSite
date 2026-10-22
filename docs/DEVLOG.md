@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-10-23 · 人机验证接入 Cloudflare Turnstile（登录 / 注册真拦截）
+
+**范围**：后端 16 文件——`common/apierror/apierror.go` 与 `apierror_test.go`；`modules/settings/{registry.go,registry_test.go,controller_test.go}`；`modules/auth/captcha.go`（新）、`captcha_test.go`（新）、`captcha_flow_test.go`（新）、`service.go`、`controller.go`、`dto.go`、`module.go`、`auth_test.go`、`totp_flow_test.go`；`README.md`、`internal/version/version.go`。前端 13 文件——`lib/public-settings.ts`、`components/auth/turnstile-captcha.tsx`（新）、`components/auth/captcha-dialog.tsx`（新）、`hooks/{use-signin.ts,use-signup.ts}`、`app/signin/{page,signin-view,signin-form}.tsx`、`app/signup/{page,signup-view,signup-form}.tsx`、`messages/{zh-CN,en}.json`。另加本条目。零迁移、零依赖、零新路由；版本 `0.22.0` → `0.23.0`。
+
+**动机**：上一轮只把两把密钥存进了设置组，选了 Turnstile 也不会真的出验证。本轮按用户要求接真：启用后登录与注册必须先过人机验证，失败不允许登录 / 注册，并返回专属状态码。
+
+**口径**：
+
+- 公开面：`captcha_enabled`、`captcha_provider`、`turnstile_site_key` 三项标 `Public`（登录 / 注册页要读它们决定是否渲染小组件），`turnstile_secret_key` 保持非公开。
+- 错误码：新增 `captcha_failed`（400 `invalid_request_error`，`param:"captcha_token"`），登记进 `statusByCode` 与 `TestRegistryIntegrity`（33 → 34）。
+- 四态模型照参考项目：`pass` / `reject` / `unavailable`（另有「不启用」由条件判断直接放行）。`siteverify` 表单字段 `secret` / `response` / `remoteip`（IP 为空或 `unknown` 时不带），超时 2.5 秒；只有访客侧错误码 `missing-input-response` / `invalid-input-response` / `timeout-or-duplicate` 判拒绝，`invalid-input-secret`、非 2xx、坏 JSON、超时、传输错误全部判「不可用」。
+- 拦截条件（三者同时成立才校验）：`captcha_enabled=true`、`captcha_provider="turnstile"`、`turnstile_secret_key` 非空。**缺任一条件放行**——包括选了自研（`builtin`，尚无实现）、密钥没填、以及设置层读取失败（沿用 auth 模块既有的 fail-open：`brokenSettingsService` 用例仍然登录成功）。
+- 判定顺序：登录在 IP 频率限制 + 账号锁定检查之后、比对密码之前；注册在注册总闸与字段结构校验之后、邮箱频率限制之前。captcha 失败**不计入**登录失败次数（有专门用例连打 6 次拒绝后仍能用正确密码登录成功），也不新开独立计数桶。
+- 空 token 不发网络请求，直接 400 `captcha_failed`。
+- 前端：`lib/public-settings.ts` 加 `getCaptchaConfig`，只有「启用 + turnstile + site key 非空」才返回配置；`components/auth/turnstile-captcha.tsx` 用 `render=explicit` 加载官方脚本（10 秒加载超时、失败清空 token），主题读 `documentElement.classList.contains("dark")`、语言跟随 locale、`size:"flexible"`。
+- 弹窗形态（用户裁定，照参考项目）：小组件**不内嵌在表单里**，而是包进 `components/auth/captcha-dialog.tsx` 的二级弹窗——只有点「登录」/「注册」且表单校验全部通过、当前又没有 token 时才弹出（标题 `auth.captchaDialogTitle`「人机验证」，点遮罩不关，右上角 X 可取消）；弹窗打开时才挂载组件，关闭即卸载。
+- 通过后的节奏：拿到 token 不立刻关窗，先停 `CLOSE_DELAY_MS = 1618`（照参考项目的停顿）让 Turnstile 自己的成功动画走完，再关窗并提交；等待期间点 X 取消会清掉定时器，不会偷偷提交。
+- 提交闸门：hook 新增 `onCaptchaRequired` 回调与 `submit(captchaToken?)` 可选参数。表单提交 → 校验通过后若缺 token 就回调开窗并中止；用户在弹窗里验完 → 关窗、把 token 直接传给 `submit(token)` 发起真实请求（不用隐藏 input + `requestSubmit`）。token 一次性，验过即作废：任何失败后再次提交都会重新弹窗、重新拿码；`captcha_failed` 单独 toast「人机验证未通过，请重试」。2FA 二段步骤不校验 captcha，也不需要弹窗。
+- 后端注入：`newService` 新增最后一个参数 `captchaVerifier`（接口），`nil` 时退化为「不可用」实现；生产在 `auth.New` 里构造 `newTurnstileVerifier(turnstileSiteverifyURL, 2500ms)`。测试用 `fakeCaptchaVerifier` 记录 secret / token / ip。
+
+**未做**：自研（`builtin`）验证器仍未实现，选了它 + 启用开关等于不拦（文档已注明）；没有独立的 captcha 频率桶（只受登录 / 注册既有 IP 频率限制保护）；前端无自动化测试；`/public/settings` 读不到时页面不出小组件，但后端照样拦，用户会碰到 `captcha_failed`（公开设置缓存 60 秒，正常的瞬时故障影响有限）。
+
+**验证**：`gofmt -l` 干净；`bash scripts/test.sh`（`-p 1`，含 `DATABASE_URL_TEST`）全绿——app / apierror / auth / settings 等 13 个包全过。四条变异实测变红：① 去掉 `remoteip` → 表单用例报 `remoteip = ""`；② 把访客侧错误码改成「不可用」→ 分类矩阵三条红；③ 删掉空 token 短路 → 登录 / 注册用例拿到 200 / 201；④ 把「拒绝」当成「通过」→ 拒绝类用例全部翻绿失败。前端 `npx tsc --noEmit`、ESLint、Prettier 全通过。运行期（本地用测试密钥走通登录 / 注册与失败提示）归用户实机确认。
+
+**本地调试密钥**（Cloudflare 官方测试密钥，任意域名可用，含 localhost）：站点密钥 `1x00000000000000000000AA` + 私钥 `1x0000000000000000000000000000000AA` = 永远通过；站点 `2x00000000000000000000AB` + 私钥 `2x0000000000000000000000000000000AA` = 永远失败；`3x00000000000000000000FF` = 强制交互，配合 `1x…AA` 私钥。
+
+**提交状态**：未提交。
+
+---
+
 ## 2026-10-23 · Turnstile 密钥设置落库（只接线，不改登录/注册）
 
 **范围**：后端 5 文件——`internal/modules/settings/registry.go`、`registry_test.go`、`controller_test.go`、`README.md`、`internal/version/version.go`；前端 3 文件——`lib/login-settings.ts`、`hooks/use-login-settings-save.ts`、`app/console/settings/login/login-control-form.tsx`；另加本条目。零迁移、零依赖、零路由变化；版本 `0.21.2` → `0.22.0`（minor）。
