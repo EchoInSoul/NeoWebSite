@@ -30,7 +30,7 @@ const fieldClassName =
   "flex min-h-9 w-full items-center gap-1 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm dark:bg-input/30";
 
 const optionClassName =
-  "flex w-full cursor-pointer items-center gap-2 rounded-md py-1 pr-1.5 pl-1.5 text-left text-sm outline-hidden select-none";
+  "flex w-full cursor-pointer items-center gap-2 rounded-md py-1 pr-1.5 pl-1.5 text-left text-sm/6 outline-hidden select-none";
 
 export function AllowedEmailDomainsField({
   value,

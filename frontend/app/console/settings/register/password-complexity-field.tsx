@@ -133,7 +133,7 @@ export function PasswordComplexityField({
               key={code}
               role="option"
               aria-selected={checked}
-              className="flex cursor-pointer items-center gap-2 rounded-md py-1 pr-2 pl-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+              className="flex cursor-pointer items-center gap-2 rounded-md py-1 pr-2 pl-1.5 text-sm/6 outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
               onClick={() => toggleCode(code)}
             >
               <Checkbox
