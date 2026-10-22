@@ -259,7 +259,7 @@ func TestGinModeFollowsEnvironment(t *testing.T) {
 	}{
 		{config.EnvironmentProduction, gin.ReleaseMode},
 		{config.EnvironmentDevelopment, gin.DebugMode},
-		{config.EnvironmentTest, gin.TestMode},
+		{"test", gin.ReleaseMode},
 		{"bogus", gin.ReleaseMode},
 	} {
 		t.Run(tc.environment, func(t *testing.T) {

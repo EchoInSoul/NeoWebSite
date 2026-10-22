@@ -22,10 +22,9 @@ const (
 const (
 	EnvironmentDevelopment = "development"
 	EnvironmentProduction  = "production"
-	EnvironmentTest        = "test"
 )
 
-var DefaultEnvironment = EnvironmentDevelopment
+const DefaultEnvironment = EnvironmentProduction
 
 const (
 	defaultSMTPPort     = 587
@@ -140,10 +139,10 @@ func EffectiveEnvironment() (string, error) {
 		value = strings.TrimSpace(v)
 	}
 	switch value {
-	case EnvironmentDevelopment, EnvironmentProduction, EnvironmentTest:
+	case EnvironmentDevelopment, EnvironmentProduction:
 		return value, nil
 	}
-	return "", fmt.Errorf("APP_ENV must be one of %q, %q or %q, got %q", EnvironmentDevelopment, EnvironmentProduction, EnvironmentTest, value)
+	return "", fmt.Errorf("APP_ENV must be one of %q or %q, got %q", EnvironmentDevelopment, EnvironmentProduction, value)
 }
 
 func loadSMTP() (smtpConfig, error) {

@@ -110,8 +110,6 @@ func ginMode(environment string) string {
 	switch environment {
 	case config.EnvironmentProduction:
 		return gin.ReleaseMode
-	case config.EnvironmentTest:
-		return gin.TestMode
 	case config.EnvironmentDevelopment:
 		return gin.DebugMode
 	default:

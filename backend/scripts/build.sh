@@ -18,10 +18,9 @@ mkdir -p "$(dirname "$OUT")"
 
 CGO_ENABLED=0 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build \
   -trimpath \
-  -ldflags "-s -w -X website/backend/internal/config.DefaultEnvironment=production" \
+  -ldflags "-s -w" \
   -o "$OUT" .
 
 BYTES="$(wc -c < "$OUT" | tr -d ' ')"
 echo "built: $OUT (${BYTES} B)"
-echo "APP_ENV default: production"
 echo "version: $VERSION"

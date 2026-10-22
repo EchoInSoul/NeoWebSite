@@ -13,7 +13,7 @@ func TestLoadRequiresDatabaseURL(t *testing.T) {
 	}
 }
 
-func TestLoadFallsBackToCompiledDefaultEnvironment(t *testing.T) {
+func TestLoadDefaultsToProductionWhenEnvironmentUnset(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
 	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 	unsetEnv(t, "APP_ENV")
@@ -22,19 +22,19 @@ func TestLoadFallsBackToCompiledDefaultEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Environment != DefaultEnvironment {
-		t.Fatalf("Environment = %q, want compiled default %q", cfg.Environment, DefaultEnvironment)
+	if cfg.Environment != EnvironmentProduction {
+		t.Fatalf("Environment = %q, want %q when APP_ENV is unset", cfg.Environment, EnvironmentProduction)
 	}
-	if cfg.IsProduction() != (DefaultEnvironment == EnvironmentProduction) {
-		t.Fatalf("IsProduction = %v, want %v", cfg.IsProduction(), DefaultEnvironment == EnvironmentProduction)
+	if !cfg.IsProduction() {
+		t.Fatal("IsProduction must be true when APP_ENV is unset")
 	}
 }
 
-func TestCompiledDefaultEnvironmentIsKnown(t *testing.T) {
+func TestDefaultEnvironmentIsSupported(t *testing.T) {
 	switch DefaultEnvironment {
-	case EnvironmentDevelopment, EnvironmentProduction, EnvironmentTest:
+	case EnvironmentDevelopment, EnvironmentProduction:
 	default:
-		t.Fatalf("DefaultEnvironment = %q, which no build mode accepts", DefaultEnvironment)
+		t.Fatalf("DefaultEnvironment = %q, which Load does not accept", DefaultEnvironment)
 	}
 }
 
@@ -52,11 +52,11 @@ func TestLoadRejectsEmptyEnvironment(t *testing.T) {
 	}
 }
 
-func TestLoadEnvironmentOverridesCompiledDefault(t *testing.T) {
+func TestLoadEnvironmentOverridesDefault(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
 	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 
-	for _, value := range []string{EnvironmentDevelopment, EnvironmentProduction, EnvironmentTest} {
+	for _, value := range []string{EnvironmentDevelopment, EnvironmentProduction} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("APP_ENV", value)
 			cfg, err := Load()
@@ -77,7 +77,7 @@ func TestLoadRejectsUnknownEnvironment(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
 	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 
-	for _, value := range []string{"prod", "Production", "staging", "dev"} {
+	for _, value := range []string{"prod", "Production", "staging", "dev", "test"} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("APP_ENV", value)
 			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "APP_ENV") {

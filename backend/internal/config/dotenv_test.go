@@ -171,6 +171,7 @@ func unsetEnv(t *testing.T, keys ...string) {
 }
 
 func TestEnsureDotEnvFileCreatesWhenAbsent(t *testing.T) {
+	t.Setenv("APP_ENV", EnvironmentDevelopment)
 	path := filepath.Join(t.TempDir(), ".env")
 
 	created, err := EnsureDotEnvFile(path)
@@ -242,7 +243,8 @@ func TestEnsureDotEnvFileNeverOverwrites(t *testing.T) {
 
 func TestEnsuredDotEnvMakesLoadSucceed(t *testing.T) {
 	t.Chdir(t.TempDir())
-	unsetEnv(t, "DATABASE_URL", "DATABASE_URL_TEST", "TOTP_ENCRYPTION_KEY", "POSTGRES_PASSWORD", "APP_ENV")
+	unsetEnv(t, "DATABASE_URL", "DATABASE_URL_TEST", "TOTP_ENCRYPTION_KEY", "POSTGRES_PASSWORD")
+	t.Setenv("APP_ENV", EnvironmentDevelopment)
 
 	created, err := EnsureDotEnv()
 	if err != nil {
@@ -288,16 +290,19 @@ func TestEnsureDotEnvSkipsProduction(t *testing.T) {
 	}
 }
 
-func TestEnsureDotEnvStillBootstrapsTestEnvironment(t *testing.T) {
+func TestEnsureDotEnvSkipsDefaultEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	t.Setenv("APP_ENV", EnvironmentTest)
+	unsetEnv(t, "APP_ENV")
 
 	created, err := EnsureDotEnv()
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
-	if !created {
-		t.Fatal("test environment must keep the dev-shaped bootstrap so integration tests can run")
+	if created {
+		t.Fatal("the default environment must not bootstrap a dev-shaped .env")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".env")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a .env appeared in %s under the default environment: %v", dir, err)
 	}
 }
