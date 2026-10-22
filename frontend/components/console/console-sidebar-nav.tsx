@@ -14,6 +14,7 @@ import { usePathname } from "next/navigation";
 import {
   CircleUserRound,
   LogIn,
+  Mail,
   MonitorSmartphone,
   Settings,
   SlidersHorizontal,
@@ -60,6 +61,7 @@ const SETTINGS_REGISTER_HREF = `${PANEL_PREFIXES.settings}/register`;
 const SETTINGS_LOGIN_HREF = `${PANEL_PREFIXES.settings}/login`;
 const SETTINGS_GROUPS_HREF = `${PANEL_PREFIXES.settings}/groups`;
 const SETTINGS_USERS_HREF = `${PANEL_PREFIXES.settings}/users`;
+const SETTINGS_MAIL_HREF = `${PANEL_PREFIXES.settings}/mail`;
 
 const SLIDE_FALLBACK_MS = SIDEBAR_SLIDE_DURATION_MS + 80;
 
@@ -322,6 +324,18 @@ export function ConsoleSidebarNav({
                     ]
                   : []),
               ],
+            },
+            {
+              label: t("mail"),
+              items: canViewSettings
+                ? [
+                    {
+                      href: SETTINGS_MAIL_HREF,
+                      label: ts("mail"),
+                      icon: <Mail />,
+                    } satisfies ConsoleSidebarSectionItem,
+                  ]
+                : [],
             },
           ].filter((group) => group.items.length > 0)}
         />
