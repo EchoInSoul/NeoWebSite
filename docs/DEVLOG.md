@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-10-23 · 六个免缓存页面补 `instant = false`（消除导航期未缓存数据告警）
+
+**范围**：前端 6 文件——`app/console/settings/{general,groups,login,register,users}/page.tsx` 与 `app/console/uc/session/page.tsx`，每页新增一行 `export const instant = false;`。零后端、零迁移、零依赖、零路由与接口变化；版本保持 0.21.2（纯前端告警收口，不单独进位）。
+
+**动机**：`frontend/next.config.ts` 已开 `cacheComponents: true`。这六个页面在服务端都显式以 `cache: "no-store"` 取数，导航时会触发「uncached data during a navigation」告警。`export const instant = false` 声明该页不参与即时导航约束；它只豁免所在层、不向下传播，所以根 `app/layout.tsx`、`app/console/layout.tsx` 与 `app/{signin,signup}/page.tsx` 早有的同一行覆盖不到这些子页。
+
+**口径**：
+
+- 六页与数据来源一一对应：`general` / `login` / `register` 走 `lib/admin-settings.ts`，`users` 走 `lib/admin-users.ts`，`groups` 走 `lib/admin-groups.ts`，`uc/session` 走 `lib/user-sessions-server.ts`；四处 fetch 均为 `cache: "no-store"`。
+- 只加段配置，不改取数方式、不动缓存策略与页面渲染，也不全局关闭 `cacheComponents`。
+- 未加的同层页面：`app/page.tsx`、`app/ui-check/page.tsx` 无服务端取数；`app/console/page.tsx` 只读标题文案；`app/console/uc/page.tsx` 是重定向；`app/console/uc/profile/page.tsx` 无显式 `no-store` 取数（会话走 cookie 动态渲染，公开设置带 60 秒 revalidate）。
+
+**验证**：`npx tsc --noEmit`、ESLint（6 文件）、`npx prettier --check` 均通过。告警消失的运行期现象未另起 dev server 复现，归用户实机确认。
+
+**已知缺口**：无新增。后续新增页面若同样在服务端 `no-store` 取数，需自行补这一行。
+
+**提交状态**：代码批次 `c396e05` 已入库；本条目随后单独入库。
+
+---
+
 ## 2026-10-20 · 鉴权入口限流（登录 / 注册 / 2FA verify + 前端 429 反馈）（0.21.2）
 
 **范围**：后端新增 `internal/common/ratelimit`（实现 + 单测）、`apierror` 的 429 / `Retry-After`、`config.TrustedProxies`、`app.go` 注入 limiter、`auth/{ratelimit.go,service.go,controller.go,module.go}` 与测试（`ratelimit_test.go`、`auth_test.go`、`sessions_test.go`、`totp_flow_test.go`）；前端 `lib/{api,rate-limit}.ts`、登录/注册 hooks 与表单、中英文案。零迁移、零新依赖、零新路由；版本 0.21.1 → 0.21.2（patch）。
