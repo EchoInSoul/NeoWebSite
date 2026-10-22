@@ -2,12 +2,12 @@
 
 import { useState, type FormEvent } from "react";
 import {
-  Clock,
-  Clock3,
+  CalendarClock,
   Fingerprint,
+  Hourglass,
   KeyRound,
   ShieldCheck,
-  Smartphone,
+  ShieldUser,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -121,11 +121,11 @@ export function LoginControlForm({
                   </Select>
                 </div>
               }
-              icon={<Clock3 />}
+              icon={<CalendarClock />}
               label={t("sessionMaxAge")}
             />
           }
-          icon={<Clock />}
+          icon={<Hourglass />}
           label={t("sessionMaxAgeEnabled")}
         />
       </ConsoleSettingsGroup>
@@ -139,7 +139,7 @@ export function LoginControlForm({
               disabled={isSaving}
             />
           }
-          icon={<Smartphone />}
+          icon={<ShieldUser />}
           label={t("twoFactorAuth")}
         />
         <ConsoleSettingsRow
