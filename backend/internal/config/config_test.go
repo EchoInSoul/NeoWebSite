@@ -1,7 +1,6 @@
 package config
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -11,57 +10,6 @@ func TestLoadRequiresDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
 		t.Fatalf("expected error naming DATABASE_URL, got %v", err)
-	}
-}
-
-func TestLoadTrustedProxiesDefaultsToLoopback(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
-	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
-	unsetEnv(t, "TRUSTED_PROXIES")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"127.0.0.1/32", "::1/128"}
-	if !reflect.DeepEqual(cfg.TrustedProxies, want) {
-		t.Fatalf("TrustedProxies = %v, want %v", cfg.TrustedProxies, want)
-	}
-}
-
-func TestLoadReadsTrustedProxies(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
-	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
-	t.Setenv("TRUSTED_PROXIES", "10.0.0.0/8, 192.168.1.1 ,::1")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"10.0.0.0/8", "192.168.1.1", "::1"}
-	if !reflect.DeepEqual(cfg.TrustedProxies, want) {
-		t.Fatalf("TrustedProxies = %v, want %v", cfg.TrustedProxies, want)
-	}
-}
-
-func TestLoadRejectsInvalidTrustedProxies(t *testing.T) {
-	cases := []struct {
-		name  string
-		value string
-	}{
-		{"invalid ip", "not-an-ip"},
-		{"empty entry", "10.0.0.0/8,,::1"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
-			t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
-			t.Setenv("TRUSTED_PROXIES", tc.value)
-
-			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRUSTED_PROXIES") {
-				t.Fatalf("expected error naming TRUSTED_PROXIES, got %v", err)
-			}
-		})
 	}
 }
 

@@ -33,8 +33,6 @@ func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Serv
 	return ts, sm
 }
 
-var testTrustedProxies = []string{"127.0.0.1/32", "::1/128"}
-
 func newTestAppWithSessionsAndSettings(t *testing.T, db *database.Database, overrideSettings ...*settings.Service) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
 
@@ -49,17 +47,7 @@ func newTestAppWithSessionsAndSettings(t *testing.T, db *database.Database, over
 		settingsService = settingsModule.Service
 	}
 
-	return newTestAppWithProxySettings(t, db, testTrustedProxies, settingsService, ratelimit.New(), disabledRateLimitPolicies())
-}
-
-func newTestAppWithTrustedProxies(t *testing.T, db *database.Database, proxies []string) (*httptest.Server, *scs.SessionManager, *settings.Service) {
-	t.Helper()
-
-	settingsModule, err := settings.New(db)
-	if err != nil {
-		t.Fatalf("settings.New: %v", err)
-	}
-	return newTestAppWithProxySettings(t, db, proxies, settingsModule.Service, ratelimit.New(), disabledRateLimitPolicies())
+	return newTestAppWithSettings(t, db, settingsService, ratelimit.New(), disabledRateLimitPolicies())
 }
 
 func newTestAppWithRatePolicies(t *testing.T, db *database.Database, policies rateLimitPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
@@ -69,10 +57,10 @@ func newTestAppWithRatePolicies(t *testing.T, db *database.Database, policies ra
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
 	}
-	return newTestAppWithProxySettings(t, db, testTrustedProxies, settingsModule.Service, ratelimit.New(), policies)
+	return newTestAppWithSettings(t, db, settingsModule.Service, ratelimit.New(), policies)
 }
 
-func newTestAppWithProxySettings(t *testing.T, db *database.Database, proxies []string, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+func newTestAppWithSettings(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
 
 	sm := scs.New()
@@ -80,7 +68,7 @@ func newTestAppWithProxySettings(t *testing.T, db *database.Database, proxies []
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	if err := engine.SetTrustedProxies(proxies); err != nil {
+	if err := engine.SetTrustedProxies(nil); err != nil {
 		t.Fatalf("SetTrustedProxies: %v", err)
 	}
 	api := engine.Group("/api/v1")

@@ -52,7 +52,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	engine.Use(gin.Logger(), recoveryHandler())
 	engine.HandleMethodNotAllowed = true
 
-	if err := engine.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+	if err := engine.SetTrustedProxies(nil); err != nil {
 		return nil, err
 	}
 
