@@ -67,6 +67,7 @@ export function ConsoleSidebarSection({
             render={backLink}
             onClick={onBackClick}
             tooltip={tooltip}
+            className="select-none"
           >
             <ArrowLeft />
             <span
@@ -102,6 +103,7 @@ export function ConsoleSidebarSection({
                   }
                   render={<Link href={item.href} />}
                   tooltip={item.label}
+                  className="select-none"
                 >
                   {item.icon}
                   <span>{item.label}</span>

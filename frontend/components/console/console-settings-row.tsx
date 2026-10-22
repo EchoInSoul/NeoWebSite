@@ -76,7 +76,7 @@ export function ConsoleSettingsRow({
         </ItemMedia>
       )}
       <ItemContent className={isInteractiveRow ? rowLayerClassName : undefined}>
-        <ItemTitle>{label}</ItemTitle>
+        <ItemTitle className="select-none">{label}</ItemTitle>
         {description === undefined ? null : (
           <ItemDescription>{description}</ItemDescription>
         )}
