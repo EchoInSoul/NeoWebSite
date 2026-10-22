@@ -662,7 +662,7 @@ func (s *Service) verifyCaptcha(ctx context.Context, token string, meta SessionM
 	if token == "" {
 		return apierror.ErrCaptchaFailed
 	}
-	if s.captcha.Verify(ctx, secret, token, meta.IP) == captchaRejected {
+	if s.captcha.Verify(ctx, secret, token, meta.IP) != captchaPassed {
 		return apierror.ErrCaptchaFailed
 	}
 

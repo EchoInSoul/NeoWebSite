@@ -146,7 +146,7 @@ func TestLoginRejectedCaptchaBlocksLogin(t *testing.T) {
 	}
 }
 
-func TestLoginFailsOpenWhenCaptchaUnavailable(t *testing.T) {
+func TestLoginRejectsWhenCaptchaUnavailable(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
 	verifier := &fakeCaptchaVerifier{outcome: captchaUnavailable}
@@ -157,9 +157,9 @@ func TestLoginFailsOpenWhenCaptchaUnavailable(t *testing.T) {
 
 	client := testClient(t)
 	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "anything"})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d — an unavailable verifier must not block sign-in", resp.StatusCode, http.StatusOK)
+	assertCaptchaFailed(t, resp)
+	if cookie := sessionCookie(t, client.Jar, ts.URL); cookie != "" {
+		t.Fatalf("session cookie = %q, want none when the verifier is unavailable", cookie)
 	}
 }
 
@@ -305,7 +305,7 @@ func TestRegisterRejectedCaptchaCreatesNoUser(t *testing.T) {
 	}
 }
 
-func TestRegisterFailsOpenWhenCaptchaUnavailable(t *testing.T) {
+func TestRegisterRejectsWhenCaptchaUnavailable(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
 	verifier := &fakeCaptchaVerifier{outcome: captchaUnavailable}
@@ -321,11 +321,8 @@ func TestRegisterFailsOpenWhenCaptchaUnavailable(t *testing.T) {
 		Password:     "pass-" + tag,
 		CaptchaToken: "anything",
 	})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d — an unavailable verifier must not block sign-up", resp.StatusCode, http.StatusCreated)
-	}
-	if after := userCount(t, db); after != before+1 {
-		t.Fatalf("user count = %d, want %d", after, before+1)
+	assertCaptchaFailed(t, resp)
+	if after := userCount(t, db); after != before {
+		t.Fatalf("user count = %d, want %d when the verifier is unavailable", after, before)
 	}
 }
