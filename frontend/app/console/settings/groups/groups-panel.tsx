@@ -282,7 +282,7 @@ export function GroupsPanel({
       <AlertDialog open={isDeleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogMedia>
+            <AlertDialogMedia className="text-destructive">
               <Trash2 aria-hidden="true" />
             </AlertDialogMedia>
             <AlertDialogTitle>{t("deleteConfirmTitle")}</AlertDialogTitle>

@@ -190,7 +190,7 @@ export function UsersPanel({
       <AlertDialog open={isDeleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogMedia>
+            <AlertDialogMedia className="text-destructive">
               <Trash2 aria-hidden="true" />
             </AlertDialogMedia>
             <AlertDialogTitle>{t("deleteConfirmTitle")}</AlertDialogTitle>
@@ -214,7 +214,7 @@ export function UsersPanel({
       <AlertDialog open={isBatchDeleteOpen} onOpenChange={setBatchDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogMedia>
+            <AlertDialogMedia className="text-destructive">
               <Trash2 aria-hidden="true" />
             </AlertDialogMedia>
             <AlertDialogTitle>
