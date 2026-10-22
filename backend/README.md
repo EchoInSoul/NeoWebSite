@@ -66,7 +66,6 @@ postsModule.Register(api)
 | `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
 | `DB_CONN_MAX_LIFETIME` | `30m` | 连接最长存活时间 |
 | `SESSION_LIFETIME` | `168h` | 会话默认有效期（`auth.session_max_age_enabled` 关闭时生效；开启时由 `session_max_age_days` 决定）。浏览器 cookie 的 `Max-Age` 跟随当前会话 deadline |
-| `TRUSTED_PROXIES` | `127.0.0.1/32,::1/128` | 可信代理列表（逗号分隔 IP/CIDR）；`ClientIP()`、限流与会话列表 IP 都用它解析，非可信来源的转发头不采信；非法值启动即失败；生产经非回环代理时改成实际代理网段 |
 | `SMTP_HOST` | 空 | SMTP 服务器；**为空时邮件只写日志、不影响启动** |
 | `SMTP_PORT` | `587` | SMTP 端口（正整数 ≤ 65535；**25 不受支持**——会被 go-mail 视为未设置并改写成 587/465） |
 | `SMTP_TLS` | `starttls` | `starttls`（配 587）或 `ssl`（配 465） |
@@ -195,11 +194,11 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 - 改自己的资料（`PATCH /users/me`）挂 `RequireAuth` + `LoadIdentity`、**不需要权限点**（改的是自己）；字段可选、只改给出的字段（缺省与 `null` 同义，都表示不修改）；昵称 / 邮箱 / 简介沿用注册那套归一与校验、同一批错误码；简介提交空串（或纯空白）即清空、库中存 `NULL`；**不校验当前密码**；会话只存 `userID`，因此改完无需重新登录，`/users/me` 与侧栏下次读取即是新值。
 - **更改密码保留当前设备、吊销该用户其他所有设备的会话**（用 scs 的 `IterableStore.All()` + `Codec` 按会话中的 `auth.user_id` 定位删除；失败即 500 且密码不落盘，可用旧密码重试）；密码哈希与 `auth_version` 在同一条 UPDATE 里写入，当前会话随后同步新版本。
 - **会话认证版本**：`users.auth_version` 在改密与启用 2FA 时 +1（与凭据写入同一条 UPDATE / 同一事务）；`establishSession` 把当时版本写进会话的 `auth.version`，`LoadIdentity` 每次请求与当前用户版本比对，不一致立即 401 并销毁会话。当前设备在改密 / 启用成功后同步写入新版本，不会踢掉自己；在途登录即使拿旧状态落了库，第一次访问受保护接口也会失效。
-- **会话管理（`GET` / `DELETE /users/me/sessions`）**：会话元数据以四个会话数据键随建立写入——`auth.user_agent` / `auth.ip` / `auth.created_at` / `auth.last_seen_at`（RFC3339 UTC 字符串），**零迁移**（仍存 scs 的 `sessions` 表，元数据在 gob 编码的 `data` 里）；两处建立点（单段登录、2FA verify）统一走 `auth.establishSession`，进入「待二段」改走 `enterPendingSession`（清身份、认证版本与元数据，因此待验会话不进任何人的列表）。最后活跃由 `guard.TrackSessionActivity` 维护：**距上次写入不足 5 分钟不写库**（`Put` 不移动 scs 的 deadline，因此不产生滑动续期，7 天上限仍从登录时刻起算）。IP 由 `ctx.ClientIP()` 在 `TRUSTED_PROXIES`（默认本机回环）下解析，**限流与会话列表共用**，非可信来源的转发头不采信（UA / IP 分别截断 512 / 64 字节）。列表与吊销共用 `eachSession` 迭代器（全表扫 + 逐条解码后按 `auth.user_id` 过滤）；删当前会话走 `Destroy`（避免本请求的节流写把已删的行提交回写）。
+- **会话管理（`GET` / `DELETE /users/me/sessions`）**：会话元数据以四个会话数据键随建立写入——`auth.user_agent` / `auth.ip` / `auth.created_at` / `auth.last_seen_at`（RFC3339 UTC 字符串），**零迁移**（仍存 scs 的 `sessions` 表，元数据在 gob 编码的 `data` 里）；两处建立点（单段登录、2FA verify）统一走 `auth.establishSession`，进入「待二段」改走 `enterPendingSession`（清身份、认证版本与元数据，因此待验会话不进任何人的列表）。最后活跃由 `guard.TrackSessionActivity` 维护：**距上次写入不足 5 分钟不写库**（`Put` 不移动 scs 的 deadline，因此不产生滑动续期，7 天上限仍从登录时刻起算）。IP 取直连对端（`ctx.RemoteIP()`），**限流与会话列表共用**；不采信 `X-Forwarded-For` / `X-Real-IP`，经反向代理或容器转发时看到的是代理 IP（UA / IP 分别截断 512 / 64 字节）。列表与吊销共用 `eachSession` 迭代器（全表扫 + 逐条解码后按 `auth.user_id` 过滤）；删当前会话走 `Destroy`（避免本请求的节流写把已删的行提交回写）。
 
 会话由 `scs` 管理、存 Postgres `sessions` 表；cookie 名 `session`、HttpOnly、SameSite=Lax、`Secure` 仅当解析出的环境为 `production`（发布构建默认即是，见「环境与构建」）；登录成功会换发会话 token（注册只建号，不下发会话）。受保护路由在 `app.go` 里经 `guard.RequireAuth → guard.TrackSessionActivity → guard.LoadIdentity` 挂载。账号由注册流程创建；`auth.CreateAdminUser` 仅供测试使用。
 
-**已知缺口**：限流计数在单实例进程内，重启清零、多实例各算各的（需要共享存储时再换实现）；生产经非回环代理时必须配置 `TRUSTED_PROXIES`（见环境变量表），否则 IP 维度会退化为代理机 IP。另：`sessions.token` 列存**原始 token**（scs 默认），库可读即会话可伪造——scs 自带 `HashTokenInStore` 可改成只存哈希，代价是开启时存量会话全部失效（用户被登出一次），且**三处比较都要改成指纹口径**：① `revokeOtherSessions` 跳过当前会话比的是裸 token（哈希 vs 裸永不相等，会把自己也踢掉）；② 会话列表的 `current` 徽标永不亮；③ 吊销接口判不出「删的是当前会话」，会掉回裸 `Store.Delete` 的复活坑。待点名；会话列表**不保留历史**（吊销即删行，过期由存储层 5 分钟一轮清理），要状态筛选 / 历史需另设登记表（见 `docs/superpowers/specs/2026-10-14-neoblog-session-management-design.md` §9）。
+**已知缺口**：限流计数在单实例进程内，重启清零、多实例各算各的（需要共享存储时再换实现）；IP 维度取直连对端，经反向代理或容器转发时所有用户会共用代理 IP；需要真实客户端 IP 时须另开一轮明确信任边界。另：`sessions.token` 列存**原始 token**（scs 默认），库可读即会话可伪造——scs 自带 `HashTokenInStore` 可改成只存哈希，代价是开启时存量会话全部失效（用户被登出一次），且**三处比较都要改成指纹口径**：① `revokeOtherSessions` 跳过当前会话比的是裸 token（哈希 vs 裸永不相等，会把自己也踢掉）；② 会话列表的 `current` 徽标永不亮；③ 吊销接口判不出「删的是当前会话」，会掉回裸 `Store.Delete` 的复活坑。待点名；会话列表**不保留历史**（吊销即删行，过期由存储层 5 分钟一轮清理），要状态筛选 / 历史需另设登记表（见 `docs/superpowers/specs/2026-10-14-neoblog-session-management-design.md` §9）。
 
 **两步验证（TOTP + 自管恢复码）**：已实现（设计：`docs/superpowers/specs/2026-10-11-neoblog-2fa-design.md`；setup 复用窗口：`docs/superpowers/specs/2026-10-14-neoblog-2fa-setup-reuse-window-design.md`；表结构见上方迁移清单的 `totp_and_recovery_codes`、`totp_last_counter` 与 `totp_setup_at`）。
 
@@ -228,7 +227,7 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 - 超限返回 429，`type` 为 `rate_limit_error`、`code` 为 `rate_limited`，错误信封不变；响应带 `Retry-After: <秒>`（向上取整，最小 1）。前端只弹 sonner「请求过于频繁」，不显示等待时间；提交按钮按该头暂时禁用，按钮文字显示剩余时间（如「12 分 48 秒」）。
 - 未知标识与已知标识走同一套计数和响应形状，不通过 429 泄漏账号是否存在。
 - 会话内「2FA 连错 5 次 → `two_factor_locked`」保留；账号级 10 次冷却负责跨会话、跨并发的总闸门。
-- 客户端 IP 由 Gin 在 `TRUSTED_PROXIES`（默认只信本机回环）下用 `ClientIP()` 解析，限流与会话列表共用；非可信来源的 `X-Forwarded-For` 不采信。生产经非回环代理时必须配置该变量。
+- 客户端 IP 取直连对端（`ctx.RemoteIP()`），限流与会话列表共用；不采信 `X-Forwarded-For` / `X-Real-IP`，经反向代理或容器转发时看到的是代理 IP。
 - 限流数值是代码常量（`auth/ratelimit.go`），暂不在后台设置页暴露。
 
 ### 用户组与权限
