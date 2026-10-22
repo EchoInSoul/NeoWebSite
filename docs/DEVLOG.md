@@ -4,6 +4,50 @@
 
 ---
 
+## 2026-10-23 · 个人资料内嵌报错统一改走 sonner
+
+**范围**：前端 4 文件——`app/console/uc/profile/{profile-form,two-factor-panel}.tsx`、`hooks/{use-password-change,use-two-factor-setup}.ts`。零后端、零迁移、零依赖；7 个既有文案键全部保留（改由 toast 使用），未新增、未删除键；版本保持 0.21.2（纯前端交互修正，不单独进位）。
+
+**动机**：个人信息页是全站仅有的内嵌红字报错处（`aria-live` 状态行）。同一句「密码不正确」在改密块是内嵌红字、在两步验证流程却是 sonner toast，两套呈现并存。用户要求把这些报错统一为 sonner。
+
+**口径**：
+
+- 删除三处内嵌状态行：改密块（密码不正确 / 密码长度不足 / 密码太长 / 新旧密码相同）与两步验证第一步、第二步（本站未开放两步验证 / 密钥生成失败 / 验证码不正确）。
+- 改密：本地预检（超长、复杂度）由 `setState` 改为直接 `toast.error`；后端 `invalid_credentials` / `weak_password` / `password_unchanged` 与通用失败全部 toast；`usePasswordChange` 的状态机简化为 `isSubmitting` 布尔值，在 `finally` 中复位，失败时字段保持不清空以便修改。
+- 两步验证：hook 原本已对密码错误、站点关闭、生成密钥失败弹 toast，页面又重复显示一遍，现只保留 toast；验证码错误原本只有内嵌红字，本轮补上 `twoFactorInvalidCode` 的 toast，输入框 `aria-invalid` 红框保留。
+- 随状态行一起移除「密钥生成失败」后的「重试」按钮：失败后密码仍留在输入框，再点「继续」即重试；验证码重输满 6 位自动提交。hook 中只被该行使用的 `isLoadFailed`、`isDisabledBySite`、`retrySetup` 一并删除。
+- 未改：请求期间按钮与输入框仍禁用；成功与通用失败 toast 不变；`common.retry` 仍被登录会话页使用，未清键。
+
+**验证**：`npx tsc --noEmit`（全项目）、ESLint（4 文件）、`npx prettier --check`、`git diff --check` 均通过；grep 确认 `frontend/app` 下已无 `aria-live` / `text-destructive` 内嵌报错残留（组件库内部样式除外）；七个文案键逐一确认仍有调用方。成功 / 各类错误码 / 401 静默 / 站点关闭 / 生成失败 / 验证码错逐条核对，未发现重复 toast 或状态卡死。运行期 toast 外观未起 dev server 复现，归用户实机确认。
+
+**已知缺口**：验证码校验遇 401 时 `submitState` 会停在 `verifying`（既有行为；401 由全局会话失效弹窗接管页面，不影响使用）；「密钥生成失败」不再有显式重试按钮，若需要 toast 内带动作需另做。
+
+**提交状态**：代码批次 `f3bea92` 已入库；本条目随后单独入库。
+
+---
+
+## 2026-10-23 · 移除全站加载中状态文字与转圈图标
+
+**范围**：前端 9 文件——`app/console/uc/profile/{profile-form,two-factor-panel}.tsx`、`app/ui-check/page.tsx`、`components/console/console-list-toolbar.tsx`、`components/ui/{toast,sonner}.tsx`、删除 `components/ui/spinner.tsx`、`messages/{zh-CN,en}.json`。零后端、零依赖、零路由变化；版本保持 0.21.2（纯前端，不单独进位）。
+
+**动机**：用户要求移除全站所有「加载中」状态文字与转圈图标。
+
+**口径**：
+
+- 个人资料：改密「正在修改…」、两步验证「正在生成密钥…」「正在验证…」三处状态文字与 `LoaderCircle` 删除；请求期间按钮与输入框仍禁用，防重复提交。
+- 列表刷新：用户 / 用户组 / 登录会话共用的工具栏刷新按钮不再旋转，刷新期间仍禁用。
+- 组件库：删除 `Spinner` 组件及 `ui-check` 中三处演示（按钮「处理中」、spinner 演示、附件上传态）；base-ui toast 去掉 `loading` 类型图标；sonner toaster 清理未使用的 `Loader2Icon` 导入（生产代码无任何 `toast.loading` 调用）。
+- i18n：删除 `uc.passwordChanging`、`uc.twoFactorSetupLoading`、`uc.twoFactorVerifying` 三键，中英文各三。
+- 未动：成功与失败 toast、所有错误文案、`Skeleton` 占位（仅出现在 `ui-check` 演示与未使用的侧栏样板，生产页面未使用）。
+
+**验证**：`npx tsc --noEmit`、ESLint（改动文件）、`npx prettier --check` 均通过；grep 确认无 `animate-spin` / `LoaderCircle` / `<Spinner` 残留。运行期未起 dev server 复现，归用户实机确认。
+
+**已知缺口**：`components/ui/attachment.tsx` 内仍保留一条针对 `data-slot=spinner` 的尺寸选择器（组件已删除，选择器成死样式，无可视影响）；`ui-check` 的 `Skeleton` 演示与 `components/ui/sidebar.tsx` 的 `SidebarMenuSkeleton` 仍在。
+
+**提交状态**：代码批次 `40646ee` 已入库；本条目与上一轮日志同批入库。
+
+---
+
 ## 2026-10-23 · 开关折叠块随开关自动展开（用户注册 / 登录控制 / 邮件）
 
 **范围**：前端 4 文件——新增 `hooks/use-switch-row-expansion.ts`；`app/console/settings/{register,login,mail}` 三个表单把共 6 个开关行接成受控展开。共享组件 `components/console/console-settings-row.tsx` 零改动（其 `expanded` / `onExpandedChange` 是既有能力）。零后端、零迁移、零依赖、无新增文案键；版本保持 0.21.2（纯前端交互修正，不单独进位）。
