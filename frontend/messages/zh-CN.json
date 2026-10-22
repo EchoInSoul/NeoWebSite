@@ -273,7 +273,6 @@
   "auth": {
     "signin": {
       "title": "欢迎回来",
-      "subtitle": "登录以继续",
       "identifier": "用户名或邮箱",
       "password": "密码",
       "submit": "登录",
@@ -296,7 +295,6 @@
     },
     "signup": {
       "title": "创建账号",
-      "subtitle": "注册新账号",
       "email": "邮箱",
       "name": "用户名",
       "password": "密码",

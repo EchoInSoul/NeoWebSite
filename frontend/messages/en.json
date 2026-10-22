@@ -273,7 +273,6 @@
   "auth": {
     "signin": {
       "title": "Welcome back",
-      "subtitle": "Sign in to continue",
       "identifier": "Username or email",
       "password": "Password",
       "submit": "Sign in",
@@ -296,7 +295,6 @@
     },
     "signup": {
       "title": "Create your account",
-      "subtitle": "Start your new account",
       "email": "Email",
       "name": "Username",
       "password": "Password",

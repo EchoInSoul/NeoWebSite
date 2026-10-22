@@ -28,10 +28,7 @@ export function SigninView({ signupOpen }: { signupOpen: boolean }) {
         ) : undefined
       }
     >
-      <div>
-        <h1 className="text-xl font-semibold">{t("title")}</h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">{t("subtitle")}</p>
-      </div>
+      <h1 className="text-xl font-semibold">{t("title")}</h1>
       <div className="mt-6">
         <SigninForm />
       </div>
