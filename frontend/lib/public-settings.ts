@@ -59,3 +59,26 @@ export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
 export function isSignupOpen(settings: PublicSettings): boolean {
   return settings.register?.enabled !== false;
 }
+
+export type CaptchaConfig = {
+  provider: "turnstile";
+  siteKey: string;
+};
+
+export function getCaptchaConfig(
+  settings: PublicSettings,
+): CaptchaConfig | null {
+  const auth = settings.auth;
+
+  if (auth?.captcha_enabled !== true || auth.captcha_provider !== "turnstile") {
+    return null;
+  }
+
+  const siteKey = auth.turnstile_site_key;
+
+  if (typeof siteKey !== "string" || siteKey.trim() === "") {
+    return null;
+  }
+
+  return { provider: "turnstile", siteKey };
+}

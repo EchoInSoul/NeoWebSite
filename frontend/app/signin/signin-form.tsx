@@ -13,11 +13,14 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import { CaptchaDialog } from "@/components/auth/captcha-dialog";
 import { useSigninForm } from "@/hooks/use-signin";
+import type { CaptchaConfig } from "@/lib/public-settings";
 
-export function SigninForm() {
+export function SigninForm({ captcha }: { captcha: CaptchaConfig | null }) {
   const t = useTranslations("auth.signin");
   const tCommon = useTranslations("common");
+  const [isCaptchaOpen, setIsCaptchaOpen] = useState(false);
   const {
     values,
     step,
@@ -31,7 +34,7 @@ export function SigninForm() {
     backToCredentials,
     submit,
     submitCode,
-  } = useSigninForm();
+  } = useSigninForm(captcha !== null, () => setIsCaptchaOpen(true));
 
   const formRef = useRef<HTMLFormElement>(null);
   const identifierFieldId = useId();
@@ -40,15 +43,25 @@ export function SigninForm() {
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
+  function focusField(field: string | undefined) {
+    if (!field) {
+      return;
+    }
+    formRef.current
+      ?.querySelector<HTMLInputElement>(`[name="${field}"]`)
+      ?.focus();
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const field = step === "verify" ? await submitCode() : await submit();
-    if (field) {
-      formRef.current
-        ?.querySelector<HTMLInputElement>(`[name="${field}"]`)
-        ?.focus();
-    }
+    focusField(field);
+  }
+
+  async function handleCaptchaSolved(token: string) {
+    setIsCaptchaOpen(false);
+    focusField(await submit(token));
   }
 
   return (
@@ -148,6 +161,15 @@ export function SigninForm() {
           {t("backToCredentials")}
         </Button>
       ) : null}
+
+      {captcha === null ? null : (
+        <CaptchaDialog
+          open={isCaptchaOpen}
+          siteKey={captcha.siteKey}
+          onOpenChange={setIsCaptchaOpen}
+          onSolved={handleCaptchaSolved}
+        />
+      )}
     </form>
   );
 }

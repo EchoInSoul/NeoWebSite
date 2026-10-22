@@ -13,12 +13,15 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import { CaptchaDialog } from "@/components/auth/captcha-dialog";
 import { useSignupForm } from "@/hooks/use-signup";
 import { PASSWORD_MIN_LENGTH } from "@/lib/password";
+import type { CaptchaConfig } from "@/lib/public-settings";
 
-export function SignupForm() {
+export function SignupForm({ captcha }: { captcha: CaptchaConfig | null }) {
   const t = useTranslations("auth.signup");
   const tCommon = useTranslations("common");
+  const [isCaptchaOpen, setIsCaptchaOpen] = useState(false);
   const {
     values,
     isPending,
@@ -27,7 +30,7 @@ export function SignupForm() {
     retryLabel,
     changeField,
     submit,
-  } = useSignupForm();
+  } = useSignupForm(captcha !== null, () => setIsCaptchaOpen(true));
 
   const formRef = useRef<HTMLFormElement>(null);
   const nameFieldId = useId();
@@ -38,14 +41,23 @@ export function SignupForm() {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmVisible, setIsConfirmVisible] = useState(false);
 
+  function focusField(field: string | undefined) {
+    if (!field) {
+      return;
+    }
+    formRef.current
+      ?.querySelector<HTMLInputElement>(`[name="${field}"]`)
+      ?.focus();
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const field = await submit();
-    if (field) {
-      formRef.current
-        ?.querySelector<HTMLInputElement>(`[name="${field}"]`)
-        ?.focus();
-    }
+    focusField(await submit());
+  }
+
+  async function handleCaptchaSolved(token: string) {
+    setIsCaptchaOpen(false);
+    focusField(await submit(token));
   }
 
   return (
@@ -152,6 +164,15 @@ export function SignupForm() {
         {retryLabel ??
           (serviceDown ? tCommon("serviceUnavailableButton") : t("submit"))}
       </Button>
+
+      {captcha === null ? null : (
+        <CaptchaDialog
+          open={isCaptchaOpen}
+          siteKey={captcha.siteKey}
+          onOpenChange={setIsCaptchaOpen}
+          onSolved={handleCaptchaSolved}
+        />
+      )}
     </form>
   );
 }

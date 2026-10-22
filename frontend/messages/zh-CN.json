@@ -284,6 +284,7 @@
     "retry": "重试"
   },
   "auth": {
+    "captchaDialogTitle": "人机验证",
     "signin": {
       "title": "欢迎回来",
       "identifier": "用户名或邮箱",
@@ -301,6 +302,7 @@
       "locked": "错误次数过多，请重新登录",
       "verifyExpired": "验证已失效，请重新登录",
       "rateLimited": "请求过于频繁",
+      "captchaFailed": "人机验证未通过，请重试",
       "retryIn": "{duration}",
       "failed": "登录失败，请稍后重试",
       "success": "登录成功",
@@ -330,6 +332,7 @@
       "invalidRequest": "填写内容有误，请检查后重试",
       "registrationClosed": "注册功能已关闭",
       "rateLimited": "请求过于频繁",
+      "captchaFailed": "人机验证未通过，请重试",
       "retryIn": "{duration}",
       "failed": "注册失败，请稍后重试",
       "success": "注册成功，请登录",

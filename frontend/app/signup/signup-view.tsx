@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { AuthFrame } from "@/components/auth/auth-frame";
+import type { CaptchaConfig } from "@/lib/public-settings";
 import { SignupForm } from "./signup-form";
 
-export function SignupView() {
+export function SignupView({ captcha }: { captcha: CaptchaConfig | null }) {
   const t = useTranslations("auth.signup");
 
   return (
@@ -25,7 +26,7 @@ export function SignupView() {
     >
       <h1 className="text-xl font-semibold">{t("title")}</h1>
       <div className="mt-6">
-        <SignupForm />
+        <SignupForm captcha={captcha} />
       </div>
     </AuthFrame>
   );

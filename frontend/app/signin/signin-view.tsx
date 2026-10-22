@@ -6,9 +6,16 @@ import { useTranslations } from "next-intl";
 import { AuthFrame } from "@/components/auth/auth-frame";
 import { useSignoutNotice } from "@/hooks/use-signout-notice";
 import { useSignupNotice } from "@/hooks/use-signup-notice";
+import type { CaptchaConfig } from "@/lib/public-settings";
 import { SigninForm } from "./signin-form";
 
-export function SigninView({ signupOpen }: { signupOpen: boolean }) {
+export function SigninView({
+  signupOpen,
+  captcha,
+}: {
+  signupOpen: boolean;
+  captcha: CaptchaConfig | null;
+}) {
   const t = useTranslations("auth.signin");
 
   useSignupNotice();
@@ -32,7 +39,7 @@ export function SigninView({ signupOpen }: { signupOpen: boolean }) {
     >
       <h1 className="text-xl font-semibold">{t("title")}</h1>
       <div className="mt-6">
-        <SigninForm />
+        <SigninForm captcha={captcha} />
       </div>
     </AuthFrame>
   );

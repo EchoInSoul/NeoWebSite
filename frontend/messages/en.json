@@ -284,6 +284,7 @@
     "retry": "Retry"
   },
   "auth": {
+    "captchaDialogTitle": "Human verification",
     "signin": {
       "title": "Welcome back",
       "identifier": "Username or email",
@@ -301,6 +302,7 @@
       "locked": "Too many attempts, please sign in again",
       "verifyExpired": "Verification expired, please sign in again",
       "rateLimited": "Too many requests.",
+      "captchaFailed": "Human verification failed, please try again",
       "retryIn": "{duration}",
       "failed": "Sign in failed, please try again later",
       "success": "Signed in successfully",
@@ -330,6 +332,7 @@
       "invalidRequest": "Some details are invalid, please review and try again",
       "registrationClosed": "Sign-ups are currently closed",
       "rateLimited": "Too many requests.",
+      "captchaFailed": "Human verification failed, please try again",
       "retryIn": "{duration}",
       "failed": "Sign up failed, please try again later",
       "success": "Account created, please sign in",

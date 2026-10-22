@@ -37,7 +37,10 @@ function isValidName(value: string) {
   );
 }
 
-export function useSignupForm() {
+export function useSignupForm(
+  captchaRequired: boolean,
+  onCaptchaRequired: () => void,
+) {
   const t = useTranslations("auth.signup");
   const locale = useLocale();
   const { serviceDown, resolveServiceError } = useServiceHealth();
@@ -94,13 +97,15 @@ export function useSignupForm() {
           return { message: t("registrationClosed") };
         case "rate_limited":
           return { message: t("rateLimited") };
+        case "captcha_failed":
+          return { message: t("captchaFailed") };
       }
     }
 
     return { message: t("failed") };
   }
 
-  async function submit(): Promise<SignupField | undefined> {
+  async function submit(captchaToken = ""): Promise<SignupField | undefined> {
     if (retryRemaining > 0) {
       return undefined;
     }
@@ -144,12 +149,21 @@ export function useSignupForm() {
       toast.error(t("mismatch"));
       return "confirmPassword";
     }
+    if (captchaRequired && captchaToken === "") {
+      onCaptchaRequired();
+      return undefined;
+    }
 
     setIsPending(true);
     try {
       await apiRequest("/api/v1/users", {
         method: "POST",
-        body: { email, nickname, password: values.password },
+        body: {
+          email,
+          nickname,
+          password: values.password,
+          ...(captchaToken === "" ? {} : { captcha_token: captchaToken }),
+        },
       });
       markSignupSuccess();
       setValues(EMPTY_VALUES);

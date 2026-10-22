@@ -17,7 +17,10 @@ const EMPTY_VALUES: Record<SigninField, string> = {
   password: "",
 };
 
-export function useSigninForm() {
+export function useSigninForm(
+  captchaRequired: boolean,
+  onCaptchaRequired: () => void,
+) {
   const t = useTranslations("auth.signin");
   const locale = useLocale();
   const { serviceDown, resolveServiceError } = useServiceHealth();
@@ -79,13 +82,15 @@ export function useSigninForm() {
           return t("verifyExpired");
         case "rate_limited":
           return t("rateLimited");
+        case "captcha_failed":
+          return t("captchaFailed");
       }
     }
 
     return t("failed");
   }
 
-  async function submit(): Promise<SigninField | undefined> {
+  async function submit(captchaToken = ""): Promise<SigninField | undefined> {
     if (retryRemaining > 0) {
       return undefined;
     }
@@ -101,12 +106,20 @@ export function useSigninForm() {
       toast.error(t("requiredPassword"));
       return "password";
     }
+    if (captchaRequired && captchaToken === "") {
+      onCaptchaRequired();
+      return undefined;
+    }
 
     setIsPending(true);
     try {
       await apiRequest("/api/v1/sessions", {
         method: "POST",
-        body: { identifier, password },
+        body: {
+          identifier,
+          password,
+          ...(captchaToken === "" ? {} : { captcha_token: captchaToken }),
+        },
       });
       markSigninSuccess();
       router.push("/console");
