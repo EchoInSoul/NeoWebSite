@@ -11,7 +11,6 @@ import {
   UserRound,
   UsersRound,
 } from "lucide-react";
-import { cn } from "cn";
 import { useTranslations } from "next-intl";
 
 import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
@@ -29,7 +28,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { usePasswordChange } from "@/hooks/use-password-change";
 import { useProfileSave } from "@/hooks/use-profile-save";
 import type { SessionUser } from "@/lib/auth-session";
-import { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH } from "@/lib/password";
 
 import { TwoFactorDisablePanel } from "./two-factor-disable-panel";
 import { TwoFactorPanel } from "./two-factor-panel";
@@ -64,7 +62,6 @@ export function ProfileForm({
   const {
     currentPassword,
     newPassword,
-    state: passwordState,
     isSubmitting: isChangingPassword,
     changeCurrentPassword,
     changeNewPassword,
@@ -80,17 +77,6 @@ export function ProfileForm({
   const isLocked = profile === null || isSaving;
   const isPasswordLocked = profile === null || isChangingPassword;
   const isPasswordFilled = currentPassword !== "" && newPassword !== "";
-
-  const passwordStatusText =
-    passwordState === "invalidPassword"
-      ? t("invalidPassword")
-      : passwordState === "weak"
-        ? t("passwordWeak", { minLength: PASSWORD_MIN_LENGTH })
-        : passwordState === "tooLong"
-          ? t("passwordTooLong", { maxBytes: PASSWORD_MAX_BYTES })
-          : passwordState === "unchanged"
-            ? t("passwordUnchanged")
-            : "";
 
   function handlePasswordKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
@@ -266,24 +252,6 @@ export function ProfileForm({
                   }
                   label={t("newPassword")}
                 />
-                {passwordStatusText === "" ? null : (
-                  <div className="px-5 py-3.5">
-                    <p
-                      aria-live="polite"
-                      className={cn(
-                        "flex min-h-4 items-center gap-1.5 text-xs leading-4",
-                        passwordState === "invalidPassword" ||
-                          passwordState === "weak" ||
-                          passwordState === "tooLong" ||
-                          passwordState === "unchanged"
-                          ? "text-destructive"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      {passwordStatusText}
-                    </p>
-                  </div>
-                )}
               </>
             }
             icon={<KeyRound />}

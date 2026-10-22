@@ -30,8 +30,6 @@ export function useTwoFactorSetup() {
   const [setup, setSetup] = useState<TwoFactorSetup | null>(null);
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadFailed, setIsLoadFailed] = useState(false);
-  const [isDisabledBySite, setIsDisabledBySite] = useState(false);
   const [code, setCode] = useState("");
   const [submitState, setSubmitState] = useState<TwoFactorSubmitState>("idle");
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
@@ -45,8 +43,6 @@ export function useTwoFactorSetup() {
 
     isStarting.current = true;
     setIsLoading(true);
-    setIsLoadFailed(false);
-    setIsDisabledBySite(false);
 
     try {
       const payload = await apiRequest<TwoFactorSetupPayload>(
@@ -71,14 +67,12 @@ export function useTwoFactorSetup() {
           return;
         }
         if (error.code === "two_factor_disabled") {
-          setIsDisabledBySite(true);
           toast.error(t("twoFactorSiteDisabled"));
           router.refresh();
           return;
         }
       }
 
-      setIsLoadFailed(true);
       toast.error(
         looksLikeServiceFailure(error)
           ? tCommon("serviceUnavailable")
@@ -92,12 +86,7 @@ export function useTwoFactorSetup() {
 
   const changePassword = useCallback((value: string) => {
     setPassword(value);
-    setIsLoadFailed(false);
   }, []);
-
-  const retrySetup = useCallback(() => {
-    void startSetup();
-  }, [startSetup]);
 
   const submitCode = useCallback(
     async (submittedCode: string) => {
@@ -125,6 +114,7 @@ export function useTwoFactorSetup() {
         if (error instanceof ApiError) {
           if (error.code === "two_factor_invalid_code") {
             setSubmitState("invalid");
+            toast.error(t("twoFactorInvalidCode"));
             return;
           }
           if (error.code === "invalid_credentials") {
@@ -144,7 +134,6 @@ export function useTwoFactorSetup() {
           }
           if (error.code === "two_factor_disabled") {
             setSubmitState("idle");
-            setIsDisabledBySite(true);
             toast.error(t("twoFactorSiteDisabled"));
             router.refresh();
             return;
@@ -194,13 +183,10 @@ export function useTwoFactorSetup() {
     setup,
     password,
     isLoading,
-    isLoadFailed,
-    isDisabledBySite,
     code,
     submitState,
     recoveryCodes,
     isBusy,
-    retrySetup,
     startSetup,
     changePassword,
     submitCode,

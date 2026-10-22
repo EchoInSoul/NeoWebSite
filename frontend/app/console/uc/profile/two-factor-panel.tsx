@@ -1,15 +1,7 @@
 "use client";
 
 import { useState, type ChangeEvent, type KeyboardEvent } from "react";
-import {
-  Check,
-  Copy,
-  ExternalLink,
-  Eye,
-  EyeOff,
-  KeyRound,
-} from "lucide-react";
-import { cn } from "cn";
+import { Check, Copy, ExternalLink, Eye, EyeOff, KeyRound } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useTranslations } from "next-intl";
 
@@ -44,13 +36,10 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
     setup,
     password,
     isLoading,
-    isLoadFailed,
-    isDisabledBySite,
     code,
     submitState,
     recoveryCodes,
     isBusy,
-    retrySetup,
     startSetup,
     changePassword,
     submitCode,
@@ -82,69 +71,42 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
   }
 
   if (setup === null) {
-    const passwordStatusText = isDisabledBySite
-      ? t("twoFactorSiteDisabled")
-      : isLoadFailed
-        ? t("twoFactorSetupFailed")
-        : "";
-
     return (
       <ConsoleSettingsRow
         control={
-          <div className="flex w-70 flex-col items-start gap-2">
-            <div className="flex w-full items-center gap-2">
-              <InputGroup className="min-w-0 flex-1">
-                <InputGroupInput
-                  aria-label={t("currentPassword")}
-                  autoComplete="current-password"
+          <div className="flex w-70 items-center gap-2">
+            <InputGroup className="min-w-0 flex-1">
+              <InputGroupInput
+                aria-label={t("currentPassword")}
+                autoComplete="current-password"
+                disabled={isLoading}
+                onChange={(event) => changePassword(event.target.value)}
+                onKeyDown={handlePasswordKeyDown}
+                type={isPasswordVisible ? "text" : "password"}
+                value={password}
+              />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  aria-label={
+                    isPasswordVisible
+                      ? tCommon("hidePassword")
+                      : tCommon("showPassword")
+                  }
                   disabled={isLoading}
-                  onChange={(event) => changePassword(event.target.value)}
-                  onKeyDown={handlePasswordKeyDown}
-                  type={isPasswordVisible ? "text" : "password"}
-                  value={password}
-                />
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    aria-label={
-                      isPasswordVisible
-                        ? tCommon("hidePassword")
-                        : tCommon("showPassword")
-                    }
-                    disabled={isLoading}
-                    onClick={() => setIsPasswordVisible((visible) => !visible)}
-                    size="icon-xs"
-                  >
-                    {isPasswordVisible ? <EyeOff /> : <Eye />}
-                  </InputGroupButton>
-                </InputGroupAddon>
-              </InputGroup>
-              <Button
-                disabled={password === "" || isLoading}
-                onClick={() => void startSetup()}
-                type="button"
-              >
-                {t("twoFactorContinue")}
-              </Button>
-            </div>
-            <p
-              aria-live="polite"
-              className={cn(
-                "flex min-h-4 items-center gap-1.5 text-xs leading-4",
-                isLoadFailed ? "text-destructive" : "text-muted-foreground",
-              )}
-            >
-              {passwordStatusText}
-              {isLoadFailed ? (
-                <Button
-                  onClick={retrySetup}
-                  size="xs"
-                  type="button"
-                  variant="ghost"
+                  onClick={() => setIsPasswordVisible((visible) => !visible)}
+                  size="icon-xs"
                 >
-                  {tCommon("retry")}
-                </Button>
-              ) : null}
-            </p>
+                  {isPasswordVisible ? <EyeOff /> : <Eye />}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+            <Button
+              disabled={password === "" || isLoading}
+              onClick={() => void startSetup()}
+              type="button"
+            >
+              {t("twoFactorContinue")}
+            </Button>
           </div>
         }
         icon={<KeyRound />}
@@ -152,14 +114,6 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
       />
     );
   }
-
-  const statusText = isDisabledBySite
-    ? t("twoFactorSiteDisabled")
-    : isLoadFailed
-      ? t("twoFactorSetupFailed")
-      : submitState === "invalid"
-        ? t("twoFactorInvalidCode")
-        : "";
 
   return (
     <>
@@ -243,27 +197,6 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
                 placeholder={t("twoFactorCodePlaceholder")}
                 value={code}
               />
-              <p
-                aria-live="polite"
-                className={cn(
-                  "flex min-h-4 items-center gap-1.5 text-xs leading-4",
-                  submitState === "invalid"
-                    ? "text-destructive"
-                    : "text-muted-foreground",
-                )}
-              >
-                {statusText}
-                {isLoadFailed ? (
-                  <Button
-                    onClick={retrySetup}
-                    size="xs"
-                    type="button"
-                    variant="ghost"
-                  >
-                    {tCommon("retry")}
-                  </Button>
-                ) : null}
-              </p>
             </div>
           </div>
         </div>
