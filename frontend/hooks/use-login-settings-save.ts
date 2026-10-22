@@ -69,6 +69,14 @@ export function useLoginSettingsSave(initial: LoginSettingsValues) {
     setValues((previous) => ({ ...previous, captchaProvider: value }));
   }
 
+  function setTurnstileSiteKey(value: string) {
+    setValues((previous) => ({ ...previous, turnstileSiteKey: value }));
+  }
+
+  function setTurnstileSecretKey(value: string) {
+    setValues((previous) => ({ ...previous, turnstileSecretKey: value }));
+  }
+
   async function save() {
     if (isSaving || !isDirty) {
       return;
@@ -130,6 +138,8 @@ export function useLoginSettingsSave(initial: LoginSettingsValues) {
     setPasswordResetEnabled,
     setCaptchaEnabled,
     setCaptchaProvider,
+    setTurnstileSiteKey,
+    setTurnstileSecretKey,
     save,
   };
 }
