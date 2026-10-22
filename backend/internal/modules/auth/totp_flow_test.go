@@ -1077,7 +1077,7 @@ func TestTwoFactorSetupConcurrentCallsShareSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
 	}
-	svc := newService(db, scs.New(), testTOTPKey, settingsModule.Service, ratelimit.New(), disabledRateLimitPolicies())
+	svc := newService(db, scs.New(), testTOTPKey, settingsModule.Service, ratelimit.New(), disabledRateLimitPolicies(), nil)
 
 	results := make([]TwoFactorSetupResponse, 8)
 	errs := make([]error, 8)

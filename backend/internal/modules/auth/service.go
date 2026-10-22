@@ -32,12 +32,16 @@ type Service struct {
 	settings  *settings.Service
 	limiter   *ratelimit.Limiter
 	policies  rateLimitPolicies
+	captcha   captchaVerifier
 }
 
-func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies) *Service {
+func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captchaVerifier) *Service {
 	dummy, err := bcrypt.GenerateFromPassword([]byte("timing-defense-placeholder"), bcrypt.DefaultCost)
 	if err != nil {
 		dummy = nil
+	}
+	if verifier == nil {
+		verifier = unavailableCaptchaVerifier{}
 	}
 	return &Service{
 		repo:      newRepository(db),
@@ -47,10 +51,11 @@ func newService(db *database.Database, sessions *scs.SessionManager, totpKey []b
 		settings:  settingsService,
 		limiter:   limiter,
 		policies:  policies,
+		captcha:   verifier,
 	}
 }
 
-func (s *Service) Register(ctx context.Context, email, nickname, password string, meta SessionMeta) (User, error) {
+func (s *Service) Register(ctx context.Context, email, nickname, password, captchaToken string, meta SessionMeta) (User, error) {
 	if err := s.allowWindow(s.policies.RegisterIP, ipKey("register", meta.IP)); err != nil {
 		return User{}, err
 	}
@@ -68,6 +73,9 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 
 	if !validEmail(email) || !validNickname(nickname) {
 		return User{}, apierror.ErrInvalidRequest
+	}
+	if err := s.verifyCaptcha(ctx, captchaToken, meta); err != nil {
+		return User{}, err
 	}
 	if err := s.allowWindow(s.policies.RegisterEmail, registerEmailKey(email)); err != nil {
 		return User{}, err
@@ -111,12 +119,15 @@ func (s *Service) Register(ctx context.Context, email, nickname, password string
 	return toUser(created), nil
 }
 
-func (s *Service) Login(ctx context.Context, identifier, password string, meta SessionMeta) (User, error) {
+func (s *Service) Login(ctx context.Context, identifier, password, captchaToken string, meta SessionMeta) (User, error) {
 	if err := s.allowWindow(s.policies.LoginIP, ipKey("login", meta.IP)); err != nil {
 		return User{}, err
 	}
 	accountKey := loginIdentifierKey(identifier)
 	if err := s.checkFailure(s.policies.LoginIdentifier, accountKey); err != nil {
+		return User{}, err
+	}
+	if err := s.verifyCaptcha(ctx, captchaToken, meta); err != nil {
 		return User{}, err
 	}
 
@@ -630,4 +641,30 @@ func (s *Service) ensureRegistrationDomain(ctx context.Context, email string) er
 		return nil
 	}
 	return apierror.ErrEmailDomainNotAllowed
+}
+
+func (s *Service) verifyCaptcha(ctx context.Context, token string, meta SessionMeta) error {
+	enabled, err := s.settings.GetBool(ctx, "auth", "captcha_enabled")
+	if err != nil || !enabled {
+		return nil
+	}
+
+	provider, err := s.settings.GetString(ctx, "auth", "captcha_provider")
+	if err != nil || provider != captchaProviderTurnstile {
+		return nil
+	}
+
+	secret, err := s.settings.GetString(ctx, "auth", "turnstile_secret_key")
+	if err != nil || secret == "" {
+		return nil
+	}
+
+	if token == "" {
+		return apierror.ErrCaptchaFailed
+	}
+	if s.captcha.Verify(ctx, secret, token, meta.IP) == captchaRejected {
+		return apierror.ErrCaptchaFailed
+	}
+
+	return nil
 }

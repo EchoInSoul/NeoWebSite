@@ -63,6 +63,12 @@ func newTestAppWithRatePolicies(t *testing.T, db *database.Database, policies ra
 func newTestAppWithSettings(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
 
+	return newTestAppWithCaptchaVerifier(t, db, settingsService, limiter, policies, nil)
+}
+
+func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captchaVerifier) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+	t.Helper()
+
 	sm := scs.New()
 	sm.Lifetime = time.Hour
 
@@ -73,7 +79,7 @@ func newTestAppWithSettings(t *testing.T, db *database.Database, settingsService
 	}
 	api := engine.Group("/api/v1")
 
-	service := newService(db, sm, testTOTPKey, settingsService, limiter, policies)
+	service := newService(db, sm, testTOTPKey, settingsService, limiter, policies, verifier)
 	module := &Module{Service: service, controller: newController(service)}
 	module.Register(api)
 	accessModule := access.New(db)

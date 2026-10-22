@@ -53,7 +53,7 @@ func (c *controller) login(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.Login(ctx.Request.Context(), req.Identifier, req.Password, requestSessionMeta(ctx))
+	user, err := c.service.Login(ctx.Request.Context(), req.Identifier, req.Password, req.CaptchaToken, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -74,7 +74,7 @@ func (c *controller) signup(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password, requestSessionMeta(ctx))
+	user, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password, req.CaptchaToken, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return

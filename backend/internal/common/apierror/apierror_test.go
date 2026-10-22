@@ -308,6 +308,7 @@ func TestAbortRateLimitedSetsRetryAfter(t *testing.T) {
 func TestRegistryIntegrity(t *testing.T) {
 	all := []*Error{
 		ErrInvalidRequest, ErrWeakPassword, ErrPasswordUnchanged, ErrInvalidPermission, ErrEmailDomainNotAllowed,
+		ErrCaptchaFailed,
 		ErrMethodNotAllowed,
 		ErrInvalidCredentials, ErrUnauthorized, ErrRateLimit, ErrTwoFactorRequired, ErrTwoFactorInvalidCode,
 		ErrTwoFactorLocked, ErrForbidden, ErrGrantForbidden,
@@ -316,11 +317,11 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrGroupNotEmpty, ErrLastOwner, ErrSettingConflict, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
 		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrServiceUnavailable, ErrInternal,
 	}
-	if len(all) != 33 {
-		t.Fatalf("sentinel count = %d, want 33", len(all))
+	if len(all) != 34 {
+		t.Fatalf("sentinel count = %d, want 34", len(all))
 	}
-	if len(statusByCode) != 33 {
-		t.Fatalf("statusByCode entries = %d, want 33", len(statusByCode))
+	if len(statusByCode) != 34 {
+		t.Fatalf("statusByCode entries = %d, want 34", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,

@@ -119,9 +119,9 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "session_max_age_days", typ: FieldTypeNumber, def: int64(7)},
 		{name: "totp_enabled", typ: FieldTypeBool, def: true, public: true},
 		{name: "password_reset_enabled", typ: FieldTypeBool, def: false},
-		{name: "captcha_enabled", typ: FieldTypeBool, def: false},
-		{name: "captcha_provider", typ: FieldTypeString, def: ""},
-		{name: "turnstile_site_key", typ: FieldTypeString, def: ""},
+		{name: "captcha_enabled", typ: FieldTypeBool, def: false, public: true},
+		{name: "captcha_provider", typ: FieldTypeString, def: "", public: true},
+		{name: "turnstile_site_key", typ: FieldTypeString, def: "", public: true},
 		{name: "turnstile_secret_key", typ: FieldTypeString, def: ""},
 	})
 }
@@ -142,7 +142,10 @@ func TestBuiltinPublicAllowlist(t *testing.T) {
 	}
 	sort.Strings(public)
 	want := []string{
+		"auth.captcha_enabled",
+		"auth.captcha_provider",
 		"auth.totp_enabled",
+		"auth.turnstile_site_key",
 		"register.enabled",
 		"site.block_search_engines",
 		"site.description",

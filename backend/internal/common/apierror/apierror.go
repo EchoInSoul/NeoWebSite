@@ -42,6 +42,7 @@ var (
 	ErrPasswordUnchanged       = &Error{Type: TypeInvalidRequest, Code: "password_unchanged", Param: strPtr("new_password")}
 	ErrInvalidPermission       = &Error{Type: TypeInvalidRequest, Code: "invalid_permission"}
 	ErrEmailDomainNotAllowed   = &Error{Type: TypeInvalidRequest, Code: "email_domain_not_allowed", Param: strPtr("email")}
+	ErrCaptchaFailed           = &Error{Type: TypeInvalidRequest, Code: "captcha_failed", Param: strPtr("captcha_token")}
 	ErrMethodNotAllowed        = &Error{Type: TypeInvalidRequest, Code: "method_not_allowed"}
 	ErrInvalidCredentials      = &Error{Type: TypeAuthentication, Code: "invalid_credentials"}
 	ErrUnauthorized            = &Error{Type: TypeAuthentication, Code: "unauthorized"}
@@ -78,6 +79,7 @@ var statusByCode = map[string]int{
 	"password_unchanged":         http.StatusBadRequest,
 	"invalid_permission":         http.StatusBadRequest,
 	"email_domain_not_allowed":   http.StatusBadRequest,
+	"captcha_failed":             http.StatusBadRequest,
 	"method_not_allowed":         http.StatusMethodNotAllowed,
 	"invalid_credentials":        http.StatusUnauthorized,
 	"unauthorized":               http.StatusUnauthorized,

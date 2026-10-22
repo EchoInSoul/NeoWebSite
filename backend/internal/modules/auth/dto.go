@@ -9,14 +9,16 @@ type User struct {
 }
 
 type LoginRequest struct {
-	Identifier string `json:"identifier"`
-	Password   string `json:"password"`
+	Identifier   string `json:"identifier"`
+	Password     string `json:"password"`
+	CaptchaToken string `json:"captcha_token"`
 }
 
 type RegisterRequest struct {
-	Email    string `json:"email"`
-	Nickname string `json:"nickname"`
-	Password string `json:"password"`
+	Email        string `json:"email"`
+	Nickname     string `json:"nickname"`
+	Password     string `json:"password"`
+	CaptchaToken string `json:"captcha_token"`
 }
 
 type ProfileUpdateRequest struct {

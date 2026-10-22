@@ -16,7 +16,7 @@ type Module struct {
 }
 
 func New(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter) *Module {
-	service := newService(db, sessions, totpKey, settingsService, limiter, defaultRateLimitPolicies())
+	service := newService(db, sessions, totpKey, settingsService, limiter, defaultRateLimitPolicies(), newTurnstileVerifier(turnstileSiteverifyURL, turnstileTimeout))
 	return &Module{
 		Service:    service,
 		controller: newController(service),
