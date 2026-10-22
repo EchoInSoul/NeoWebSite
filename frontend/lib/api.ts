@@ -92,11 +92,19 @@ export async function apiRequest<T = unknown>(
   return payload as T;
 }
 
-export async function isServiceUp(): Promise<boolean> {
-  try {
-    await apiRequest("/api/v1/healthy");
-    return true;
-  } catch {
-    return false;
+let healthProbe: Promise<boolean> | null = null;
+
+export function isServiceUp(): Promise<boolean> {
+  if (healthProbe === null) {
+    healthProbe = apiRequest("/api/v1/healthy")
+      .then(
+        () => true,
+        () => false,
+      )
+      .finally(() => {
+        healthProbe = null;
+      });
   }
+
+  return healthProbe;
 }

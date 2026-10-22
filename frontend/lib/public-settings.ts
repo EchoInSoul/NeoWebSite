@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { backendUrl } from "@/lib/backend-url";
 
 export type PublicSettingValue = boolean | number | string;
@@ -37,7 +39,7 @@ function toSettings(payload: unknown): PublicSettings {
   return settings;
 }
 
-export async function getPublicSettings(): Promise<PublicSettings> {
+export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
   try {
     const response = await fetch(`${backendUrl}/api/v1/public/settings`, {
       next: { revalidate: 60 },
@@ -52,7 +54,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   } catch {
     return {};
   }
-}
+});
 
 export function isSignupOpen(settings: PublicSettings): boolean {
   return settings.register?.enabled !== false;
