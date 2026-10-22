@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-23 · 登录 / 注册表单打磨（副标题、按钮按压、注册校验）
+
+**范围**：前端 6 文件——`app/signin/signin-view.tsx`、`app/signup/signup-view.tsx`、`components/ui/button.tsx`、`hooks/use-signup.ts`、`messages/{zh-CN,en}.json`；另加本条目。零后端、零迁移、零依赖、零路由变化；版本保持 0.21.2（纯前端，不单独进位）。
+
+**动机**：四件事同轮处理——登录 / 注册两页的副标题与标题语义重复；全站按钮按下时只有 1px 位移，且被 `transition-all` 拖成慢速滑动，手感拖沓、移动端几乎无反馈；注册表单没有空值提示，空邮箱会落到格式校验上、弹「邮箱格式不正确」；用户名文案写的是「不能含空格和 @」，与实际校验不一致。
+
+**口径**：
+
+- 副标题：删掉 `auth.signin.subtitle`（登录以继续）与 `auth.signup.subtitle`（注册新账号）的渲染及中英各一对文案键，卡片内只剩标题；`AuthFrame` 的卡片内边距、logo 与卡片的间距、表单外层 `mt-6` 均未动。
+- 按钮按压：`components/ui/button.tsx` 去掉 `active:not-aria-[haspopup]:translate-y-px`（该 `not-aria-[haspopup]` 守卫只服务于位移，一并删除），`transition-all` 收窄为 `transition-colors`，`default` 变体新增 `active:bg-primary/80`（hover 为 `/90`，按下再深一档）。全站 `<Button>` 一并生效。
+- 注册空值校验：`submit()` 每个字段改为先判空、再判格式，新增 `requiredEmail` / `requiredName` / `requiredPassword` / `requiredConfirmPassword` 四对文案键，命名对齐登录页既有的 `requiredIdentifier` / `requiredPassword`。此前空确认密码会误报「两次输入的密码不一致」。
+- 用户名规则（用户裁定）：`invalidName` 文案改为「用户名至少为 {minLength} 位，且不能包含特殊字符」（英文同步），调用处去掉不再使用的 `maxLength` 参数；`isValidName` 的正则由 `/[\s@]/` 换成 `/^[\p{L}\p{N}_-]+$/u`，即只允许中文 / 英文字母、数字、`_`、`-`，长度仍为 2–32。
+- 字段顺序（用户裁定）：注册表单改为用户名在上、邮箱在下（DOM 顺序一并调整，Tab 顺序与浏览器自动填充跟随）；`submit()` 的校验顺序同步改为先用户名后邮箱，保证弹出的第一句提示与最上面的字段一致。
+- 文案微调：`weakPassword` 改为「密码不符合站点要求」（英文同步），前端预检与后端 `weak_password` 两处报错共用。
+- 未做：`outline` / `secondary` 变体的「阴影收掉 + 下沉」按压效果；`badge.tsx`、`toggle.tsx` 里的 `transition-all`（与按压无关）。
+
+**验证**：`npx tsc --noEmit` 全项目通过；两个语言文件 JSON 解析通过，改写与新增的键在中英两侧渲染结果逐一核对；用户名校验用 14 个用例（空、单字、中文、下划线、连字符、空格、`@`、`!`、emoji、32 / 33 位边界）跑同一套判断逻辑，全部符合预期；用项目 `globals.css` 编译 `hover:bg-primary/90` 与 `active:bg-primary/80`，确认生成顺序是 hover 在前、active 在后，按下时不会被 `/90` 覆盖。运行期观感未起 dev server 复现，归用户实机确认（改 CSS 类后需重启 dev server，否则可能沿用旧样式）。
+
+**已知缺口**：后端 `backend/internal/modules/auth/validate.go` 的 `validNickname` 仍只拦空格和 `@`、长度 2–32，绕过界面直接调 `POST /api/v1/users` 仍可注册出 `q!` 这类用户名——用户裁定本轮暂不改后端。`NAME_MAX_LENGTH = 32` 仍生效，但界面文案不再提示上限。`outline` / `secondary` 变体如需要按压反馈，可加 `active:translate-y-px active:shadow-none`。
+
+**提交状态**：副标题移除 `dd3c6c1`、按钮按压 `123d48b`、注册校验与字段顺序 `da17496` 均已入库；本条目随后单独入库。
+
+---
+
 ## 2026-10-23 · 个人资料内嵌报错统一改走 sonner
 
 **范围**：前端 4 文件——`app/console/uc/profile/{profile-form,two-factor-panel}.tsx`、`hooks/{use-password-change,use-two-factor-setup}.ts`。零后端、零迁移、零依赖；7 个既有文案键全部保留（改由 toast 使用），未新增、未删除键；版本保持 0.21.2（纯前端交互修正，不单独进位）。
