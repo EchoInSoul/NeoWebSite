@@ -123,7 +123,6 @@
     "password": "Password",
     "currentPassword": "Current password",
     "newPassword": "New password",
-    "changePasswordSubmit": "Change password",
     "passwordChanging": "Changing…",
     "passwordWeak": "Passwords must be at least {minLength} characters and include letters and digits",
     "passwordTooLong": "That password is too long (max {maxBytes} bytes)",

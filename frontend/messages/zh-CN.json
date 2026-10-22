@@ -123,7 +123,6 @@
     "password": "密码",
     "currentPassword": "当前密码",
     "newPassword": "新密码",
-    "changePasswordSubmit": "修改密码",
     "passwordChanging": "正在修改…",
     "passwordWeak": "密码长度至少 {minLength} 位，须包含：字母/数字",
     "passwordTooLong": "密码太长，最多 {maxBytes} 字节",

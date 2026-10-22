@@ -2,13 +2,13 @@
 
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import {
-  AlignLeft,
   Eye,
   EyeOff,
   KeyRound,
   LoaderCircle,
   Mail,
   ShieldCheck,
+  TextInitial,
   UserRound,
   UsersRound,
 } from "lucide-react";
@@ -18,7 +18,6 @@ import { useTranslations } from "next-intl";
 import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   InputGroup,
@@ -81,8 +80,7 @@ export function ProfileForm({
 
   const isLocked = profile === null || isSaving;
   const isPasswordLocked = profile === null || isChangingPassword;
-  const isPasswordSubmittable =
-    currentPassword !== "" && newPassword !== "" && !isChangingPassword;
+  const isPasswordFilled = currentPassword !== "" && newPassword !== "";
 
   const passwordStatusText =
     passwordState === "submitting"
@@ -114,6 +112,7 @@ export function ProfileForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    void submitPasswordChange();
     void save();
   }
 
@@ -146,7 +145,7 @@ export function ProfileForm({
                 value={bio}
               />
             }
-            icon={<AlignLeft />}
+            icon={<TextInitial />}
             label={t("bio")}
           />
           <ConsoleSettingsRow
@@ -270,32 +269,27 @@ export function ProfileForm({
                   }
                   label={t("newPassword")}
                 />
-                <div className="flex items-center gap-3 px-5 py-3.5">
-                  <p
-                    aria-live="polite"
-                    className={cn(
-                      "flex min-h-4 flex-1 items-center gap-1.5 text-xs leading-4",
-                      passwordState === "invalidPassword" ||
-                        passwordState === "weak" ||
-                        passwordState === "tooLong" ||
-                        passwordState === "unchanged"
-                        ? "text-destructive"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {passwordState === "submitting" ? (
-                      <LoaderCircle className="size-3 animate-spin" />
-                    ) : null}
-                    {passwordStatusText}
-                  </p>
-                  <Button
-                    disabled={!isPasswordSubmittable}
-                    onClick={() => void submitPasswordChange()}
-                    type="button"
-                  >
-                    {t("changePasswordSubmit")}
-                  </Button>
-                </div>
+                {passwordStatusText === "" ? null : (
+                  <div className="px-5 py-3.5">
+                    <p
+                      aria-live="polite"
+                      className={cn(
+                        "flex min-h-4 items-center gap-1.5 text-xs leading-4",
+                        passwordState === "invalidPassword" ||
+                          passwordState === "weak" ||
+                          passwordState === "tooLong" ||
+                          passwordState === "unchanged"
+                          ? "text-destructive"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {passwordState === "submitting" ? (
+                        <LoaderCircle className="size-3 animate-spin" />
+                      ) : null}
+                      {passwordStatusText}
+                    </p>
+                  </div>
+                )}
               </>
             }
             icon={<KeyRound />}
@@ -304,8 +298,8 @@ export function ProfileForm({
         </ConsoleSettingsGroup>
       </div>
       <ConsoleFloatingSaveButton
-        isDirty={isDirty}
-        isPending={isSaving}
+        isDirty={isDirty || isPasswordFilled}
+        isPending={isSaving || isChangingPassword}
         label={t("save")}
       />
     </form>
