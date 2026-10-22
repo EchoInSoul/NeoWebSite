@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-10-23 · 退出登录后提示「已退出登录」
+
+**范围**：前端 6 文件——新增 `lib/signout-notice.ts`、`hooks/use-signout-notice.ts`；`hooks/use-signout.ts`、`app/signin/signin-view.tsx`、`messages/{zh-CN,en}.json`；另加本条目。零后端、零迁移、零依赖、零路由变化；版本保持 0.21.2（纯前端，不单独进位）。
+
+**动机**：用户要求照登录成功的做法，退出登录后也弹 sonner 提示。
+
+**口径**：
+
+- 机制与「登录成功后进控制台再提示」完全一致：退出成功写 `sessionStorage` 标记（`neoblog.signout.success`），`/signin` 页面挂载时由 `useSignoutNotice()` 消费并 `toast.success`，时序是「先切回登录页、再弹提示」。
+- 两条退出路径都写标记：正常 `DELETE /api/v1/sessions/current` 成功后 `router.replace("/signin")`；返回 401（会话已失效）走 `window.location.replace("/signin")` 之前——整页跳转不影响 `sessionStorage`。
+- 文案：新增 `userMenu.signedOut` =「已退出登录」/「Signed out」，放 `userMenu` 命名空间（与 `signOutFailed` 同组；注册、登录两条提示也各自用自己的来源命名空间）。
+- 未做：会话失效弹窗（`SessionExpiryDialog`）不写标记——它不是用户主动退出。
+
+**验证**：ESLint（改动文件）、`npx prettier --check`、`npx tsc --noEmit` 全部通过；中英两个新键读取正确；grep 确认「写标记 / 挂载 / 消费」三处接线完整，无多余调用点。运行期观感未起 dev server 复现，归用户实机确认。
+
+**已知缺口**：若退出后登录页没能挂载，这条提示会留到下一次进登录页才弹（与注册、登录同款行为，未额外处理）。
+
+**提交状态**：本轮代码 `de600d1` 已入库；本条目再单独入库，且只包含本轮的 6 个文件（两个语言文件里仅 `signedOut` 两行），未混入并行会话正在做的「验证服务（Turnstile）」改动。
+
+---
+
+## 2026-10-23 · toast 同屏两条 + 登录成功后进控制台再提示
+
+**范围**：前端 7 文件——`components/ui/sonner.tsx`；新增 `lib/signin-notice.ts`、`hooks/use-signin-notice.ts`、`components/console/console-signin-notice.tsx`；`hooks/use-signin.ts`、`app/console/layout.tsx`、`messages/{zh-CN,en}.json`；另加本条目。零后端、零迁移、零依赖、零路由变化；版本保持 0.21.2（纯前端，不单独进位）。
+
+**动机**：两条文案长短不一的 toast 连着弹时，后出现的那条会退到背景、文字被隐藏，只剩一条比前面更宽的空白卡片；用户要求去掉这个观感。另外登录成功后没有提示，用户要求照注册成功的做法：先完成页面切换、再在控制台弹「登录成功」。
+
+**口径**：
+
+- toast 堆叠：根因在 sonner 默认样式——`styles.css:297` 把非最上层 toast 的高度压成最前面那条的高度，`:315` 把它的所有子元素设为 `opacity: 0`，但宽度仍按各自内容的 `max-content` 计算（我们在 `sonner.tsx` 里设的），于是长文案那条只剩一块更宽的空白卡片。在 `<Sonner>` 上加 `visibleToasts`，超出的 toast 会被打上 `data-visible="false"` 直接淡出。用户在 1 与 2 之间选定 **2**（`visibleToasts={2}`）。
+- 登录成功提示：完全照注册的机制——`use-signin.ts` 在密码登录成功、两步验证成功两处 `router.push("/console")` 之前写 `sessionStorage` 标记；控制台布局挂载 `ConsoleSigninNotice`，其 `useSigninNotice()` 在 effect 中消费标记并 `toast.success`。放布局而不是页面，是为了任何进入控制台的入口都检查一次。
+- 文案：新增 `auth.signin.success` =「登录成功」/「Signed in successfully」。
+- 未做：改为登录页直接弹 toast（时序会变成切换前弹，与用户要求的「先切换再弹」相反）；未改 `expand`、未改 toast 宽度。
+
+**验证**：`npx tsc --noEmit` 全项目通过；ESLint 0 error（`sonner.tsx:7` 的 `InfoIcon` 未使用为改动前既有 warning，已核对 HEAD 版本）；Prettier 对全部改动文件通过；`git diff --check` 无空白问题；grep 确认标记的写、挂载、消费三处接线完整，无多余调用点；两份语言文件中 `"success"` 各 2 处（登录、注册），同一块内无重复键。标记读取即删除，开发模式 effect 跑两遍时第二次读到空值，不会重复弹。运行期观感未起 dev server 复现，归用户实机确认。
+
+**已知缺口**：背景 toast 的文字仍被 sonner 隐藏，两条宽度差距大时「更宽的空白条」仍可能露出来；真遇到可退回 `visibleToasts={1}` 或把 toast 宽度统一成固定值。登录成功标记存在 `sessionStorage`，若登录成功但控制台页面没能加载，这条提示会留到下一次进控制台才弹（与注册同款行为，未额外处理）。
+
+**提交状态**：`db7e199`（toast 同屏两条）、`0679f46`（登录成功提示）已入库；本条目随后单独入库。
+
+---
+
 ## 2026-10-23 · 登录 / 注册表单打磨（副标题、按钮按压、注册校验）
 
 **范围**：前端 6 文件——`app/signin/signin-view.tsx`、`app/signup/signup-view.tsx`、`components/ui/button.tsx`、`hooks/use-signup.ts`、`messages/{zh-CN,en}.json`；另加本条目。零后端、零迁移、零依赖、零路由变化；版本保持 0.21.2（纯前端，不单独进位）。
