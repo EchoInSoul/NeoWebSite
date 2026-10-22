@@ -5,6 +5,8 @@ import { getLoginSettings } from "@/lib/admin-settings";
 
 import { LoginControlForm } from "./login-control-form";
 
+export const instant = false;
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("settings");
 

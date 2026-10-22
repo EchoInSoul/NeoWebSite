@@ -5,6 +5,8 @@ import { getAuthenticatedUser } from "@/lib/auth-session";
 
 import { UsersPanel } from "./users-panel";
 
+export const instant = false;
+
 export default async function SettingsUsersPage() {
   const t = await getTranslations("users");
   const [usersRead, user] = await Promise.all([

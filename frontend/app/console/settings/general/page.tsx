@@ -5,6 +5,8 @@ import { getSiteSettings } from "@/lib/admin-settings";
 
 import { SiteSettingsForm } from "./site-settings-form";
 
+export const instant = false;
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("settings");
 

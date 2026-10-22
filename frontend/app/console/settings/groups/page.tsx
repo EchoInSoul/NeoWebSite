@@ -6,6 +6,8 @@ import { buildPermissionMatrix } from "@/lib/groups";
 
 import { GroupsPanel } from "./groups-panel";
 
+export const instant = false;
+
 export default async function SettingsGroupsPage() {
   const t = await getTranslations("groups");
   const [groupsRead, catalogRead] = await Promise.all([

@@ -5,6 +5,8 @@ import { getRegisterSettings } from "@/lib/admin-settings";
 
 import { RegisterSettingsForm } from "./register-settings-form";
 
+export const instant = false;
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("settings");
 

@@ -5,6 +5,8 @@ import { getCurrentUserSessions } from "@/lib/user-sessions-server";
 
 import { SessionsPanel } from "./sessions-panel";
 
+export const instant = false;
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("sidebar");
 
