@@ -108,8 +108,8 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "email_verification_enabled", typ: FieldTypeBool, def: false},
 	})
 
-	if len(reg.groups["auth"]) != 9 {
-		t.Fatalf("auth items = %d, want 9", len(reg.groups["auth"]))
+	if len(reg.groups["auth"]) != 11 {
+		t.Fatalf("auth items = %d, want 11", len(reg.groups["auth"]))
 	}
 	assertDefinitions(t, reg.groups["auth"], []wantItem{
 		{name: "password_requirements_enabled", typ: FieldTypeBool, def: false},
@@ -121,6 +121,8 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "password_reset_enabled", typ: FieldTypeBool, def: false},
 		{name: "captcha_enabled", typ: FieldTypeBool, def: false},
 		{name: "captcha_provider", typ: FieldTypeString, def: ""},
+		{name: "turnstile_site_key", typ: FieldTypeString, def: ""},
+		{name: "turnstile_secret_key", typ: FieldTypeString, def: ""},
 	})
 }
 

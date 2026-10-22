@@ -45,6 +45,8 @@ var builtinRegistry = []Group{
 			{Name: "password_reset_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "captcha_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "captcha_provider", Type: FieldTypeString, Default: ""},
+			{Name: "turnstile_site_key", Type: FieldTypeString, Default: ""},
+			{Name: "turnstile_secret_key", Type: FieldTypeString, Default: ""},
 		},
 	},
 }

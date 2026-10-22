@@ -458,8 +458,8 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	if group != "auth" {
 		t.Fatalf("group = %q, want auth", group)
 	}
-	if len(values) != 9 {
-		t.Fatalf("auth values = %v, want the nine defaults", values)
+	if len(values) != 11 {
+		t.Fatalf("auth values = %v, want the eleven defaults", values)
 	}
 	if values["session_max_age_days"] != float64(7) {
 		t.Fatalf("auth.session_max_age_days = %v, want 7", values["session_max_age_days"])
@@ -469,6 +469,9 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	}
 	if values["captcha_provider"] != "" {
 		t.Fatalf("auth.captcha_provider = %v, want empty", values["captcha_provider"])
+	}
+	if values["turnstile_site_key"] != "" || values["turnstile_secret_key"] != "" {
+		t.Fatalf("turnstile keys = %v / %v, want empty", values["turnstile_site_key"], values["turnstile_secret_key"])
 	}
 	if values["totp_enabled"] != true {
 		t.Fatalf("auth.totp_enabled = %v, want true", values["totp_enabled"])
@@ -489,6 +492,34 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	_, values = decodeGroup(t, after)
 	if values["session_max_age_days"] != float64(14) {
 		t.Fatalf("readback session_max_age_days = %v, want 14", values["session_max_age_days"])
+	}
+}
+
+func TestSettingsPatchTurnstileKeysRoundtrip(t *testing.T) {
+	db := testDB(t)
+	resetGroups(t, db, "auth")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	patch := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{
+		"captcha_enabled":      true,
+		"captcha_provider":     "turnstile",
+		"turnstile_site_key":   "0x4AAAAAAAsite",
+		"turnstile_secret_key": "0x4AAAAAAAsecret",
+	})
+	expectStatus(t, patch, http.StatusOK)
+
+	after := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/settings/auth", nil)
+	expectStatus(t, after, http.StatusOK)
+	_, values := decodeGroup(t, after)
+	if values["captcha_enabled"] != true || values["captcha_provider"] != "turnstile" {
+		t.Fatalf("captcha gate = %v / %v, want true / turnstile", values["captcha_enabled"], values["captcha_provider"])
+	}
+	if values["turnstile_site_key"] != "0x4AAAAAAAsite" {
+		t.Fatalf("readback turnstile_site_key = %v", values["turnstile_site_key"])
+	}
+	if values["turnstile_secret_key"] != "0x4AAAAAAAsecret" {
+		t.Fatalf("readback turnstile_secret_key = %v", values["turnstile_secret_key"])
 	}
 }
 
