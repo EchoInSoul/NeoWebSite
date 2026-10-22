@@ -21,6 +21,7 @@ import {
 
 export type ConsoleSettingsRowProperties = {
   label: string;
+  expandLabel?: string;
   description?: ReactNode;
   icon?: ReactNode;
   control?: ReactNode;
@@ -41,6 +42,7 @@ const rowExpandedClassName = "divide-y divide-border border-t border-border";
 
 export function ConsoleSettingsRow({
   label,
+  expandLabel,
   description,
   icon,
   control,
@@ -105,7 +107,7 @@ export function ConsoleSettingsRow({
       >
         <Item variant="flush" size="lg">
           <CollapsibleTrigger className={rowOverlayClassName}>
-            <span className="sr-only">{label}</span>
+            <span className="sr-only">{expandLabel ?? label}</span>
           </CollapsibleTrigger>
           {rowContentNode}
         </Item>
