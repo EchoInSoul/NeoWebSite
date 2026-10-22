@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { type FormEvent } from "react";
 import {
   CalendarClock,
   Fingerprint,
@@ -35,7 +35,6 @@ import {
   type LoginSettingsValues,
 } from "@/lib/login-settings";
 
-const SESSION_UNIT_DAY = "day";
 const KNOWN_CAPTCHA_PROVIDERS: string[] = [
   CAPTCHA_PROVIDER_BUILTIN,
   CAPTCHA_PROVIDER_TURNSTILE,
@@ -61,15 +60,11 @@ export function LoginControlForm({
     setTurnstileSecretKey,
     save,
   } = useLoginSettingsSave(settings);
-  const [sessionMaxAgeUnit, setSessionMaxAgeUnit] = useState(SESSION_UNIT_DAY);
   const sessionMaxAgeExpansion = useSwitchRowExpansion(
     values.sessionMaxAgeEnabled,
   );
   const captchaExpansion = useSwitchRowExpansion(values.captchaEnabled);
 
-  const sessionUnitItems = {
-    [SESSION_UNIT_DAY]: t("sessionMaxAgeUnitDay"),
-  };
   const unknownCaptchaProvider = KNOWN_CAPTCHA_PROVIDERS.includes(
     values.captchaProvider,
   )
@@ -120,29 +115,9 @@ export function LoginControlForm({
                     value={values.sessionMaxAgeDays}
                     disabled={isSaving}
                   />
-                  <Select
-                    items={sessionUnitItems}
-                    value={sessionMaxAgeUnit}
-                    onValueChange={(value) => {
-                      if (value !== null) {
-                        setSessionMaxAgeUnit(value);
-                      }
-                    }}
-                    disabled={isSaving}
-                  >
-                    <SelectTrigger
-                      aria-label={t("sessionMaxAgeUnitDay")}
-                      className="w-24"
-                      size="sm"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="min-w-0">
-                      <SelectItem value={SESSION_UNIT_DAY}>
-                        {t("sessionMaxAgeUnitDay")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <span className="text-sm text-muted-foreground">
+                    {t("sessionMaxAgeUnitDay")}
+                  </span>
                 </div>
               }
               icon={<CalendarClock />}
