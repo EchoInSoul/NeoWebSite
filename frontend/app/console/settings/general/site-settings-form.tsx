@@ -6,11 +6,11 @@ import {
   Baseline,
   CirclePlus,
   Download,
-  FileText,
   Globe,
   SearchX,
-  Shapes,
+  Star,
   Tags,
+  TextInitial,
   Type,
   X,
 } from "lucide-react";
@@ -202,7 +202,7 @@ export function SiteSettingsForm({
                 />
               </button>
             }
-            icon={<Shapes />}
+            icon={<Star />}
             label={t("siteLogo")}
           />
         </ConsoleSettingsGroup>
@@ -220,7 +220,7 @@ export function SiteSettingsForm({
                 value={values.description}
               />
             }
-            icon={<FileText />}
+            icon={<TextInitial />}
             label={t("siteDescription")}
           />
           <ConsoleSettingsRow
@@ -238,10 +238,10 @@ export function SiteSettingsForm({
           />
           <ConsoleSettingsRow
             control={
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex w-70 shrink-0 items-center gap-2">
                 <Input
                   aria-label={t("siteUrl")}
-                  className={inputClassName}
+                  className="flex-1"
                   disabled={isSaving}
                   onChange={(event) => updateText("url", event.target.value)}
                   value={values.url}
