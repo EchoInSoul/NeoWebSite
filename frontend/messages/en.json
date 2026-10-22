@@ -285,6 +285,7 @@
   },
   "auth": {
     "captchaDialogTitle": "Human verification",
+    "captchaUnavailable": "Verification failed to load",
     "signin": {
       "title": "Welcome back",
       "identifier": "Username or email",

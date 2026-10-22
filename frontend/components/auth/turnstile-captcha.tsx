@@ -41,6 +41,7 @@ function loadTurnstileApi(): Promise<TurnstileApi> {
   const loader = new Promise<TurnstileApi>((resolve, reject) => {
     const script = document.createElement("script");
     const timer = window.setTimeout(() => {
+      script.remove();
       reject(new Error("turnstile script timed out"));
     }, SCRIPT_TIMEOUT_MS);
 
@@ -52,10 +53,12 @@ function loadTurnstileApi(): Promise<TurnstileApi> {
         resolve(window.turnstile);
         return;
       }
+      script.remove();
       reject(new Error("turnstile api missing after load"));
     });
     script.addEventListener("error", () => {
       window.clearTimeout(timer);
+      script.remove();
       reject(new Error("turnstile script failed to load"));
     });
     document.head.appendChild(script);
@@ -72,17 +75,21 @@ function loadTurnstileApi(): Promise<TurnstileApi> {
 export function TurnstileCaptcha({
   siteKey,
   onToken,
+  onUnavailable,
 }: {
   siteKey: string;
   onToken: (token: string) => void;
+  onUnavailable: () => void;
 }) {
   const locale = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const onTokenRef = useRef(onToken);
+  const onUnavailableRef = useRef(onUnavailable);
 
   useEffect(() => {
     onTokenRef.current = onToken;
-  }, [onToken]);
+    onUnavailableRef.current = onUnavailable;
+  }, [onToken, onUnavailable]);
 
   useEffect(() => {
     let disposed = false;
@@ -103,10 +110,10 @@ export function TurnstileCaptcha({
           size: "flexible",
           callback: (token) => onTokenRef.current(token),
           "expired-callback": () => onTokenRef.current(""),
-          "error-callback": () => onTokenRef.current(""),
+          "error-callback": () => onUnavailableRef.current(),
         });
       } catch {
-        onTokenRef.current("");
+        onUnavailableRef.current();
       }
     }
 
