@@ -25,6 +25,7 @@ export type ConsoleSettingsRowProperties = {
   description?: ReactNode;
   icon?: ReactNode;
   control?: ReactNode;
+  controlClassName?: string;
   href?: string;
   expandedContent?: ReactNode;
   defaultCollapsed?: boolean;
@@ -46,6 +47,7 @@ export function ConsoleSettingsRow({
   description,
   icon,
   control,
+  controlClassName,
   href,
   expandedContent,
   defaultCollapsed = false,
@@ -83,7 +85,9 @@ export function ConsoleSettingsRow({
           <ItemDescription>{description}</ItemDescription>
         )}
       </ItemContent>
-      {control === undefined ? null : <ItemActions>{control}</ItemActions>}
+      {control === undefined ? null : (
+        <ItemActions className={controlClassName}>{control}</ItemActions>
+      )}
       {isInteractiveRow ? (
         <span className={cn(rowLayerClassName, "self-center")}>
           <ChevronRight
