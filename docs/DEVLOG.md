@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-10-23 · 邮件模板测试发送（行内发送按钮 + 确认弹窗）
+
+**范围**：后端 `internal/modules/mail/{controller.go,controller_test.go,dto.go,module.go,template.go}`、新增 `templates/{signup_code,password_reset}.{html,txt}`、`internal/app/app_test.go`、`README.md`、API 规范；前端 `app/console/settings/mail/{page.tsx,mail-settings-form.tsx}`、新增 `hooks/use-mail-test-send.ts`、`hooks/use-mail-settings-save.ts`、`messages/{zh-CN,en}.json`；另加本条目。
+
+**动机**：用户点名在「邮件模板」两个折叠行右侧加发送图标，点击弹确认框后发送。
+
+**口径**：
+
+- 按钮只对 owner / admin 渲染（后端 `POST /admin/mail/messages` 的预设组守卫不变）；收件人 = 当前登录账号邮箱，确认框描述里显示模板名与收件地址。
+- 有未保存修改时，确认动作先走一次保存；保存失败则不发送，按钮文案显示「保存并发送」。
+- 接口 `template` 可选：缺省 / `example` 发内置自检邮件，`signup_code` / `password_reset` 发对应模板；未知值 400 `invalid_request`（`param:"template"`）。
+- 新增内置 `signup_code` / `password_reset` 的 html + txt 模板；`mail` 设置组里的 `*_subject` / `*_body` 非空时覆盖主题 / HTML 正文；占位符用示例值填充（`code`=123456、`expiresMinutes`=10、`siteTitle` / `siteUrl` 读 `site` 组、`username` 取收件人 `@` 前、`sentAt` 当前时间）。
+- 自定义 HTML 覆盖时纯文本部分仍用内置 txt 模板；模板只用于管理端测试发送，注册验证码 / 密码重置业务发送仍未接。
+
+**验证**：`go test ./internal/modules/mail/ ./internal/app/ -count=1` 全绿；`tsc --noEmit`、ESLint、Prettier 通过；运行期界面未手测。
+
+**提交状态**：已随本轮邮件模板测试发送提交入库（未推送）。
+
+---
+
 ## 2026-10-23 · 邮件设置接入：mail 设置组 + 页面读写 + 发信运行时读取
 
 **范围**：后端 `internal/modules/settings/{registry.go,registry_test.go,seed_migration_test.go}`、`internal/modules/mail/{module.go,mailer.go,settings.go,settings_test.go,smtp_test.go}`、`internal/app/app.go`、新迁移 `migrations/20261023120000_seed_mail_setting_values.sql` 与 `migrations/atlas.sum`、`README.md`；前端 `lib/{mail-settings.ts,admin-settings.ts}`、`hooks/use-mail-settings-save.ts`、`app/console/settings/mail/{page.tsx,mail-settings-form.tsx}`、`messages/{zh-CN,en}.json`；另加本条目。
@@ -15,13 +35,13 @@
 - 新增 `mail` 设置组十二项：`enabled`（默认 `true`）、`smtp_host` / `smtp_port`（默认 `587`）/ `smtp_encryption`（默认 `starttls`，只接受 `ssl` / `starttls`）/ `smtp_username` / `smtp_password` / `sender_address` / `sender_name`（默认 `NeoBlog`）与 `signup_code_subject` / `signup_code_body` / `password_reset_subject` / `password_reset_body`。全部非公开。
 - 发信每次投递前读 `mail` 组：`enabled=false` → 日志实现（不发送）；`enabled=true` 且 `smtp_host` 非空 → 整组使用设置值；`enabled=true` 但 `smtp_host` 为空 → 回退 `SMTP_*` 环境变量；两者都没有则日志。设置组读取失败直接返回错误（管理端自检 500），不静默改用环境变量。
 - 组级校验：端口在被改动或已启用且填了主机时检查 1–65535，加密方式在同一时机检查枚举；启用且填了主机时要求 `sender_address` 是纯邮箱地址，`smtp_username` 非空则 `smtp_password` 必填。
-- `smtp_password` 明文入库、管理接口原样返回（沿用 Turnstile 私钥的既有口径）；模板四项只存不用，当前没有注册验证码 / 密码重置发送流程。
+- `smtp_password` 明文入库、管理接口原样返回（沿用 Turnstile 私钥的既有口径）；模板四项当时只存不用，当前没有注册验证码 / 密码重置发送流程。
 - 前端页面改为服务端 `getMailSettings()` 读取，403 显示「无权查看设置」；保存走 `PATCH /api/v1/admin/settings/mail`，只提交改动项，端口转数字；保存成功 toast + `router.refresh()`。删掉「不加密」选项（后端 spec 明确不提供明文模式），保留未知加密值的显示以便修正脏数据。
 - 新增校验文案四条；占位符提示改为「预留给后续验证码 / 重置邮件」。
 
 **验证**：`go test ./internal/modules/mail/ ./internal/modules/settings/ ./internal/app/ -count=1`（带 `DATABASE_URL_TEST`）全绿；`npx tsc --noEmit`、ESLint、Prettier 对改动前端文件通过；新迁移已应用到开发库与测试库。
 
-**已知缺口**：注册验证码 / 密码重置的发送流程仍未接，模板四项因此只存不用；管理端自检接口仍没有前端「发送测试邮件」入口；未做密码打码 / 加密存储。
+**已知缺口**：注册验证码 / 密码重置的发送流程仍未接，模板四项因此当时只存不用；管理端自检接口仍没有前端「发送测试邮件」入口；未做密码打码 / 加密存储。
 
 **提交状态**：已随本轮邮件设置接入提交入库（未推送）。
 

@@ -110,7 +110,7 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 12 | `GET /api/v1/admin/users` | `backend/internal/modules/access/controller.go:51` |
 | 13 | `GET /api/v1/admin/users/:id` | `backend/internal/modules/access/controller.go:52` |
 | 14 | `PATCH /api/v1/admin/users/:id` | `backend/internal/modules/access/controller.go:53` |
-| 15 | `POST /api/v1/admin/mail/messages` | `backend/internal/modules/mail/controller.go:36`（0.9.0 新增，域 `admin` 下资源 `mail/messages`，创建即发送；用当前 `mail` 设置组的 SMTP 配置，设置未填主机时回退 `SMTP_*` 环境变量） |
+| 15 | `POST /api/v1/admin/mail/messages` | `backend/internal/modules/mail/controller.go:39`（0.9.0 新增，域 `admin` 下资源 `mail/messages`，创建即发送；用当前 `mail` 设置组的 SMTP 配置，设置未填主机时回退 `SMTP_*` 环境变量；body 可选 `template`：缺省 / `example` 发内置自检邮件，`signup_code` / `password_reset` 发对应模板并允许设置组覆盖主题与 HTML 正文，未知模板 400 `param:"template"`） |
 | 16 | `POST /api/v1/sessions/current/verify` | `backend/internal/modules/auth/controller.go:29`（0.10.0 新增，公开路由，靠「待二段」会话；v1.5 改名：原 `POST /auth/2fa/verify`——二步验证 = 对当前（待二段）会话的验证） |
 | 17 | `POST /api/v1/users/me/2fa/setup` | `backend/internal/modules/auth/controller.go:39`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/setup`；0.21.0 起站级 `auth/totp_enabled` 关闭时返回 403 `two_factor_disabled`） |
 | 18 | `POST /api/v1/users/me/2fa/enable` | `backend/internal/modules/auth/controller.go:40`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/enable`；0.21.0 起站级 `auth/totp_enabled` 关闭时返回 403 `two_factor_disabled`） |

@@ -10,6 +10,7 @@
 - v4（2026-10-11，归位审查后修订）：两路独立只读审查 + 实测坐实——归位把真实投递测试里写死的 `../../.env` 变成了 `backend/internal/.env`（不存在），且 `LoadDotEnvFile` 对缺文件静默，导致按文档操作只会 SKIP。已改为从包目录向上查找 `.env`（`findEnvFile`，深度上限 5）并补三个用例钉住（含「从包目录能找到 backend/.env」的守护用例）；§10 第 5 条与 §3 / §14 的版本表述同步；README 补「无路由模块」的规则说明。完整过程见 DEVLOG 同日条目。
 - v5（2026-10-11，管理端发信接口轮修订）：模块升级为路由模块（兑现 v4 时期「若以后要形式统一」的预案）——`New(cfg)` 改返回 `*Module`（`m.Mailer` 暴露能力接口），新增 controller（`POST /admin/mail/messages`，body `{"to"}` → 201 `{"to","subject","sent":true}`；400 `invalid_request`/`param:to`、403 `forbidden`、500 `mail_delivery_failed`，状态码归并遵守 API 规范 §4）与 `Mailer.SendSync`（同步单次尝试、不重试、拨号死线 20s——go-mail 逐命令续期非总上限，专供管理端自检即时反馈；异步 `Send` 语义不变，业务流程一律走它）；新增守卫 `guard.RequirePresetGroup`（owner/admin 白名单，**不走权限目录**——SMTP 是服务器级配置，不属于可授出权限域；自建组不可授）。用户裁定：路由命名按 API 规范 §3 资源名词复数（`/messages`，创建即发送），拒绝 `/test` 动词尾巴。版本 0.8.0 → 0.9.0。
 - v6（2026-10-23，设置接入）：新增 `mail` 设置组十二项并成为 SMTP 配置的首选来源；`smtp_host` 为空时回退 `SMTP_*` 环境变量，`enabled=false` 时强制日志实现。`New(cfg)` 改为 `New(cfg, settings)`，每次投递前读取设置组；读取失败直接报错，不静默回退。前端邮件设置页从纯 UI 改为服务端读取 + `PATCH /admin/settings/mail` 保存；后端仍不提供明文 SMTP 加密模式。
+- v7（2026-10-23，模板测试发送）：`POST /admin/mail/messages` 增加可选 `template`（缺省 / `example` 自检、`signup_code`、`password_reset`），新增两个内置模板；`mail` 设置组里的 `*_subject` / `*_body` 非空时覆盖主题 / HTML 正文。前端模板行右侧新增发送图标与确认弹窗，收件人为当前登录账号邮箱，仅 owner / admin 可见。业务侧注册验证码 / 密码重置发送仍未接。
 
 ## 1. 意图与背景
 
