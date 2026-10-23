@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-10-24 · 人机验证配置自检（控制台「验证配置」行）
+
+**范围**：后端 `internal/common/apierror/{apierror.go,apierror_test.go}`、`internal/modules/auth/{captcha.go,captcha_test.go,controller.go,dto.go,service.go}`、新 `internal/modules/auth/captcha_verify_test.go`、`README.md`；前端 `app/console/settings/captcha/captcha-settings-form.tsx`、新 `hooks/use-captcha-verify.ts`、`messages/{zh-CN,en}.json`；另加本条目。零迁移、零依赖。
+
+**动机**：控制台「人机验证」页只有两把密钥，填完无法判断是否可用；保存一份错配置会立刻按 `captcha_failed` 拦死登录（Cloudflare 不可用时也是拒绝）。用户要求在私钥下新增「验证配置」行：点按钮弹出与登录页一致的人机验证弹窗，完成挑战后当场校验这对密钥，**用表单当前值（未保存草稿）**，不是库里已保存的值。
+
+**口径**：
+
+- 校验走新的 `POST /api/v1/admin/captcha/verifications`（`system.register.edit`，与保存 `auth` 设置组同一把钥匙），body `{"secret_key","token"}` → 200 `{"verified":true}`；缺字段 400 `invalid_request`；Cloudflare 判负 400 `captcha_verification_failed`；连不上 / 超时 / 非 2xx / 坏响应 503 `service_unavailable`。接口不读也不写设置表，不碰开关与 provider。
+- 私钥由请求体传入，是为了支持「未保存草稿」；私钥本来就由 `GET /admin/settings/auth` 明文返回管理端，这条不新增暴露面。
+- `turnstileVerifier` 的拒绝清单补入 `invalid-input-secret`（原先归「不可用」）：否则私钥填错时自检会提示「服务暂不可用」而不是「验证失败」。登录 / 注册侧 HTTP 结果不变（`verifyCaptcha` 对 rejected / unavailable 都回 `captcha_failed`），只有 verifier 的分类与单测预期变了。
+- 前端复用 `components/auth/captcha-dialog.tsx`（登录页同一个弹窗：停 1618ms 关闭、点遮罩不关）；挑战通过后关闭弹窗再调接口，结果走 sonner toast（成功「配置验证通过」、判负「配置验证失败，请检查站点密钥与私钥」、503 用公共「服务暂不可用」、403「无权验证配置」）。
+- 只在「验证服务 = Cloudflare Turnstile」时出现该行；两把密钥任一为空时点击只 toast「请先填写站点密钥和私钥」，不弹窗。开关（启用人机验证）关着也能验——只验密钥对，不改开关、不保存。
+
+**验证**：后端 `gofmt -l` 干净、`go build ./...` 通过、`bash scripts/test.sh ./internal/modules/auth/` 全绿；新增 7 条接口测试（通过 / 判负 400 `captcha_verification_failed` / 不可用 503 / 缺字段 / 非 JSON 与跨站 Origin / 普通用户 403 / 未登录 401）。变异自检五条：把 rejected / unavailable 都改成 `nil`、去掉权限守卫、去掉 token 非空校验、删掉 `invalid-input-secret`、去掉 `requireJSONRequest`，对应测试分别变红，恢复后全绿。独立代码审查（子代理）无 Critical / Important，3 条 Minor 已修：按钮补 `aria-label`、验证请求在途时锁住两把密钥输入、补 Content-Type / Origin 守卫用例。前端 `npx tsc --noEmit`、ESLint、Prettier 通过；前端无自动化测试，运行期观感（弹窗、toast、测试密钥下能通过）归用户实机确认。
+
+**已知缺口**：浏览器不能直连 Cloudflare `siteverify`（实测响应无 CORS 头），所以本功能必须经后端；弹窗在浏览器当前域名下渲染，域名不在该 site key 白名单时会显示「人机验证加载失败」，这是真实信号、不是误报。Cloudflare 测试密钥对任何 token 都放行，用测试密钥时自检恒过，验不出配对错误。
+
+**提交状态**：未提交。
+
+---
+
 ## 2026-10-24 · 人机验证「验证服务」新增「不启用」并作为默认
 
 **范围**：后端 7 文件——`internal/modules/settings/{registry.go,seed_migration_test.go,controller_test.go,registry_test.go}`、新迁移 `migrations/20261024120000_seed_captcha_provider_none.sql` 与 `migrations/atlas.sum`、`README.md`；前端 4 文件——`lib/captcha-settings.ts`、`app/console/settings/captcha/captcha-settings-form.tsx`、`messages/zh-CN.json`、`messages/en.json`；另加本条目。零接口、零依赖。
