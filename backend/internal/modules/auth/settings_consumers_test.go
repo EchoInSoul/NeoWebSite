@@ -237,22 +237,34 @@ func brokenSettingsService(t *testing.T) *settings.Service {
 	return module.Service
 }
 
-func TestLoginAndTOTPSetupFailOpenWhenSettingsUnavailable(t *testing.T) {
+func TestLoginFailsWhenSettingsUnavailable(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	ts, sm, _ := newTestAppWithSessionsAndSettings(t, db, brokenSettingsService(t))
+	ts, _, _ := newTestAppWithSessionsAndSettings(t, db, brokenSettingsService(t))
+	user, password := createTestUser(t, db, tag)
+
+	client := testClient(t)
+	assertErrorCode(t, loginRaw(t, client, ts.URL, user.Email, password), http.StatusInternalServerError, "internal_error")
+}
+
+func TestTOTPSetupFailsWhenSettingsUnavailable(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	ts, _, svc := newTestAppWithSessionsAndSettings(t, db)
 	user, password := createTestUser(t, db, tag)
 
 	client := testClient(t)
 	loginOK(t, client, ts.URL, user.Email, password)
 
-	_, deadline, _ := sessionRow(t, sm, ts.URL, client)
-	remaining := time.Until(deadline)
-	if remaining < sm.Lifetime-time.Minute || remaining > sm.Lifetime+time.Minute {
-		t.Fatalf("session lifetime = %v, want about %v (fail-open)", remaining, sm.Lifetime)
+	if _, err := db.SQL().Exec("DELETE FROM setting_values WHERE setting_group = $1 AND name = $2", "auth", "totp_enabled"); err != nil {
+		t.Fatalf("delete auth.totp_enabled: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = svc.ResetItem(context.Background(), "auth", "totp_enabled")
+	})
 
-	setup2FA(t, client, ts.URL, password)
+	resp := post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password})
+	assertErrorCode(t, resp, http.StatusInternalServerError, "internal_error")
 }
 
 func TestDisableTOTPStillWorksWhenGloballyDisabled(t *testing.T) {

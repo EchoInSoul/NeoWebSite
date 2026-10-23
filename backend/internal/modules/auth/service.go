@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
@@ -38,7 +39,7 @@ type Service struct {
 func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captchaVerifier) *Service {
 	dummy, err := bcrypt.GenerateFromPassword([]byte("timing-defense-placeholder"), bcrypt.DefaultCost)
 	if err != nil {
-		dummy = nil
+		panic(fmt.Sprintf("auth: generate dummy hash: %v", err))
 	}
 	if verifier == nil {
 		verifier = unavailableCaptchaVerifier{}
@@ -316,7 +317,11 @@ func isFreshTOTPSetup(row *ent.User, now time.Time) bool {
 }
 
 func (s *Service) SetupTOTP(ctx context.Context, userID, password string) (TwoFactorSetupResponse, error) {
-	if !s.twoFactorAvailable(ctx) {
+	available, err := s.twoFactorAvailable(ctx)
+	if err != nil {
+		return TwoFactorSetupResponse{}, err
+	}
+	if !available {
 		return TwoFactorSetupResponse{}, apierror.ErrTwoFactorDisabled
 	}
 	found, err := s.activeUser(ctx, userID)
@@ -380,7 +385,11 @@ func (s *Service) reuseTOTPSetup(accountName, sealed string) (TwoFactorSetupResp
 }
 
 func (s *Service) EnableTOTP(ctx context.Context, userID, code, password, currentToken string) (RecoveryCodesResponse, error) {
-	if !s.twoFactorAvailable(ctx) {
+	available, err := s.twoFactorAvailable(ctx)
+	if err != nil {
+		return RecoveryCodesResponse{}, err
+	}
+	if !available {
 		return RecoveryCodesResponse{}, apierror.ErrTwoFactorDisabled
 	}
 	found, err := s.activeUser(ctx, userID)
@@ -478,12 +487,12 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID, password 
 	return RecoveryCodesResponse{RecoveryCodes: codes}, nil
 }
 
-func (s *Service) twoFactorAvailable(ctx context.Context) bool {
+func (s *Service) twoFactorAvailable(ctx context.Context) (bool, error) {
 	enabled, err := s.settings.GetBool(ctx, "auth", "totp_enabled")
 	if err != nil {
-		return true
+		return false, err
 	}
-	return enabled
+	return enabled, nil
 }
 
 func (s *Service) activeUser(ctx context.Context, userID string) (*ent.User, error) {
@@ -644,18 +653,18 @@ func (s *Service) ensureRegistrationDomain(ctx context.Context, email string) er
 }
 
 func (s *Service) verifyCaptcha(ctx context.Context, token string, meta SessionMeta) error {
-	enabled, err := s.settings.GetBool(ctx, "auth", "captcha_enabled")
-	if err != nil || !enabled {
+	enabled, _ := s.settings.GetBool(ctx, "auth", "captcha_enabled")
+	if !enabled {
 		return nil
 	}
 
-	provider, err := s.settings.GetString(ctx, "auth", "captcha_provider")
-	if err != nil || provider != captchaProviderTurnstile {
+	provider, _ := s.settings.GetString(ctx, "auth", "captcha_provider")
+	if provider != captchaProviderTurnstile {
 		return nil
 	}
 
-	secret, err := s.settings.GetString(ctx, "auth", "turnstile_secret_key")
-	if err != nil || secret == "" {
+	secret, _ := s.settings.GetString(ctx, "auth", "turnstile_secret_key")
+	if secret == "" {
 		return nil
 	}
 

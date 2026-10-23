@@ -30,6 +30,11 @@ type Session struct {
 }
 
 func (s *Service) establishSession(ctx context.Context, userID string, authVersion int, meta SessionMeta) error {
+	deadline, err := s.sessionDeadline(ctx)
+	if err != nil {
+		return err
+	}
+
 	if err := s.sessions.RenewToken(ctx); err != nil {
 		return err
 	}
@@ -43,21 +48,27 @@ func (s *Service) establishSession(ctx context.Context, userID string, authVersi
 	s.sessions.Put(ctx, guard.SessionLastSeenAtKey, now)
 	s.sessions.Remove(ctx, pendingUserIDKey)
 	s.sessions.Remove(ctx, pendingAttemptsKey)
-	s.applySessionDeadline(ctx)
+	if deadline != nil {
+		s.sessions.SetDeadline(ctx, *deadline)
+	}
 
 	return nil
 }
 
-func (s *Service) applySessionDeadline(ctx context.Context) {
+func (s *Service) sessionDeadline(ctx context.Context) (*time.Time, error) {
 	enabled, err := s.settings.GetBool(ctx, "auth", "session_max_age_enabled")
-	if err != nil || !enabled {
-		return
+	if err != nil {
+		return nil, err
+	}
+	if !enabled {
+		return nil, nil
 	}
 	days, err := s.settings.GetNumber(ctx, "auth", "session_max_age_days")
-	if err != nil || days < 1 || days > 30 {
-		return
+	if err != nil {
+		return nil, err
 	}
-	s.sessions.SetDeadline(ctx, time.Now().Add(time.Duration(days)*24*time.Hour))
+	deadline := time.Now().Add(time.Duration(days) * 24 * time.Hour)
+	return &deadline, nil
 }
 
 func (s *Service) enterPendingSession(ctx context.Context, userID string) {
