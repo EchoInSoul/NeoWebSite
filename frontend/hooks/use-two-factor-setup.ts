@@ -110,6 +110,7 @@ export function useTwoFactorSetup() {
         setSubmitState("idle");
         setPassword("");
         setRecoveryCodes(payload.recovery_codes);
+        toast.success(t("twoFactorEnabled"));
       } catch (error) {
         if (error instanceof ApiError) {
           if (error.code === "two_factor_invalid_code") {
@@ -158,18 +159,11 @@ export function useTwoFactorSetup() {
     [password, router, setup, startSetup, t, tCommon],
   );
 
-  const changeCode = useCallback(
-    (value: string) => {
-      const digits = value.replace(/\D/g, "").slice(0, codeLength);
-      setCode(digits);
-      setSubmitState("idle");
-
-      if (digits.length === codeLength) {
-        void submitCode(digits);
-      }
-    },
-    [submitCode],
-  );
+  const changeCode = useCallback((value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, codeLength);
+    setCode(digits);
+    setSubmitState("idle");
+  }, []);
 
   const finishRecovery = useCallback(() => {
     setRecoveryCodes(null);

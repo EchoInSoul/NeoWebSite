@@ -21,7 +21,7 @@ import { useTwoFactorSetup } from "@/hooks/use-two-factor-setup";
 import { RecoveryCodesDialog } from "./recovery-codes-dialog";
 
 const labelClassName = "text-xs leading-4 font-normal text-muted-foreground";
-const valueInputClassName = "min-w-0 flex-1 font-mono text-xs";
+const valueInputClassName = "min-w-0 flex-1 font-mono text-xs text-ellipsis";
 
 function groupSecret(secret: string) {
   return secret.replace(/(.{4})/g, "$1 ").trim();
@@ -184,19 +184,28 @@ export function TwoFactorPanel({ onDone }: { onDone: () => void }) {
               <Label className={labelClassName} htmlFor="two-factor-code">
                 {t("twoFactorCodePrompt")}
               </Label>
-              <Input
-                aria-invalid={submitState === "invalid"}
-                autoComplete="one-time-code"
-                className="w-70"
-                disabled={isBusy}
-                id="two-factor-code"
-                inputMode="numeric"
-                maxLength={6}
-                onChange={handleCodeChange}
-                onKeyDown={handleCodeKeyDown}
-                placeholder={t("twoFactorCodePlaceholder")}
-                value={code}
-              />
+              <div className="flex w-full items-center gap-2">
+                <Input
+                  aria-invalid={submitState === "invalid"}
+                  autoComplete="one-time-code"
+                  className="min-w-0 flex-1"
+                  disabled={isBusy}
+                  id="two-factor-code"
+                  inputMode="numeric"
+                  maxLength={6}
+                  onChange={handleCodeChange}
+                  onKeyDown={handleCodeKeyDown}
+                  placeholder={t("twoFactorCodePlaceholder")}
+                  value={code}
+                />
+                <Button
+                  disabled={code.length !== 6 || isBusy}
+                  onClick={() => void submitCode(code)}
+                  type="button"
+                >
+                  {t("save")}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

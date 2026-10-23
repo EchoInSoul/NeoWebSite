@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download, Mail } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -13,7 +14,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { ApiError, apiRequest, looksLikeServiceFailure } from "@/lib/api";
+
+const autoDownloadDelayMs = 3000;
+
+function downloadCodes(codes: string[]) {
+  const blob = new Blob([codes.join("\n")], {
+    type: "text/plain;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "neoblog-recovery-codes.txt";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 export function RecoveryCodesDialog({
   codes,
@@ -23,7 +40,72 @@ export function RecoveryCodesDialog({
   onClose: () => void;
 }) {
   const t = useTranslations("uc");
-  const { isCopied, copy } = useCopyToClipboard();
+  const tCommon = useTranslations("common");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const autoDownloadTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (codes === null) {
+      return;
+    }
+
+    autoDownloadTimer.current = window.setTimeout(() => {
+      autoDownloadTimer.current = null;
+      downloadCodes(codes);
+    }, autoDownloadDelayMs);
+
+    return () => {
+      if (autoDownloadTimer.current !== null) {
+        window.clearTimeout(autoDownloadTimer.current);
+        autoDownloadTimer.current = null;
+      }
+    };
+  }, [codes]);
+
+  function handleDownload() {
+    if (codes === null) {
+      return;
+    }
+
+    if (autoDownloadTimer.current !== null) {
+      window.clearTimeout(autoDownloadTimer.current);
+      autoDownloadTimer.current = null;
+    }
+    downloadCodes(codes);
+  }
+
+  async function handleSendEmail() {
+    if (isSendingEmail) {
+      return;
+    }
+
+    setIsSendingEmail(true);
+
+    try {
+      await apiRequest("/api/v1/users/me/2fa/recovery-codes/email", {
+        method: "POST",
+      });
+      toast.success(t("twoFactorRecoveryEmailed"));
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.status === 401) {
+          return;
+        }
+        if (error.code === "not_implemented") {
+          toast.error(t("twoFactorRecoveryEmailUnavailable"));
+          return;
+        }
+      }
+
+      toast.error(
+        looksLikeServiceFailure(error)
+          ? tCommon("serviceUnavailable")
+          : t("twoFactorRecoveryEmailFailed"),
+      );
+    } finally {
+      setIsSendingEmail(false);
+    }
+  }
 
   return (
     <AlertDialog
@@ -41,26 +123,20 @@ export function RecoveryCodesDialog({
             {t("twoFactorRecoveryHint")}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="flex flex-col items-start gap-3">
-          <div className="grid w-full grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg border border-border bg-muted/50 p-3 font-mono text-xs">
-            {(codes ?? []).map((code) => (
-              <span key={code}>{code}</span>
-            ))}
-          </div>
+        <AlertDialogFooter>
           <Button
-            onClick={() => {
-              void copy((codes ?? []).join("\n"));
-            }}
-            size="sm"
+            disabled={isSendingEmail}
+            onClick={() => void handleSendEmail()}
             type="button"
             variant="outline"
           >
-            {isCopied ? <Check /> : <Copy />}
-            {isCopied ? t("twoFactorCopied") : t("twoFactorRecoveryCopy")}
+            <Mail />
+            {t("twoFactorRecoveryEmail")}
           </Button>
-        </div>
-        <AlertDialogFooter>
-          <AlertDialogAction>{t("twoFactorRecoveryDone")}</AlertDialogAction>
+          <Button onClick={handleDownload} type="button">
+            <Download />
+            {t("twoFactorRecoveryDownload")}
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
