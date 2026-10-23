@@ -350,7 +350,7 @@ var builtinRegistry = []Group{
 }
 ```
 
-两者必须成对（只写 `Validate` 构造即报错，管辖项不存在也报错）。校验只覆盖 `PATCH /admin/settings/:group`（唯一 HTTP 写路径）；`Set*` / `SetGroup` / `ResetItem` 直写不校验（测试与探针通道）。冲突回 409 `setting_conflict`，`param` 指向**判定项**（未必是要改的那一项）；未触碰管辖项的写入不读合并态、零开销。
+两者必须成对（只写 `Validate` 构造即报错，管辖项不存在也报错）。校验只覆盖 `PATCH /admin/settings/:group`（唯一 HTTP 写路径）；`Set*` / `SetGroup` / `ResetItem` 直写不校验（测试与探针通道）。冲突回 409 `setting_conflict`，`param` 指向**判定项**（未必是要改的那一项）；每次 PATCH 都会多读一次整组（用于计算写入后的最终态），组校验仍只在触碰管辖项时执行。
 
 ## 运行
 

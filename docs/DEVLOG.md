@@ -31,7 +31,7 @@
 
 **已知影响**：新库必须先 `bash scripts/db-migrate-apply.sh` 才有设置可读，否则 `GET /admin/settings/:group` 与 `/public/settings` 直接 500；手工删掉某行会让那一项在补回之前一直报 `not configured`（补回方式：`ResetItem`、PATCH 该项、或重跑迁移）；以后每加一个设置都必须同时加 seed 迁移。
 
-**提交状态**：待提交（改动已暂存）。
+**提交状态**：主体随 `93d083f` / `1b45632` / `677ecdd` 三笔提交入库（未推送）；本轮审查补丁待提交。
 
 ---
 
