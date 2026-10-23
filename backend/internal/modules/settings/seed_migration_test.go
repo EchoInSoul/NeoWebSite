@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -19,28 +20,35 @@ func TestSeedMigrationMatchesBuiltinRegistry(t *testing.T) {
 		t.Fatal("no seed migrations found")
 	}
 
+	sort.Strings(paths)
 	seeded := make(map[string]map[string][]byte)
-	total := 0
 	for _, path := range paths {
 		content, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read seed migration %s: %v", path, err)
 		}
+		seen := make(map[string]bool)
 		for _, line := range strings.Split(string(content), "\n") {
 			match := seedRowPattern.FindStringSubmatch(strings.TrimSpace(line))
 			if match == nil {
 				continue
 			}
 			group, name, value := match[1], match[2], match[3]
-			total++
+			key := group + "." + name
+			if seen[key] {
+				t.Fatalf("duplicate seed row for %s in %s", key, path)
+			}
+			seen[key] = true
 			if seeded[group] == nil {
 				seeded[group] = make(map[string][]byte)
 			}
-			if _, exists := seeded[group][name]; exists {
-				t.Fatalf("duplicate seed row for %s.%s in %s", group, name, path)
-			}
 			seeded[group][name] = []byte(value)
 		}
+	}
+
+	total := 0
+	for _, items := range seeded {
+		total += len(items)
 	}
 
 	want := 0
@@ -63,6 +71,6 @@ func TestSeedMigrationMatchesBuiltinRegistry(t *testing.T) {
 		}
 	}
 	if total != want {
-		t.Fatalf("seed rows = %d, want %d registry items", total, want)
+		t.Fatalf("seeded items = %d, want %d registry items", total, want)
 	}
 }

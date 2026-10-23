@@ -120,7 +120,7 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "totp_enabled", typ: FieldTypeBool, def: true, public: true},
 		{name: "password_reset_enabled", typ: FieldTypeBool, def: false},
 		{name: "captcha_enabled", typ: FieldTypeBool, def: false, public: true},
-		{name: "captcha_provider", typ: FieldTypeString, def: "", public: true},
+		{name: "captcha_provider", typ: FieldTypeString, def: "none", public: true},
 		{name: "turnstile_site_key", typ: FieldTypeString, def: "", public: true},
 		{name: "turnstile_secret_key", typ: FieldTypeString, def: ""},
 	})

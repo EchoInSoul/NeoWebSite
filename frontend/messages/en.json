@@ -110,6 +110,7 @@
     "captchaGroup": "CAPTCHA",
     "captchaEnabled": "Enable CAPTCHA",
     "captchaProvider": "CAPTCHA provider",
+    "captchaProviderNone": "Disabled",
     "captchaProviderBuiltin": "Built-in CAPTCHA",
     "captchaProviderTurnstile": "Cloudflare Turnstile",
     "captchaTurnstileSiteKey": "Site key",

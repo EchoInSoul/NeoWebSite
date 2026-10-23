@@ -20,11 +20,13 @@ import { useCaptchaSettingsSave } from "@/hooks/use-captcha-settings-save";
 import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
 import {
   CAPTCHA_PROVIDER_BUILTIN,
+  CAPTCHA_PROVIDER_NONE,
   CAPTCHA_PROVIDER_TURNSTILE,
   type CaptchaSettingsValues,
 } from "@/lib/captcha-settings";
 
 const KNOWN_CAPTCHA_PROVIDERS: string[] = [
+  CAPTCHA_PROVIDER_NONE,
   CAPTCHA_PROVIDER_BUILTIN,
   CAPTCHA_PROVIDER_TURNSTILE,
 ];
@@ -53,6 +55,7 @@ export function CaptchaSettingsForm({
     ? null
     : values.captchaProvider;
   const captchaProviderItems = {
+    [CAPTCHA_PROVIDER_NONE]: t("captchaProviderNone"),
     [CAPTCHA_PROVIDER_BUILTIN]: t("captchaProviderBuiltin"),
     [CAPTCHA_PROVIDER_TURNSTILE]: t("captchaProviderTurnstile"),
     ...(unknownCaptchaProvider === null
@@ -103,6 +106,9 @@ export function CaptchaSettingsForm({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value={CAPTCHA_PROVIDER_NONE}>
+                        {t("captchaProviderNone")}
+                      </SelectItem>
                       <SelectItem value={CAPTCHA_PROVIDER_BUILTIN}>
                         {t("captchaProviderBuiltin")}
                       </SelectItem>

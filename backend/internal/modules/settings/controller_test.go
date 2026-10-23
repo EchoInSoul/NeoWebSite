@@ -438,8 +438,8 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 	if authValues["totp_enabled"] != true {
 		t.Fatalf("public auth.totp_enabled = %v, want true", authValues["totp_enabled"])
 	}
-	if authValues["captcha_enabled"] != false || authValues["captcha_provider"] != "" || authValues["turnstile_site_key"] != "" {
-		t.Fatalf("public auth captcha values = %v, want the empty defaults", authValues)
+	if authValues["captcha_enabled"] != false || authValues["captcha_provider"] != "none" || authValues["turnstile_site_key"] != "" {
+		t.Fatalf("public auth captcha values = %v, want the disabled defaults", authValues)
 	}
 }
 
@@ -527,8 +527,8 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	if values["password_min_length"] != float64(8) {
 		t.Fatalf("auth.password_min_length = %v, want 8", values["password_min_length"])
 	}
-	if values["captcha_provider"] != "" {
-		t.Fatalf("auth.captcha_provider = %v, want empty", values["captcha_provider"])
+	if values["captcha_provider"] != "none" {
+		t.Fatalf("auth.captcha_provider = %v, want none", values["captcha_provider"])
 	}
 	if values["turnstile_site_key"] != "" || values["turnstile_secret_key"] != "" {
 		t.Fatalf("turnstile keys = %v / %v, want empty", values["turnstile_site_key"], values["turnstile_secret_key"])

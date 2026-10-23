@@ -5,6 +5,7 @@ export type CaptchaSettingsValues = {
   turnstileSecretKey: string;
 };
 
+export const CAPTCHA_PROVIDER_NONE = "none";
 export const CAPTCHA_PROVIDER_BUILTIN = "builtin";
 export const CAPTCHA_PROVIDER_TURNSTILE = "turnstile";
 
@@ -37,10 +38,7 @@ export function parseCaptchaSettingsValues(
 
   return {
     captchaEnabled: raw.captcha_enabled,
-    captchaProvider:
-      raw.captcha_provider === ""
-        ? CAPTCHA_PROVIDER_BUILTIN
-        : raw.captcha_provider,
+    captchaProvider: raw.captcha_provider,
     turnstileSiteKey: raw.turnstile_site_key,
     turnstileSecretKey: raw.turnstile_secret_key,
   };

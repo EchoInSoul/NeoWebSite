@@ -110,6 +110,7 @@
     "captchaGroup": "人机验证",
     "captchaEnabled": "启用人机验证",
     "captchaProvider": "验证服务",
+    "captchaProviderNone": "不启用",
     "captchaProviderBuiltin": "自研人机验证",
     "captchaProviderTurnstile": "Cloudflare Turnstile",
     "captchaTurnstileSiteKey": "站点密钥",

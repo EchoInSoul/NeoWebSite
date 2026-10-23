@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-24 · 人机验证「验证服务」新增「不启用」并作为默认
+
+**范围**：后端 7 文件——`internal/modules/settings/{registry.go,seed_migration_test.go,controller_test.go,registry_test.go}`、新迁移 `migrations/20261024120000_seed_captcha_provider_none.sql` 与 `migrations/atlas.sum`、`README.md`；前端 4 文件——`lib/captcha-settings.ts`、`app/console/settings/captcha/captcha-settings-form.tsx`、`messages/zh-CN.json`、`messages/en.json`；另加本条目。零接口、零依赖。
+
+**动机**：用户要求「验证服务」下拉新增「不启用」，且默认就是「不启用」；下拉常规只有三项——不启用 / 自研人机验证 / Cloudflare Turnstile（清单外的历史脏值仍会额外追加一条原值，正常数据不会出现）。首版只改前端、由前端把后端空串映射为「不启用」，用户随后要求前后端统一成同一种取值，于是把 `none` 定为唯一形状。
+
+**口径**：
+
+- 后端默认值：`auth.captcha_provider` 的 registry 默认由空串改为 `"none"`，`ResetItem` 与测试重置写回的都是 `"none"`。
+- 存量迁移：新增 seed 迁移 `seed_captcha_provider_none`，用 `INSERT ... ON CONFLICT ... DO UPDATE ... WHERE value = '""'::jsonb` 把空串行改成 `"none"`；已经是 `builtin` / `turnstile` / `none` 的行一律不动，不覆盖用户已选的服务。
+- seed 校验测试：`TestSeedMigrationMatchesBuiltinRegistry` 允许后一条 seed 迁移覆盖前一条的默认值（按文件名顺序、最后一条为准），同一条迁移内重复仍然报错，计数改为去重后的项数。这样"改已有项默认值"不用回头改历史迁移。
+- 前端：`CAPTCHA_PROVIDER_NONE = "none"`，读入不再把空串特判成「不启用」；下拉顺序为「不启用 / 自研人机验证 / Cloudflare Turnstile」，`none` 与 `builtin`、`turnstile` 一起进 `KNOWN_CAPTCHA_PROVIDERS`，清单外的历史值仍原样追加显示。
+- 「不启用」与「启用人机验证」开关相互独立：选它只改 `captcha_provider`，不碰全局开关；开关的开 / 关只由用户手动操作。折叠区不收起，仍可改选其他实现。
+- 保存仍无条件回写 `captcha_provider` 与两把密钥；Turnstile 密钥行只在选中 Turnstile 时出现，值不清空。
+- 拦截条件与消费方不变：仍是 `captcha_enabled=true` + `captcha_provider="turnstile"` + 私钥非空，`none` / `builtin` 都走「不校验」分支；公开设置与登录 / 注册页同样只看 `turnstile`。
+
+**验证**：`atlas migrate hash` / `atlas migrate validate` 通过，新迁移已应用到开发库与测试库；开发库实际读出 `captcha_provider = "none"`。迁移条件在测试库用事务回滚实测四种初值：空串 → `none`，`builtin` / `turnstile` / `none` 原样保留。后端 `gofmt -l` 干净、`scripts/check.sh` 输出 `check ok`、全量 `scripts/test.sh` 全绿（settings / auth / app / mail / access 等全部包）。前端 `npx tsc --noEmit`、ESLint、Prettier 全部通过。前端无自动化测试，运行期观感（下拉顺序、选中「不启用」后全局开关保持原状、保存刷新仍为「不启用」）归用户实机确认。
+
+**已知缺口**：新迁移尚未执行的库 `captcha_provider` 仍是空串，管理页会显示一个空白选项——应用启动不自动迁移，按既有流程先跑迁移；后端仍不校验 provider 枚举，`PATCH` 可写入任意字符串。seed 防漂移测试只校验 seed 文件里的默认值、不执行迁移 SQL，迁移的 `WHERE` 条件由上面的实测覆盖，没有自动化测试守护；迁移应用后 Atlas 校验和会锁住文件内容。
+
+**提交状态**：未提交。
+
+---
+
 ## 2026-10-23 · 兜底/回退清理与 AI 开发约束落盘
 
 **范围**：后端 `internal/modules/auth/{service.go,session.go,settings_consumers_test.go}`、`internal/app/{app.go,app_test.go}`、`internal/common/apierror/apierror.go`、`internal/common/guard/{activity.go,activity_test.go}`、`internal/config/{config.go,config_test.go}`、`.env.example`、`README.md`；新增仓库根 `AGENTS.md`；另加本条目。前端零改动。
