@@ -23,7 +23,7 @@ const (
 	maxVerifyAttempts  = 5
 )
 
-const recoveryCodesPerBatch = 10
+const recoveryCodesPerBatch = 5
 
 type Service struct {
 	repo      *repository

@@ -70,6 +70,7 @@ var (
 	ErrTwoFactorNotSetup       = &Error{Type: TypeConflict, Code: "two_factor_not_setup"}
 	ErrTwoFactorNotEnabled     = &Error{Type: TypeConflict, Code: "two_factor_not_enabled"}
 	ErrMailDeliveryFailed      = &Error{Type: TypeServer, Code: "mail_delivery_failed"}
+	ErrNotImplemented          = &Error{Type: TypeServer, Code: "not_implemented"}
 	ErrServiceUnavailable      = &Error{Type: TypeServer, Code: "service_unavailable"}
 	ErrInternal                = &Error{Type: TypeServer, Code: "internal_error"}
 )
@@ -107,6 +108,7 @@ var statusByCode = map[string]int{
 	"two_factor_not_setup":       http.StatusConflict,
 	"two_factor_not_enabled":     http.StatusConflict,
 	"mail_delivery_failed":       http.StatusInternalServerError,
+	"not_implemented":            http.StatusNotImplemented,
 	"service_unavailable":        http.StatusServiceUnavailable,
 	"internal_error":             http.StatusInternalServerError,
 }

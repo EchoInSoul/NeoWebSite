@@ -17,10 +17,12 @@ import (
 const (
 	totpIssuer             = "NeoBlog"
 	totpPeriodSeconds      = 30
+	totpSecretBytes        = 10
 	totpSkewWindows        = 1
 	totpSetupReuseWindow   = 5 * time.Minute
 	totpSetupClaimAttempts = 2
-	recoveryCodeBytes      = 16
+	recoveryCodeBytes      = 10
+	recoveryCodeGroupSize  = 4
 )
 
 var totpNow = time.Now
@@ -35,6 +37,7 @@ func generateTOTPSetup(accountName string) (totpSetup, error) {
 		Issuer:      totpIssuer,
 		AccountName: accountName,
 		Period:      totpPeriodSeconds,
+		SecretSize:  totpSecretBytes,
 		Digits:      otp.DigitsSix,
 		Algorithm:   otp.AlgorithmSHA1,
 	})
@@ -108,7 +111,8 @@ func generateRecoveryCodes(count int) ([]string, error) {
 			return nil, fmt.Errorf("auth: generate recovery code: %w", err)
 		}
 
-		code := hex.EncodeToString(raw)
+		encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)
+		code := formatRecoveryCode(encoded)
 		if _, ok := seen[code]; ok {
 			continue
 		}
@@ -118,8 +122,17 @@ func generateRecoveryCodes(count int) ([]string, error) {
 	return codes, nil
 }
 
+func formatRecoveryCode(encoded string) string {
+	groups := make([]string, 0, len(encoded)/recoveryCodeGroupSize)
+	for start := 0; start < len(encoded); start += recoveryCodeGroupSize {
+		groups = append(groups, encoded[start:min(start+recoveryCodeGroupSize, len(encoded))])
+	}
+	return strings.Join(groups, "-")
+}
+
 func hashRecoveryCode(code string) string {
 	normalized := strings.ToLower(strings.TrimSpace(code))
+	normalized = strings.ReplaceAll(normalized, "-", "")
 	sum := sha256.Sum256([]byte(normalized))
 	return hex.EncodeToString(sum[:])
 }

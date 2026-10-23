@@ -179,9 +179,10 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 | `POST /api/v1/users/me/password` | 需登录 | body `{"current_password","new_password"}` → 200 `{}`；旧密码错 401 `invalid_credentials`；400 `weak_password` / `password_unchanged` / `invalid_request` |
 | `POST /api/v1/sessions/current/verify` | 公开（靠「待二段」会话） | body `{"code"}` → 200 与登录成功同形（验证码或恢复码皆可）；码错 401 `two_factor_invalid_code`（`param:"code"`）；连错 5 次 401 `two_factor_locked` 并销毁会话；无待验会话 401 `unauthorized`；空 body 400 `invalid_request`；密钥解密失败 500 `internal_error` |
 | `POST /api/v1/users/me/2fa/setup` | 需登录 | body `{"password"}` → 200 `{"secret","otpauth_url"}`（明文 secret 仅经本端点暴露——首发与窗口内复用均可能返回明文，二维码由前端渲染）；**生成前校验当前密码**，密码错 401 `invalid_credentials`、空密码 400 `invalid_request`；**生成后 5 分钟内的重复调用复用同一把密钥**（同一账号名下响应逐字节相同、库内零写入；窗口内多设备 / 多标签页也拿到同一把；复用路径解密 / 空明文失败 500 `internal_error`）；超过 5 分钟重新生成并覆盖旧 secret（旧码作废、已认领窗号归零）；已启用 409 `two_factor_already_enabled`；站级 `auth.totp_enabled` 关闭时 403 `two_factor_disabled` |
-| `POST /api/v1/users/me/2fa/enable` | 需登录 | body `{"code","password"}` → 200 `{"recovery_codes":[…共 10 条]}`（明文只回这一次）；**验码前校验当前密码**，密码错 401 `invalid_credentials`、空密码 400 `invalid_request`；未 setup 409 `two_factor_not_setup`；码错 401 `two_factor_invalid_code`；**成功吊销该用户其它设备的会话**；密钥解密失败 500 `internal_error`；站级 `auth.totp_enabled` 关闭时 403 `two_factor_disabled` |
+| `POST /api/v1/users/me/2fa/enable` | 需登录 | body `{"code","password"}` → 200 `{"recovery_codes":[…共 5 条]}`（明文只回这一次）；**验码前校验当前密码**，密码错 401 `invalid_credentials`、空密码 400 `invalid_request`；未 setup 409 `two_factor_not_setup`；码错 401 `two_factor_invalid_code`；**成功吊销该用户其它设备的会话**；密钥解密失败 500 `internal_error`；站级 `auth.totp_enabled` 关闭时 403 `two_factor_disabled` |
 | `POST /api/v1/users/me/2fa/disable` | 需登录 | body `{"password"}` → 200 `{}`；清空 secret / 启用时间 / 窗号 / 设置时刻并删除全部恢复码行；「设置中」也允许调（中途放弃）；未 setup 409 `two_factor_not_setup`；密码错 401 `invalid_credentials`；**同样吊销其它会话** |
-| `POST /api/v1/users/me/2fa/recovery-codes` | 需登录 | body `{"password"}` → 200 `{"recovery_codes":[…共 10 条]}`；旧批（含已用过的）整体作废；未启用 409 `two_factor_not_enabled`；密码错 401 `invalid_credentials`；不吊销会话（要密码且已登录） |
+| `POST /api/v1/users/me/2fa/recovery-codes` | 需登录 | body `{"password"}` → 200 `{"recovery_codes":[…共 5 条]}`；旧批（含已用过的）整体作废；未启用 409 `two_factor_not_enabled`；密码错 401 `invalid_credentials`；不吊销会话（要密码且已登录） |
+| `POST /api/v1/users/me/2fa/recovery-codes/email` | 需登录 | **预留桩**：邮件发送恢复码方案未落地，当前固定 501 `not_implemented`；不读请求体、不发信、不写库 |
 
 **路径改名（2026-10-14，0.16.0）**：`/auth/*` 前缀已取消，上表即新口径——原 `POST /auth/register` → `POST /users`、`POST /auth/login` → `POST /sessions`、`POST /auth/logout` → `DELETE /sessions/current`、`GET /auth/me` → `GET /users/me`、`POST /auth/password` → `POST /users/me/password`、`POST /auth/2fa/verify` → `POST /sessions/current/verify`、`POST /auth/2fa/{setup,enable,disable,recovery-codes}` → `POST /users/me/2fa/*`。守卫链与错误契约不变。
 
@@ -202,13 +203,13 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 **两步验证（TOTP + 自管恢复码）**：已实现（设计：`docs/superpowers/specs/2026-10-11-neoblog-2fa-design.md`；setup 复用窗口：`docs/superpowers/specs/2026-10-14-neoblog-2fa-setup-reuse-window-design.md`；表结构见上方迁移清单的 `totp_and_recovery_codes`、`totp_last_counter` 与 `totp_setup_at`）。
 
 - 三态由两个可空列组合：`totp_secret` 空 = 未设置，非空且 `totp_enabled_at` 空 = 设置中，两者都非空 = 已启用。**登录分叉只看 `totp_enabled_at`**，「设置中」不拦登录（setup 可重复覆盖，disable 可中途放弃）。
-- 参数：TOTP 固定 SHA1 / 6 位 / 30 秒 / ±1 窗；恢复码每批 10 条、每条 16 随机字节的小写 hex（128 bit 熵），库里只存 sha256 hex、无有效期；输入侧的 trim + 转小写只在 `hashRecoveryCode` 一处归一。
+- 参数：TOTP 固定 SHA1 / 6 位 / 30 秒 / ±1 窗；恢复码每批 5 条、每条 10 随机字节的 Base32（16 位大写，按 4 位分组用连字符分隔，形如 `ES5Z-D2Y7-MB5F-AGBD`；80 bit 熵），库里只存 sha256 hex、无有效期；输入侧的 trim + 转小写 + 去掉连字符只在 `hashRecoveryCode` 一处归一。
 - secret 经 AES-256-GCM 加密后入列（密钥 `TOTP_ENCRYPTION_KEY`，随机 12 字节 nonce 前置、整体 base64）。**解密失败或 secret 本身非法 → 500 `internal_error`，且不消耗限次、不销毁会话**——密钥轮换或数据损坏不能伪装成验证码错误。
 - **重放防护**：命中的时间窗号必须大于 `totp_last_counter`，并用单条条件 UPDATE 的「影响行数 = 1」原子认领（并发提交同一枚码恰一人成功）。代价：该码所在的 30 秒窗整窗作废——刚验完又登出再登录要等下一窗，启用那一刻也占掉当窗（RFC 6238 §5.2 的标准取舍）。
 - 二段限次：会话内计数，连错 5 次销毁会话并返回 `two_factor_locked`；重走登录即续杯，所以它只用于即时反馈。真正的总闸门是「限流」章节的账号级 10 次/15 分钟冷却与 IP 窗口（login 与 verify 同做）。
 - 待验态用独立会话键 `auth.pending_2fa_user_id` / `auth.pending_2fa_attempts` 承载，**guard 包零改动**；进入待验态会清除 `auth.user_id`，因此待验会话打任何受保护接口都是 401；登录与 verify 各换发一次会话 token（防会话固定）。
 - enable（验证码 + 当前密码）/ disable（当前密码）**在通过之后、落库之前**吊销其它设备会话（复用改密在用的 `revokeOtherSessions`）：怀疑密码泄露才开 2FA 时，攻击者的旧会话必须立刻失效。enable 在同一事务里把 `auth_version` +1，当前会话随后同步新版本；吊销失败则本次动作整体不生效（500、库里不变），不留「已启用但没领到恢复码」的死角。
-- 多写操作各自单事务：enable（置启用时间 + 插 10 码）、disable（清三列 + 删全部码行）、recovery-codes（删旧 + 插新）；setup 覆盖 secret 时一并清窗号。
+- 多写操作各自单事务：enable（置启用时间 + 插 5 码）、disable（清三列 + 删全部码行）、recovery-codes（删旧 + 插新）；setup 覆盖 secret 时一并清窗号。
 
 ### 限流
 

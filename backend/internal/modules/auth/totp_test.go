@@ -132,8 +132,29 @@ func TestMatchTOTPCounterRejectsInvalidSecret(t *testing.T) {
 	}
 }
 
+func TestGenerateTOTPSetupSecretShape(t *testing.T) {
+	pattern := regexp.MustCompile(`^[A-Z2-7]{16}$`)
+
+	setup, err := generateTOTPSetup("user@example.com")
+	if err != nil {
+		t.Fatalf("generate setup: %v", err)
+	}
+	if !pattern.MatchString(setup.Secret) {
+		t.Fatalf("secret %q is not 16 base32 chars", setup.Secret)
+	}
+	if !strings.Contains(setup.OTPAuthURL, "secret="+setup.Secret) {
+		t.Fatalf("otpauth url %q does not carry secret %q", setup.OTPAuthURL, setup.Secret)
+	}
+}
+
+func TestRecoveryCodeBatchSize(t *testing.T) {
+	if recoveryCodesPerBatch != 5 {
+		t.Fatalf("recoveryCodesPerBatch = %d, want 5", recoveryCodesPerBatch)
+	}
+}
+
 func TestGenerateRecoveryCodesShape(t *testing.T) {
-	pattern := regexp.MustCompile(`^[0-9a-f]{32}$`)
+	pattern := regexp.MustCompile(`^[A-Z2-7]{4}(-[A-Z2-7]{4}){3}$`)
 
 	codes, err := generateRecoveryCodes(10)
 	if err != nil {
@@ -146,7 +167,7 @@ func TestGenerateRecoveryCodesShape(t *testing.T) {
 	seen := make(map[string]struct{}, len(codes))
 	for _, code := range codes {
 		if !pattern.MatchString(code) {
-			t.Fatalf("code %q does not match 32 lowercase hex", code)
+			t.Fatalf("code %q is not 4 groups of 4 uppercase base32", code)
 		}
 		if _, ok := seen[code]; ok {
 			t.Fatalf("duplicate code %q in batch", code)
@@ -162,6 +183,9 @@ func TestHashRecoveryCodeNormalizes(t *testing.T) {
 	}
 	if hashed != hashRecoveryCode("abcd") {
 		t.Fatalf("normalization differs: %q vs %q", hashed, hashRecoveryCode("abcd"))
+	}
+	if hashed != hashRecoveryCode("AB-CD") {
+		t.Fatalf("hyphen stripping differs: %q vs %q", hashed, hashRecoveryCode("AB-CD"))
 	}
 	if hashed == hashRecoveryCode("abcde") {
 		t.Fatal("different codes hashed identically")

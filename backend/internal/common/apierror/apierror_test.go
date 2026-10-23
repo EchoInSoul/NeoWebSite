@@ -315,13 +315,13 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrOwnerProtected, ErrCannotModifySelf, ErrRegistrationClosed, ErrTwoFactorDisabled, ErrNotFound, ErrPresetGroupLocked,
 		ErrEmailTaken, ErrNicknameTaken, ErrAlreadyTaken, ErrGroupNameTaken,
 		ErrGroupNotEmpty, ErrLastOwner, ErrSettingConflict, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
-		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrServiceUnavailable, ErrInternal,
+		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrNotImplemented, ErrServiceUnavailable, ErrInternal,
 	}
-	if len(all) != 34 {
-		t.Fatalf("sentinel count = %d, want 34", len(all))
+	if len(all) != 35 {
+		t.Fatalf("sentinel count = %d, want 35", len(all))
 	}
-	if len(statusByCode) != 34 {
-		t.Fatalf("statusByCode entries = %d, want 34", len(statusByCode))
+	if len(statusByCode) != 35 {
+		t.Fatalf("statusByCode entries = %d, want 35", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,
@@ -332,6 +332,7 @@ func TestRegistryIntegrity(t *testing.T) {
 		http.StatusConflict:            TypeConflict,
 		http.StatusTooManyRequests:     TypeRateLimit,
 		http.StatusInternalServerError: TypeServer,
+		http.StatusNotImplemented:      TypeServer,
 		http.StatusServiceUnavailable:  TypeServer,
 	}
 	seenCodes := make(map[string]struct{}, len(all))

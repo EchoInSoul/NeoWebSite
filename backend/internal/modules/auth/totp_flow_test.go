@@ -25,7 +25,7 @@ const testCodeHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 var testTOTPKey = []byte("0123456789abcdef0123456789abcdef")
 
-var recoveryCodePattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
+var recoveryCodePattern = regexp.MustCompile(`^[A-Z2-7]{4}(-[A-Z2-7]{4}){3}$`)
 
 func currentWindow() int64 {
 	return totpNow().Unix() / totpPeriodSeconds
@@ -308,7 +308,7 @@ func TestTwoFactorSetupEnableLifecycle(t *testing.T) {
 	}
 	for _, code := range issued.RecoveryCodes {
 		if !recoveryCodePattern.MatchString(code) {
-			t.Fatalf("code %q does not match 32 lowercase hex", code)
+			t.Fatalf("code %q is not 4 groups of 4 uppercase base32", code)
 		}
 	}
 
@@ -600,6 +600,22 @@ func TestTwoFactorRegenerateRecoveryCodes(t *testing.T) {
 			t.Fatalf("regenerated code %q repeats an old one", code)
 		}
 	}
+}
+
+func TestEmailRecoveryCodesReserved(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	u, password := createTestUser(t, db, tag)
+	ts := newTestApp(t, db)
+
+	anonymous := post2FA(t, testClient(t), ts.URL, "recovery-codes/email", struct{}{})
+	assertErrorCode(t, anonymous, http.StatusUnauthorized, "unauthorized")
+
+	client := testClient(t)
+	loginOK(t, client, ts.URL, u.Email, password)
+
+	reserved := post2FA(t, client, ts.URL, "recovery-codes/email", struct{}{})
+	assertErrorCode(t, reserved, http.StatusNotImplemented, "not_implemented")
 }
 
 func TestTwoFactorEnableRevokesOtherSessions(t *testing.T) {

@@ -39,6 +39,7 @@ func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.POST("/users/me/2fa/enable", c.enableTwoFactor)
 	r.POST("/users/me/2fa/disable", c.disableTwoFactor)
 	r.POST("/users/me/2fa/recovery-codes", c.regenerateRecoveryCodes)
+	r.POST("/users/me/2fa/recovery-codes/email", c.emailRecoveryCodes)
 }
 
 func (c *controller) login(ctx *gin.Context) {
@@ -239,6 +240,10 @@ func (c *controller) regenerateRecoveryCodes(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resp)
+}
+
+func (c *controller) emailRecoveryCodes(ctx *gin.Context) {
+	apierror.Write(ctx, apierror.ErrNotImplemented)
 }
 
 func (c *controller) verifySecondFactor(ctx *gin.Context) {
