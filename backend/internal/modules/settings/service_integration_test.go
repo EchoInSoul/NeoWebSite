@@ -1,10 +1,12 @@
 package settings
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -17,12 +19,10 @@ func newIntegrationService(t *testing.T, groups []Group) (*Service, *database.Da
 	t.Helper()
 	db := testDB(t)
 	names := groupNames(groups)
-	deleteGroups(t, db, names...)
 	svc, err := newServiceWith(db, groups)
 	if err != nil {
 		t.Fatalf("newServiceWith: %v", err)
 	}
-	seedGroupDefaults(t, svc, groups)
 	t.Cleanup(func() {
 		deleteGroups(t, db, names...)
 		builtin := make([]Group, 0, len(groups))
@@ -38,6 +38,8 @@ func newIntegrationService(t *testing.T, groups []Group) (*Service, *database.Da
 			t.Errorf("reseed %v: %v", names, err)
 		}
 	})
+	deleteGroups(t, db, names...)
+	seedGroupDefaults(t, svc, groups)
 	return svc, db
 }
 
@@ -111,7 +113,7 @@ func TestServiceWriteReadRoundtrip(t *testing.T) {
 	}
 }
 
-func TestServiceDefaultRead(t *testing.T) {
+func TestServiceSeededRead(t *testing.T) {
 	svc, _ := newIntegrationService(t, sampleGroups())
 	ctx := context.Background()
 
@@ -429,6 +431,30 @@ func TestServiceMissingRowReturnsError(t *testing.T) {
 	}
 	if _, err := svc.GetGroup(ctx, "extra"); err == nil {
 		t.Fatal("GetGroup without a row succeeded, want error")
+	}
+}
+
+func TestMissingRowIsLogged(t *testing.T) {
+	svc, db := newIntegrationService(t, sampleGroups())
+	ctx := context.Background()
+
+	if _, err := db.Client.SettingValue.Delete().
+		Where(settingvalue.SettingGroupEQ("demo"), settingvalue.NameEQ("port")).
+		Exec(ctx); err != nil {
+		t.Fatalf("delete demo.port: %v", err)
+	}
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	if _, err := svc.GetNumber(ctx, "demo", "port"); err == nil {
+		t.Fatal("GetNumber without a row succeeded, want error")
+	}
+	logged := buf.String()
+	if !strings.Contains(logged, "group=demo") || !strings.Contains(logged, "name=port") {
+		t.Fatalf("missing-row log = %q, want group=demo and name=port", logged)
 	}
 }
 

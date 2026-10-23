@@ -219,14 +219,14 @@ func resetBuiltin(t *testing.T, db *database.Database, names ...string) {
 		groups = append(groups, group)
 	}
 
-	deleteGroups(t, db, names...)
-	seedGroupDefaults(t, module.Service, groups)
 	t.Cleanup(func() {
 		deleteGroups(t, db, names...)
 		if err := writeGroupDefaults(module.Service, groups); err != nil {
 			t.Errorf("reseed %v: %v", names, err)
 		}
 	})
+	deleteGroups(t, db, names...)
+	seedGroupDefaults(t, module.Service, groups)
 }
 
 func createUserInGroup(t *testing.T, db *database.Database, groupID uuid.UUID) uuid.UUID {
@@ -284,7 +284,7 @@ func TestSettingsGetAsOwner(t *testing.T) {
 		t.Fatalf("group = %q, want register", group)
 	}
 	if values["enabled"] != true {
-		t.Fatalf("register.enabled = %v, want true merged from default", values["enabled"])
+		t.Fatalf("register.enabled = %v, want true from the seeded default", values["enabled"])
 	}
 	if count := registerRowCount(t, db); count != 5 {
 		t.Fatalf("register rows = %d, want the five seeded rows", count)
@@ -426,7 +426,7 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 	}
 	values, ok := items[1]["values"].(map[string]any)
 	if !ok || values["enabled"] != true {
-		t.Fatalf("values = %v, want enabled true merged from default", items[1]["values"])
+		t.Fatalf("values = %v, want enabled true from the seeded default", items[1]["values"])
 	}
 	if items[2]["group"] != "auth" {
 		t.Fatalf("group = %v, want auth", items[2]["group"])
