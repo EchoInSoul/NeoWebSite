@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-10-23 · 邮件设置接入：mail 设置组 + 页面读写 + 发信运行时读取
+
+**范围**：后端 `internal/modules/settings/{registry.go,registry_test.go,seed_migration_test.go}`、`internal/modules/mail/{module.go,mailer.go,settings.go,settings_test.go,smtp_test.go}`、`internal/app/app.go`、新迁移 `migrations/20261023120000_seed_mail_setting_values.sql` 与 `migrations/atlas.sum`、`README.md`；前端 `lib/{mail-settings.ts,admin-settings.ts}`、`hooks/use-mail-settings-save.ts`、`app/console/settings/mail/{page.tsx,mail-settings-form.tsx}`、`messages/{zh-CN,en}.json`；另加本条目。
+
+**动机**：邮件设置页此前是纯 UI，所有值只在组件 `useState` 里，刷新即失；实际发信只看 `backend/.env` 的 `SMTP_*`。用户要求把页面接入。
+
+**口径**：
+
+- 新增 `mail` 设置组十二项：`enabled`（默认 `true`）、`smtp_host` / `smtp_port`（默认 `587`）/ `smtp_encryption`（默认 `starttls`，只接受 `ssl` / `starttls`）/ `smtp_username` / `smtp_password` / `sender_address` / `sender_name`（默认 `NeoBlog`）与 `signup_code_subject` / `signup_code_body` / `password_reset_subject` / `password_reset_body`。全部非公开。
+- 发信每次投递前读 `mail` 组：`enabled=false` → 日志实现（不发送）；`enabled=true` 且 `smtp_host` 非空 → 整组使用设置值；`enabled=true` 但 `smtp_host` 为空 → 回退 `SMTP_*` 环境变量；两者都没有则日志。设置组读取失败直接返回错误（管理端自检 500），不静默改用环境变量。
+- 组级校验：端口在被改动或已启用且填了主机时检查 1–65535，加密方式在同一时机检查枚举；启用且填了主机时要求 `sender_address` 是纯邮箱地址，`smtp_username` 非空则 `smtp_password` 必填。
+- `smtp_password` 明文入库、管理接口原样返回（沿用 Turnstile 私钥的既有口径）；模板四项只存不用，当前没有注册验证码 / 密码重置发送流程。
+- 前端页面改为服务端 `getMailSettings()` 读取，403 显示「无权查看设置」；保存走 `PATCH /api/v1/admin/settings/mail`，只提交改动项，端口转数字；保存成功 toast + `router.refresh()`。删掉「不加密」选项（后端 spec 明确不提供明文模式），保留未知加密值的显示以便修正脏数据。
+- 新增校验文案四条；占位符提示改为「预留给后续验证码 / 重置邮件」。
+
+**验证**：`go test ./internal/modules/mail/ ./internal/modules/settings/ ./internal/app/ -count=1`（带 `DATABASE_URL_TEST`）全绿；`npx tsc --noEmit`、ESLint、Prettier 对改动前端文件通过；新迁移已应用到开发库与测试库。
+
+**已知缺口**：注册验证码 / 密码重置的发送流程仍未接，模板四项因此只存不用；管理端自检接口仍没有前端「发送测试邮件」入口；未做密码打码 / 加密存储。
+
+**提交状态**：已随本轮邮件设置接入提交入库（未推送）。
+
+---
+
 ## 2026-10-23 · 设置读取不再兜底：坏值与缺行都直接报错
 
 **范围**：后端 `internal/modules/settings/{service.go,module.go,service_test.go,service_integration_test.go,controller_test.go,migration_test.go,repository_test.go}`、`internal/app/app_test.go`、新迁移 `migrations/20261023080025_seed_setting_values.sql` 与 `migrations/atlas.sum`、`README.md`；另加本条目。零依赖、零新接口、零前端。

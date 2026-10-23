@@ -1263,6 +1263,97 @@ func TestRegistrationControlEndToEnd(t *testing.T) {
 	}
 }
 
+func TestMailSettingsEndToEnd(t *testing.T) {
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
+	owner, ownerPassword := createGroupUser(t, db, rbac.GroupIDOwner)
+
+	endpoint := ts.URL + "/api/v1/admin/settings/mail"
+	resetMail := func() error {
+		module, err := settings.New(db)
+		if err != nil {
+			return err
+		}
+		for _, name := range []string{
+			"enabled",
+			"smtp_host",
+			"smtp_port",
+			"smtp_encryption",
+			"smtp_username",
+			"smtp_password",
+			"sender_address",
+			"sender_name",
+			"signup_code_subject",
+			"signup_code_body",
+			"password_reset_subject",
+			"password_reset_body",
+		} {
+			if err := module.Service.ResetItem(context.Background(), "mail", name); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := resetMail(); err != nil {
+		t.Fatalf("reset mail settings: %v", err)
+	}
+	t.Cleanup(func() { _ = resetMail() })
+
+	ownerClient := newClient(t)
+	loginResp := login(t, ownerClient, ts.URL, owner.Email, ownerPassword)
+	if loginResp.StatusCode != http.StatusOK {
+		loginResp.Body.Close()
+		t.Fatalf("owner login status = %d, want 200", loginResp.StatusCode)
+	}
+	loginResp.Body.Close()
+
+	status, values := exchangeJSON(t, ownerClient, http.MethodGet, endpoint, nil)
+	if status != http.StatusOK || values["group"] != "mail" {
+		t.Fatalf("default get = %d %v, want 200 mail group", status, values)
+	}
+	defaults := envelopeValues(values)
+	if defaults["enabled"] != true || defaults["smtp_port"] != float64(587) || defaults["smtp_encryption"] != "starttls" || defaults["sender_name"] != "NeoBlog" {
+		t.Fatalf("default values = %v, want enabled true, port 587, starttls, NeoBlog", defaults)
+	}
+
+	status, values = exchangeJSON(t, ownerClient, http.MethodPatch, endpoint, map[string]any{
+		"enabled":         true,
+		"smtp_host":       "smtp.example.com",
+		"smtp_port":       465,
+		"smtp_encryption": "ssl",
+		"smtp_username":   "sender@example.com",
+		"smtp_password":   "secret",
+		"sender_address":  "sender@example.com",
+		"sender_name":     "Example",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("valid patch = %d %v, want 200", status, values)
+	}
+	patched := envelopeValues(values)
+	if patched["smtp_host"] != "smtp.example.com" || patched["smtp_port"] != float64(465) || patched["smtp_encryption"] != "ssl" || patched["smtp_password"] != "secret" {
+		t.Fatalf("patched values = %v, want stored SMTP settings", patched)
+	}
+
+	status, values = exchangeJSON(t, ownerClient, http.MethodPatch, endpoint, map[string]any{"sender_address": ""})
+	if status != http.StatusConflict || envelopeCode(values) != "setting_conflict" || envelopeParam(values) != "sender_address" {
+		t.Fatalf("missing sender = %d %v, want 409 setting_conflict sender_address", status, values)
+	}
+
+	status, values = exchangeJSON(t, ownerClient, http.MethodPatch, endpoint, map[string]any{"smtp_password": ""})
+	if status != http.StatusConflict || envelopeCode(values) != "setting_conflict" || envelopeParam(values) != "smtp_password" {
+		t.Fatalf("missing password = %d %v, want 409 setting_conflict smtp_password", status, values)
+	}
+
+	status, values = exchangeJSON(t, ownerClient, http.MethodPatch, endpoint, map[string]any{"smtp_port": 70000})
+	if status != http.StatusConflict || envelopeCode(values) != "setting_conflict" || envelopeParam(values) != "smtp_port" {
+		t.Fatalf("bad port = %d %v, want 409 setting_conflict smtp_port", status, values)
+	}
+
+	status, values = exchangeJSON(t, ownerClient, http.MethodGet, endpoint, nil)
+	if status != http.StatusOK || envelopeValues(values)["smtp_host"] != "smtp.example.com" {
+		t.Fatalf("readback = %d %v, want stored smtp_host", status, values)
+	}
+}
+
 func createGroupUser(t *testing.T, db *database.Database, groupID uuid.UUID) (auth.User, string) {
 	t.Helper()
 

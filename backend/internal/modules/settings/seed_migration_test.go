@@ -11,34 +11,36 @@ import (
 var seedRowPattern = regexp.MustCompile(`^\(gen_random_uuid\(\), '([a-z0-9_]+)', '([a-z0-9_]+)', '(.*)'::jsonb, now\(\)\)[,;]?$`)
 
 func TestSeedMigrationMatchesBuiltinRegistry(t *testing.T) {
-	paths, err := filepath.Glob("../../../migrations/*_seed_setting_values.sql")
+	paths, err := filepath.Glob("../../../migrations/*_seed_*.sql")
 	if err != nil {
-		t.Fatalf("glob seed migration: %v", err)
+		t.Fatalf("glob seed migrations: %v", err)
 	}
-	if len(paths) != 1 {
-		t.Fatalf("seed migrations = %v, want exactly one", paths)
-	}
-	content, err := os.ReadFile(paths[0])
-	if err != nil {
-		t.Fatalf("read seed migration: %v", err)
+	if len(paths) == 0 {
+		t.Fatal("no seed migrations found")
 	}
 
 	seeded := make(map[string]map[string][]byte)
 	total := 0
-	for _, line := range strings.Split(string(content), "\n") {
-		match := seedRowPattern.FindStringSubmatch(strings.TrimSpace(line))
-		if match == nil {
-			continue
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read seed migration %s: %v", path, err)
 		}
-		group, name, value := match[1], match[2], match[3]
-		total++
-		if seeded[group] == nil {
-			seeded[group] = make(map[string][]byte)
+		for _, line := range strings.Split(string(content), "\n") {
+			match := seedRowPattern.FindStringSubmatch(strings.TrimSpace(line))
+			if match == nil {
+				continue
+			}
+			group, name, value := match[1], match[2], match[3]
+			total++
+			if seeded[group] == nil {
+				seeded[group] = make(map[string][]byte)
+			}
+			if _, exists := seeded[group][name]; exists {
+				t.Fatalf("duplicate seed row for %s.%s in %s", group, name, path)
+			}
+			seeded[group][name] = []byte(value)
 		}
-		if _, exists := seeded[group][name]; exists {
-			t.Fatalf("duplicate seed row for %s.%s", group, name)
-		}
-		seeded[group][name] = []byte(value)
 	}
 
 	want := 0

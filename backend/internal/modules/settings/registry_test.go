@@ -124,6 +124,24 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "turnstile_site_key", typ: FieldTypeString, def: "", public: true},
 		{name: "turnstile_secret_key", typ: FieldTypeString, def: ""},
 	})
+
+	if len(reg.groups["mail"]) != 12 {
+		t.Fatalf("mail items = %d, want 12", len(reg.groups["mail"]))
+	}
+	assertDefinitions(t, reg.groups["mail"], []wantItem{
+		{name: "enabled", typ: FieldTypeBool, def: true},
+		{name: "smtp_host", typ: FieldTypeString, def: ""},
+		{name: "smtp_port", typ: FieldTypeNumber, def: int64(587)},
+		{name: "smtp_encryption", typ: FieldTypeString, def: "starttls"},
+		{name: "smtp_username", typ: FieldTypeString, def: ""},
+		{name: "smtp_password", typ: FieldTypeString, def: ""},
+		{name: "sender_address", typ: FieldTypeString, def: ""},
+		{name: "sender_name", typ: FieldTypeString, def: "NeoBlog"},
+		{name: "signup_code_subject", typ: FieldTypeString, def: ""},
+		{name: "signup_code_body", typ: FieldTypeString, def: ""},
+		{name: "password_reset_subject", typ: FieldTypeString, def: ""},
+		{name: "password_reset_body", typ: FieldTypeString, def: ""},
+	})
 }
 
 func TestBuiltinPublicAllowlist(t *testing.T) {
@@ -280,6 +298,53 @@ func TestValidateAuthGroup(t *testing.T) {
 			"password_min_length":     tc.length,
 			"session_max_age_enabled": tc.enabled,
 			"session_max_age_days":    tc.days,
+		}, touched)
+		if (err != nil) != tc.wantErr {
+			t.Fatalf("%s: err = %v, wantErr = %v", tc.name, err, tc.wantErr)
+		}
+	}
+}
+
+func TestValidateMailGroup(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		enabled    bool
+		host       string
+		port       int64
+		encryption string
+		username   string
+		password   string
+		sender     string
+		touched    []string
+		wantErr    bool
+	}{
+		{"disabled skips connection checks", false, "smtp.example.com", 587, "starttls", "", "", "", []string{"smtp_host"}, false},
+		{"enabled without host is allowed", true, "", 587, "starttls", "", "", "", []string{"enabled"}, false},
+		{"enabled with complete config", true, "smtp.example.com", 587, "starttls", "u", "p", "noreply@example.com", []string{"enabled"}, false},
+		{"enabled without sender", true, "smtp.example.com", 587, "starttls", "", "", "", []string{"enabled"}, true},
+		{"sender with display name", true, "smtp.example.com", 587, "starttls", "", "", "NeoBlog <noreply@example.com>", []string{"enabled"}, true},
+		{"sender without domain", true, "smtp.example.com", 587, "starttls", "", "", "noreply", []string{"enabled"}, true},
+		{"username without password", true, "smtp.example.com", 587, "starttls", "u", "", "noreply@example.com", []string{"enabled"}, true},
+		{"port below floor", false, "", 0, "starttls", "", "", "", []string{"smtp_port"}, true},
+		{"port above cap", false, "", 65536, "starttls", "", "", "", []string{"smtp_port"}, true},
+		{"port at cap", false, "", 65535, "starttls", "", "", "", []string{"smtp_port"}, false},
+		{"unknown encryption", false, "", 587, "none", "", "", "", []string{"smtp_encryption"}, true},
+		{"ssl encryption", false, "", 587, "ssl", "", "", "", []string{"smtp_encryption"}, false},
+		{"untouched invalid port", false, "", 0, "starttls", "", "", "", []string{"totp_enabled"}, false},
+	} {
+		touched := make(map[string]bool, len(tc.touched))
+		for _, name := range tc.touched {
+			touched[name] = true
+		}
+
+		err := validateMailGroup(map[string]any{
+			"enabled":         tc.enabled,
+			"smtp_host":       tc.host,
+			"smtp_port":       tc.port,
+			"smtp_encryption": tc.encryption,
+			"smtp_username":   tc.username,
+			"smtp_password":   tc.password,
+			"sender_address":  tc.sender,
 		}, touched)
 		if (err != nil) != tc.wantErr {
 			t.Fatalf("%s: err = %v, wantErr = %v", tc.name, err, tc.wantErr)

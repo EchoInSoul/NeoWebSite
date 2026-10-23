@@ -12,6 +12,10 @@ import {
   type LoginSettingsValues,
 } from "@/lib/login-settings";
 import {
+  parseMailSettingsValues,
+  type MailSettingsValues,
+} from "@/lib/mail-settings";
+import {
   parseRegisterSettingsValues,
   type RegisterSettingsValues,
 } from "@/lib/register-settings";
@@ -129,5 +133,14 @@ export async function getCaptchaSettings(): Promise<CaptchaSettingsRead> {
   return toAdminSettingsRead(
     await fetchAdminPayload("/api/v1/admin/settings/auth"),
     parseCaptchaSettingsValues,
+  );
+}
+
+export type MailSettingsRead = AdminSettingsRead<MailSettingsValues>;
+
+export async function getMailSettings(): Promise<MailSettingsRead> {
+  return toAdminSettingsRead(
+    await fetchAdminPayload("/api/v1/admin/settings/mail"),
+    parseMailSettingsValues,
   );
 }

@@ -73,7 +73,10 @@ func newMailer(tr transport, logger *slog.Logger) *mailer {
 	}
 }
 
-func newTransport(cfg config.Config, logger *slog.Logger) transport {
+func newTransport(cfg config.Config, settings Settings, logger *slog.Logger) transport {
+	if settings != nil {
+		return newSettingsTransport(cfg, settings, logger)
+	}
 	if cfg.SMTPHost == "" {
 		return newLogSender(cfg, logger)
 	}

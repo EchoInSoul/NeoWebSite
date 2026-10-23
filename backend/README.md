@@ -26,8 +26,8 @@
 | `internal/modules/health/dto.go` | `dto/*.dto.ts` | 请求/响应数据结构 |
 | `internal/modules/auth/*` | `auth.module.ts` 等 | 注册 / 登录（含 2FA 分叉）/ 登出 / 当前用户（`GET /users/me` 读、`PATCH /users/me` 改）/ 改密 / 两步验证；`Register`（公开）与 `RegisterProtected`（受保护）；`totp.go` + `secretbox.go` 承载 TOTP 窗匹配与 secret 加密 |
 | `internal/modules/access/*` | `access.module.ts` 等 | 用户组与权限：组 CRUD、用户管理接口、生效权限解析；全部挂在权限守卫下 |
-| `internal/modules/mail/*` | `@nestjs-modules/mailer`（对照位） | 邮件能力 + 管理端发信接口：`Mailer` 接口（Send / SendSync / Close）+ SMTP / 日志双实现 + `templates/` 模板；异步 `Send` 走后台队列重试，同步 `SendSync` 单次尝试（管理端即时反馈用）；`POST /admin/mail/messages` 挂守卫链 + 预设组守卫；`SMTP_HOST` 为空时降级为日志 |
-| `internal/modules/settings/*` | `@nestjs/config` + `config.controller.ts`（对照位） | 有路由模块：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；对外入口 `New(db) (*Module, error)`，能力挂 `m.Service`；管理侧 `GET / PATCH /admin/settings/:group`（按组挂权限点：`site` → `system.settings.view` / `.edit`，`register` / `auth` → `system.register.view` / `.edit`），公开侧 `GET /public/settings`（无鉴权，只出清单里标了 `Public` 的项）；响应统一为 `{group, values}` 记录、集合套 `items`；当前清单项 `site` 组六项（全公开）、`register` 组五项（`enabled` 公开；`email_domain_control_enabled` / `allowed_email_domains` 已有消费方）与 `auth` 组十一项（`password_requirements_enabled` / `password_min_length` / `totp_enabled` / `captcha_enabled` / `captcha_provider` / `turnstile_site_key` 已有消费方，其中 `totp_enabled` 与人机验证三项公开，其余非公开），加设置见「设置」章节配方 |
+| `internal/modules/mail/*` | `@nestjs-modules/mailer`（对照位） | 邮件能力 + 管理端发信接口：`Mailer` 接口（Send / SendSync / Close）+ SMTP / 日志双实现 + `templates/` 模板；异步 `Send` 走后台队列重试，同步 `SendSync` 单次尝试（管理端即时反馈用）；`POST /admin/mail/messages` 挂守卫链 + 预设组守卫；SMTP 配置优先读 `mail` 设置组，设置未填服务器地址时回退 `SMTP_*` 环境变量，二者都不可用时降级为日志 |
+| `internal/modules/settings/*` | `@nestjs/config` + `config.controller.ts`（对照位） | 有路由模块：设置清单定义在代码内（构造即自检）+ `setting_values` 复合键 upsert 存储；对外入口 `New(db) (*Module, error)`，能力挂 `m.Service`；管理侧 `GET / PATCH /admin/settings/:group`（按组挂权限点：`site` / `mail` → `system.settings.view` / `.edit`，`register` / `auth` → `system.register.view` / `.edit`），公开侧 `GET /public/settings`（无鉴权，只出清单里标了 `Public` 的项）；响应统一为 `{group, values}` 记录、集合套 `items`；当前清单项 `site` 组六项（全公开）、`register` 组五项（`enabled` 公开；`email_domain_control_enabled` / `allowed_email_domains` 已有消费方）、`auth` 组十一项（`password_requirements_enabled` / `password_min_length` / `totp_enabled` / `captcha_enabled` / `captcha_provider` / `turnstile_site_key` 已有消费方，其中 `totp_enabled` 与人机验证三项公开，其余非公开）与 `mail` 组十二项（SMTP 发送配置，全部非公开，`mail` 模块消费），加设置见「设置」章节配方 |
 | `internal/common/guard` | `src/common`（Guards） | `RequireAuth`（会话）+ `LoadIdentity`（身份与生效权限）+ `RequirePermission`（权限点）+ `RequirePresetGroup`（预设组白名单，owner / admin 这类不入权限目录的服务器级操作用）；常量 `auth.user_id` / `auth.identity` |
 | `internal/common/rbac` | `src/common`（权限目录） | 权限点目录与预设组常量（固定 UUID）；纯 Go，不依赖 gin / DB |
 | `internal/common` 其余 | `src/common` | `apierror` 统一错误注册与写出、`apiresponse` 共享响应信封；pipes 校验 / interceptors / filters 仍待加（guards 已落地于 `internal/common/guard`） |
@@ -66,7 +66,7 @@ postsModule.Register(api)
 | `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
 | `DB_CONN_MAX_LIFETIME` | `30m` | 连接最长存活时间 |
 | `SESSION_LIFETIME` | `168h` | 会话默认有效期（`auth.session_max_age_enabled` 关闭时生效；开启时由 `session_max_age_days` 决定）。浏览器 cookie 的 `Max-Age` 跟随当前会话 deadline |
-| `SMTP_HOST` | 空 | SMTP 服务器；**为空时邮件只写日志、不影响启动** |
+| `SMTP_HOST` | 空 | SMTP 服务器；**`mail.smtp_host` 为空时才作为回退**；两者都为空时邮件只写日志、不影响启动 |
 | `SMTP_PORT` | `587` | SMTP 端口（正整数 ≤ 65535；**25 不受支持**——会被 go-mail 视为未设置并改写成 587/465） |
 | `SMTP_TLS` | `starttls` | `starttls`（配 587）或 `ssl`（配 465） |
 | `SMTP_USERNAME` | 空 | 认证用户名；为空则不做 AUTH（自建中继场景） |
@@ -76,6 +76,8 @@ postsModule.Register(api)
 | `MAIL_TEST_RECIPIENT` | 空 | 仅测试用：与 `SMTP_*` 齐备时真实投递用例会向它发一封自检邮件 |
 | `TOTP_ENCRYPTION_KEY` | 无（必需） | 两步验证密钥的 AES-256-GCM 加密钥匙；base64 且解码后恰 32 字节；缺失或非法都**启动即失败**；丢失后已启用 2FA 的用户验码报 500，只能清列重置 |
 | `POSTGRES_PASSWORD` | `neoblog` | 本地容器密码（compose 读 `.env`）；改动需同步 `DATABASE_URL` |
+
+`SMTP_*` 只在 `mail.smtp_host` 为空时整组生效；设置组填了主机就整组使用设置组，不逐项合并。`mail.enabled=false` 时无论环境变量如何都只写日志。
 
 ## 环境与构建
 
@@ -257,7 +259,7 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 
 ## 邮件
 
-后端发信能力 + 管理端发信接口。`internal/modules/mail` 对外暴露 `*Module`（`New(cfg) *Module`，`m.Mailer` 是 `Mailer` 接口）与 `Render`，以及 `Message` / `Body` 数据结构和哨兵 `ErrClosed`：
+后端发信能力 + 管理端发信接口。`internal/modules/mail` 对外暴露 `*Module`（`New(cfg, settings) *Module`，`m.Mailer` 是 `Mailer` 接口）与 `Render`，以及 `Message` / `Body` 数据结构和哨兵 `ErrClosed`：
 
 ```go
 body, err := mail.Render("example", map[string]string{"Time": "...", "Site": "NeoBlog"})
@@ -272,9 +274,19 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 
 规则：
 
-- 守卫链 `RequireAuth` → `LoadIdentity` → `RequirePresetGroup(owner, admin)`。**不走权限目录**：SMTP 配置是服务器级设置（环境变量），不属于可授出的业务权限域；owner / admin 天然持有全部权限，自建组不可授。
+- 守卫链 `RequireAuth` → `LoadIdentity` → `RequirePresetGroup(owner, admin)`。**不走权限目录**：SMTP 配置是服务器级设置（`mail` 设置组 / 环境变量），不属于可授出的业务权限域；owner / admin 天然持有全部权限，自建组不可授。
 - 投递走 `SendSync`：**单次尝试、不重试**；死线为拨号 20s（go-mail 对每条 SMTP 命令续期死线，**慢速对端总耗时可超 20s**，不是硬性总上限），失败时操作者可自行重试；失败细节看服务端结构化日志。收件地址经 `net/mail.ParseAddress` 解析（支持 `Name <addr>` 形式，取纯地址），主题与正文由服务器控制（`example` 模板），请求方不能指定内容。
-- 开发环境（`SMTP_HOST` 为空）降级为日志实现，接口永远 201（邮件全文在日志里，不真发）。
+- 未配置 SMTP（设置组与 `SMTP_HOST` 都为空，或 `mail.enabled` 为 `false`）时降级为日志实现，接口永远 201（邮件全文在日志里，不真发）。
+
+### 运行时配置
+
+每次投递前读取 `mail` 设置组，优先级如下：
+
+1. `mail.enabled=false` → 日志实现（不发送；日志里的发件人取设置组里的 `sender_address` / `sender_name`）。
+2. `enabled=true` 且 `smtp_host` 非空 → 使用设置组里的 `smtp_host` / `smtp_port` / `smtp_encryption` / `smtp_username` / `smtp_password` / `sender_address` / `sender_name`；此时要求 `sender_address` 是纯邮箱地址、用户名非空时密码必填，`smtp_encryption` 只接受 `ssl` / `starttls`（不提供明文模式）。
+3. `enabled=true` 但 `smtp_host` 为空 → 回退环境变量 `SMTP_*`（旧部署继续可用）；环境变量也没填就降级为日志。
+
+设置组读取失败（例如迁移未跑导致缺行）时投递直接返回错误并记日志，管理端自检接口返回 500 `mail_delivery_failed`，不会静默改用环境变量。`mail.smtp_password` 与 Turnstile 私钥一样**明文入库、管理接口原样返回**；能读 `mail` 组的账号即可读到它。`signup_code_*` / `password_reset_*` 四项只存不用（当前没有注册验证码 / 密码重置发送流程），沿用 `example` 模板的自检邮件不受它们影响。
 
 ### 发信能力
 
@@ -282,13 +294,13 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 - `SendSync` 是同步单次投递，当前仅管理端自检接口使用。
 - `Close(ctx)` 停收新消息并把队列投完（`app.Run` 关闭路径中先 `server.Shutdown` 再 `mailer.Close`，共用 10s 预算）；`Close` 之后 `Send` / `SendSync` 返回 `mail.ErrClosed`。
 - 模板：`internal/modules/mail/templates/<name>.html` 与 `<name>.txt` 成对（HTML 侧用 `html/template` 自动转义）；内置一封 `example`（邮件配置自检）。
-- `SMTP_HOST` 为空时降级为日志实现：邮件全文写进日志但不发送，开发环境无需凭据即可跑通全流程。
+- 设置组与 `SMTP_HOST` 都未配置（或 `mail.enabled=false`）时降级为日志实现：邮件全文写进日志但不发送，开发环境无需凭据即可跑通全流程。
 - 真实投递测试（可选）：`backend/.env` 填好 `SMTP_*` 与 `MAIL_TEST_RECIPIENT` 后跑 `go test ./internal/modules/mail/ -run TestRealDelivery -v`（测试会从包目录向上查找 `.env`，深度上限 5，不写死相对路径）。
 - 上线前按所选服务商配好 SPF / DKIM / DMARC（域验类服务商侧签 DKIM）；发件域名必须与认证域名对齐，**不要用自有域名 From 搭配 QQ 个人邮箱认证**。细节见 `docs/superpowers/specs/2026-10-11-neoblog-mail-design.md` §11。
 
 ## 设置
 
-模块 `internal/modules/settings/`：一张 `setting_values` 表存每个设置的当前值，"有哪些设置"定义在代码内清单（`registry.go` 的 `builtinRegistry`）。构造入口 `settings.New(db) (*Module, error)`——清单自检不过启动即失败，能力挂 `m.Service`；错误哨兵 `ErrUnknownGroup` / `ErrUnknownItem` / `ErrTypeMismatch` / `ErrMethodMismatch`。三种类型（文字 / 数字 int64 / 开关）读写各按类型分方法，用错方法即报错；`GetGroup` 整组读取；`PatchGroup` 整组部分更新（值类型以清单为准，任一项不合法即整组零落库）；`ResetItem` 把代码默认值写回该项。**读取不做任何兜底**：组内任一项没有行、或存的值解析不出声明类型，都直接返回错误（`settings: <group>.<name>: not configured` 或解码错误），不会退回代码默认值。初始行由迁移 `seed_setting_values` 种入，新库必须先跑迁移。
+模块 `internal/modules/settings/`：一张 `setting_values` 表存每个设置的当前值，"有哪些设置"定义在代码内清单（`registry.go` 的 `builtinRegistry`）。构造入口 `settings.New(db) (*Module, error)`——清单自检不过启动即失败，能力挂 `m.Service`；错误哨兵 `ErrUnknownGroup` / `ErrUnknownItem` / `ErrTypeMismatch` / `ErrMethodMismatch`。三种类型（文字 / 数字 int64 / 开关）读写各按类型分方法，用错方法即报错；`GetGroup` 整组读取；`PatchGroup` 整组部分更新（值类型以清单为准，任一项不合法即整组零落库）；`ResetItem` 把代码默认值写回该项。**读取不做任何兜底**：组内任一项没有行、或存的值解析不出声明类型，都直接返回错误（`settings: <group>.<name>: not configured` 或解码错误），不会退回代码默认值。初始行由 seed 迁移种入（按组拆成多条，`*_seed_*.sql`），新库必须先跑迁移。
 
 **响应信封（两侧统一）**：一个组的记录固定是 `{ "group": "<组名>", "values": { …整组当前值… } }`；集合外面套 `{ "items": [ 组记录… ] }`，与 `access` 模块的 `items` 列表同形。`values` 的每一项都来自数据库行，键是项名。
 
@@ -296,7 +308,7 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 
 | 端点 | 鉴权 | 返回 |
 | --- | --- | --- |
-| `GET /api/v1/admin/settings/:group` | `site` 组：`system.settings.view`；`register` / `auth` 组：`system.register.view` | 一条组记录（**全部项**，含未标公开的） |
+| `GET /api/v1/admin/settings/:group` | `site` / `mail` 组：`system.settings.view`；`register` / `auth` 组：`system.register.view` | 一条组记录（**全部项**，含未标公开的） |
 | `PATCH /api/v1/admin/settings/:group` | 同上两把钥匙的 `edit` 档（`system.settings.edit` / `system.register.edit`，隐含 `view`） | 更新后的组记录 |
 | `GET /api/v1/public/settings` | **无鉴权** | `{items: […]}`，只含**至少有一项标了 `Public` 的组**，且每组只出公开项 |
 
@@ -310,6 +322,8 @@ PATCH /api/v1/admin/settings/register        →  {"group":"register","values":{
 ```
 
 （两行响应都是节选：`GET` 的完整负载里 `site` 组六项、`register` 组的 `enabled` 和 `auth` 组的 `totp_enabled` 都在；`PATCH` 回的是整组合并结果，`register` 另四项非公开策略一并回显。）
+
+④ `mail` 组十二项——`enabled`（开关，默认 `true`）、`smtp_host`（文字，默认空串）、`smtp_port`（数字，默认 `587`，取值 1–65535）、`smtp_encryption`（文字，默认 `starttls`，只接受 `ssl` / `starttls`）、`smtp_username` / `smtp_password` / `sender_address`（默认空串）、`sender_name`（默认 `NeoBlog`）与 `signup_code_subject` / `signup_code_body` / `password_reset_subject` / `password_reset_body`（默认空串）。`mail` 模块每次投递前读这组值，规则见「邮件」章节；`smtp_password` 明文入库、管理接口原样返回；模板四项只存不用。组级校验只在 `enabled` / SMTP 连接项 / `sender_address` 被改动时触发：端口与加密方式在被改动、或已启用且填了主机时校验；`enabled=true` 且 `smtp_host` 非空时，`sender_address` 必须是纯邮箱地址，`smtp_username` 非空则 `smtp_password` 必填。所有项均非公开。
 
 **怎么加一个设置**：两处一起改。① 在 `internal/modules/settings/registry.go` 的 `builtinRegistry` 里添加定义（组不存在就新增一个 `Group` 字面量）：
 

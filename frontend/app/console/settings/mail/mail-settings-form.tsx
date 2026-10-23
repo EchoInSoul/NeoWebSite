@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type FormEvent } from "react";
 import {
   AtSign,
   Hash,
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
 import { Input } from "@/components/ui/input";
@@ -27,11 +28,14 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useMailSettingsSave } from "@/hooks/use-mail-settings-save";
 import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
-
-const ENCRYPTION_SSL = "ssl";
-const ENCRYPTION_STARTTLS = "starttls";
-const ENCRYPTION_NONE = "none";
+import {
+  MAIL_ENCRYPTION_SSL,
+  MAIL_ENCRYPTION_STARTTLS,
+  MAIL_ENCRYPTIONS,
+  type MailSettingsValues,
+} from "@/lib/mail-settings";
 
 const MAIL_TEMPLATE_PLACEHOLDERS = [
   "code",
@@ -42,75 +46,64 @@ const MAIL_TEMPLATE_PLACEHOLDERS = [
   "sentAt",
 ] as const;
 
-type MailTemplateKey = "signupCode" | "passwordReset";
-
-type MailTemplateValue = {
-  subject: string;
-  body: string;
-};
-
 const controlClassName = "w-70";
 
-export function MailSettingsForm() {
+export function MailSettingsForm({
+  settings,
+}: {
+  settings: MailSettingsValues;
+}) {
   const t = useTranslations("settings");
-  const [enabled, setEnabled] = useState(false);
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("465");
-  const [encryption, setEncryption] = useState<string>(ENCRYPTION_SSL);
-  const [smtpUser, setSmtpUser] = useState("");
-  const [smtpPassword, setSmtpPassword] = useState("");
-  const [senderAddress, setSenderAddress] = useState("");
-  const [senderName, setSenderName] = useState("");
-  const [templateValues, setTemplateValues] = useState<
-    Record<MailTemplateKey, MailTemplateValue>
-  >({
-    signupCode: { subject: "", body: "" },
-    passwordReset: { subject: "", body: "" },
-  });
-  const smtpExpansion = useSwitchRowExpansion(enabled);
+  const { values, isDirty, isSaving, update, save } =
+    useMailSettingsSave(settings);
+  const smtpExpansion = useSwitchRowExpansion(values.enabled);
 
-  function updateTemplateValue(
-    templateKey: MailTemplateKey,
-    field: keyof MailTemplateValue,
-    value: string,
-  ) {
-    setTemplateValues((previous) => ({
-      ...previous,
-      [templateKey]: { ...previous[templateKey], [field]: value },
-    }));
-  }
+  const unknownEncryption = MAIL_ENCRYPTIONS.includes(values.smtpEncryption)
+    ? null
+    : values.smtpEncryption;
+  const encryptionItems = {
+    [MAIL_ENCRYPTION_SSL]: t("smtpEncryptionSsl"),
+    [MAIL_ENCRYPTION_STARTTLS]: t("smtpEncryptionStarttls"),
+    ...(unknownEncryption === null
+      ? {}
+      : { [unknownEncryption]: unknownEncryption }),
+  };
 
   const templateRows = [
     {
       key: "signupCode",
       icon: <MailCheck />,
       label: t("mailTemplateSignupCode"),
+      subjectField: "signupCodeSubject",
+      bodyField: "signupCodeBody",
     },
     {
       key: "passwordReset",
       icon: <MailWarning />,
       label: t("mailTemplatePasswordReset"),
+      subjectField: "passwordResetSubject",
+      bodyField: "passwordResetBody",
     },
   ] as const;
 
-  const encryptionItems = {
-    [ENCRYPTION_SSL]: t("smtpEncryptionSsl"),
-    [ENCRYPTION_STARTTLS]: t("smtpEncryptionStarttls"),
-    [ENCRYPTION_NONE]: t("smtpEncryptionNone"),
-  };
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void save();
+  }
 
   return (
-    <div className="flex flex-col gap-4">
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
       <ConsoleSettingsGroup title={t("smtpServerGroup")}>
         <ConsoleSettingsRow
           control={
             <Switch
               aria-label={t("smtpEnabled")}
-              checked={enabled}
+              checked={values.enabled}
               onCheckedChange={(checked) => {
-                setEnabled(checked);
+                update("enabled", checked);
                 smtpExpansion.expandOnEnable(checked);
               }}
+              disabled={isSaving}
             />
           }
           expandLabel={t("smtpExpandSettings")}
@@ -123,9 +116,10 @@ export function MailSettingsForm() {
                     aria-label={t("smtpHost")}
                     autoComplete="off"
                     className={controlClassName}
-                    onChange={(event) => setSmtpHost(event.target.value)}
+                    onChange={(event) => update("smtpHost", event.target.value)}
                     spellCheck={false}
-                    value={smtpHost}
+                    value={values.smtpHost}
+                    disabled={isSaving}
                   />
                 }
                 icon={<Server />}
@@ -139,10 +133,11 @@ export function MailSettingsForm() {
                     className={controlClassName}
                     inputMode="numeric"
                     onChange={(event) =>
-                      setSmtpPort(event.target.value.replace(/\D/g, ""))
+                      update("smtpPort", event.target.value.replace(/\D/g, ""))
                     }
                     spellCheck={false}
-                    value={smtpPort}
+                    value={values.smtpPort}
+                    disabled={isSaving}
                   />
                 }
                 icon={<Hash />}
@@ -154,10 +149,11 @@ export function MailSettingsForm() {
                     items={encryptionItems}
                     onValueChange={(value) => {
                       if (value !== null) {
-                        setEncryption(value);
+                        update("smtpEncryption", value);
                       }
                     }}
-                    value={encryption}
+                    value={values.smtpEncryption}
+                    disabled={isSaving}
                   >
                     <SelectTrigger
                       aria-label={t("smtpEncryption")}
@@ -166,15 +162,17 @@ export function MailSettingsForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={ENCRYPTION_SSL}>
+                      <SelectItem value={MAIL_ENCRYPTION_SSL}>
                         {t("smtpEncryptionSsl")}
                       </SelectItem>
-                      <SelectItem value={ENCRYPTION_STARTTLS}>
+                      <SelectItem value={MAIL_ENCRYPTION_STARTTLS}>
                         {t("smtpEncryptionStarttls")}
                       </SelectItem>
-                      <SelectItem value={ENCRYPTION_NONE}>
-                        {t("smtpEncryptionNone")}
-                      </SelectItem>
+                      {unknownEncryption === null ? null : (
+                        <SelectItem value={unknownEncryption}>
+                          {unknownEncryption}
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 }
@@ -195,9 +193,10 @@ export function MailSettingsForm() {
               aria-label={t("smtpUser")}
               autoComplete="off"
               className={controlClassName}
-              onChange={(event) => setSmtpUser(event.target.value)}
+              onChange={(event) => update("smtpUsername", event.target.value)}
               spellCheck={false}
-              value={smtpUser}
+              value={values.smtpUsername}
+              disabled={isSaving}
             />
           }
           icon={<AtSign />}
@@ -209,10 +208,11 @@ export function MailSettingsForm() {
               aria-label={t("smtpPassword")}
               autoComplete="new-password"
               className={controlClassName}
-              onChange={(event) => setSmtpPassword(event.target.value)}
+              onChange={(event) => update("smtpPassword", event.target.value)}
               spellCheck={false}
               type="password"
-              value={smtpPassword}
+              value={values.smtpPassword}
+              disabled={isSaving}
             />
           }
           icon={<KeyRound />}
@@ -224,9 +224,10 @@ export function MailSettingsForm() {
               aria-label={t("senderAddress")}
               autoComplete="off"
               className={controlClassName}
-              onChange={(event) => setSenderAddress(event.target.value)}
+              onChange={(event) => update("senderAddress", event.target.value)}
               spellCheck={false}
-              value={senderAddress}
+              value={values.senderAddress}
+              disabled={isSaving}
             />
           }
           icon={<Send />}
@@ -238,9 +239,10 @@ export function MailSettingsForm() {
               aria-label={t("senderName")}
               autoComplete="off"
               className={controlClassName}
-              onChange={(event) => setSenderName(event.target.value)}
+              onChange={(event) => update("senderName", event.target.value)}
               spellCheck={false}
-              value={senderName}
+              value={values.senderName}
+              disabled={isSaving}
             />
           }
           icon={<Tag />}
@@ -266,14 +268,11 @@ export function MailSettingsForm() {
                     autoComplete="off"
                     className="w-full"
                     onChange={(event) =>
-                      updateTemplateValue(
-                        template.key,
-                        "subject",
-                        event.target.value,
-                      )
+                      update(template.subjectField, event.target.value)
                     }
                     spellCheck={false}
-                    value={templateValues[template.key].subject}
+                    value={values[template.subjectField]}
+                    disabled={isSaving}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -288,15 +287,12 @@ export function MailSettingsForm() {
                     aria-describedby={`${template.key}.placeholder-hint`}
                     className="min-h-[320px] resize-y font-mono text-[13px] leading-relaxed"
                     onChange={(event) =>
-                      updateTemplateValue(
-                        template.key,
-                        "body",
-                        event.target.value,
-                      )
+                      update(template.bodyField, event.target.value)
                     }
                     rows={12}
                     spellCheck={false}
-                    value={templateValues[template.key].body}
+                    value={values[template.bodyField]}
+                    disabled={isSaving}
                   />
                 </div>
                 <div
@@ -324,6 +320,11 @@ export function MailSettingsForm() {
           />
         ))}
       </ConsoleSettingsGroup>
-    </div>
+      <ConsoleFloatingSaveButton
+        isDirty={isDirty}
+        isPending={isSaving}
+        label={t("save")}
+      />
+    </form>
   );
 }

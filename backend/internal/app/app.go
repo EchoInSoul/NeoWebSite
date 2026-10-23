@@ -63,7 +63,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	healthModule := health.New(cfg, db)
 	healthModule.Register(api)
 
-	mailModule := mail.New(cfg)
+	mailModule := mail.New(cfg, settingsModule.Service)
 
 	limiter := ratelimit.New()
 	authModule := auth.New(db, sessions, cfg.TOTPEncryptionKey, settingsModule.Service, limiter)

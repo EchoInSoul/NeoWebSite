@@ -342,7 +342,7 @@ func TestNewSelectsLogTransportWhenHostEmpty(t *testing.T) {
 	slog.SetDefault(discardLogger())
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	mailer := New(config.Config{}).Mailer
+	mailer := New(config.Config{}, nil).Mailer
 	if err := mailer.Send(context.Background(), testMessage()); err != nil {
 		t.Fatalf("send: %v", err)
 	}

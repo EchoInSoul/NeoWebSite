@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	netmail "net/mail"
 	"regexp"
 	"strings"
 
@@ -47,6 +48,33 @@ var builtinRegistry = []Group{
 			{Name: "captcha_provider", Type: FieldTypeString, Default: "", Public: true},
 			{Name: "turnstile_site_key", Type: FieldTypeString, Default: "", Public: true},
 			{Name: "turnstile_secret_key", Type: FieldTypeString, Default: ""},
+		},
+	},
+	{
+		Name: "mail",
+		ValidateOn: []string{
+			"enabled",
+			"smtp_host",
+			"smtp_port",
+			"smtp_encryption",
+			"smtp_username",
+			"smtp_password",
+			"sender_address",
+		},
+		Validate: validateMailGroup,
+		Items: []Definition{
+			{Name: "enabled", Type: FieldTypeBool, Default: true},
+			{Name: "smtp_host", Type: FieldTypeString, Default: ""},
+			{Name: "smtp_port", Type: FieldTypeNumber, Default: int64(587)},
+			{Name: "smtp_encryption", Type: FieldTypeString, Default: "starttls"},
+			{Name: "smtp_username", Type: FieldTypeString, Default: ""},
+			{Name: "smtp_password", Type: FieldTypeString, Default: ""},
+			{Name: "sender_address", Type: FieldTypeString, Default: ""},
+			{Name: "sender_name", Type: FieldTypeString, Default: "NeoBlog"},
+			{Name: "signup_code_subject", Type: FieldTypeString, Default: ""},
+			{Name: "signup_code_body", Type: FieldTypeString, Default: ""},
+			{Name: "password_reset_subject", Type: FieldTypeString, Default: ""},
+			{Name: "password_reset_body", Type: FieldTypeString, Default: ""},
 		},
 	},
 }
@@ -121,6 +149,10 @@ const (
 	passwordMinLengthCap   = 64
 	sessionMaxAgeDaysFloor = 1
 	sessionMaxAgeDaysCap   = 30
+	smtpPortFloor          = 1
+	smtpPortCap            = 65535
+	smtpEncryptionSSL      = "ssl"
+	smtpEncryptionStartTLS = "starttls"
 )
 
 func validateAuthGroup(values map[string]any, touched map[string]bool) error {
@@ -145,6 +177,58 @@ func validateAuthGroup(values map[string]any, touched map[string]bool) error {
 		}
 	}
 	return nil
+}
+
+func validateMailGroup(values map[string]any, touched map[string]bool) error {
+	enabled, _ := values["enabled"].(bool)
+	host, _ := values["smtp_host"].(string)
+	connectionConfigured := enabled && strings.TrimSpace(host) != ""
+
+	if touched["smtp_port"] || connectionConfigured {
+		port, ok := values["smtp_port"].(int64)
+		if !ok {
+			return fmt.Errorf("settings: smtp_port is not a number")
+		}
+		if port < smtpPortFloor || port > smtpPortCap {
+			return &ItemError{Item: "smtp_port", Err: apierror.ErrSettingConflict}
+		}
+	}
+
+	if touched["smtp_encryption"] || connectionConfigured {
+		encryption, ok := values["smtp_encryption"].(string)
+		if !ok {
+			return fmt.Errorf("settings: smtp_encryption is not a string")
+		}
+		if encryption != smtpEncryptionSSL && encryption != smtpEncryptionStartTLS {
+			return &ItemError{Item: "smtp_encryption", Err: apierror.ErrSettingConflict}
+		}
+	}
+
+	if !connectionConfigured {
+		return nil
+	}
+
+	sender, _ := values["sender_address"].(string)
+	if !validSenderAddress(sender) {
+		return &ItemError{Item: "sender_address", Err: apierror.ErrSettingConflict}
+	}
+
+	username, _ := values["smtp_username"].(string)
+	password, _ := values["smtp_password"].(string)
+	if strings.TrimSpace(username) != "" && password == "" {
+		return &ItemError{Item: "smtp_password", Err: apierror.ErrSettingConflict}
+	}
+
+	return nil
+}
+
+func validSenderAddress(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed != raw {
+		return false
+	}
+	address, err := netmail.ParseAddress(trimmed)
+	return err == nil && address.Name == "" && address.Address == trimmed
 }
 
 func SplitListValue(raw string) []string {

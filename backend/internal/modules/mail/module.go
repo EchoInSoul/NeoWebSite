@@ -14,9 +14,9 @@ type Module struct {
 	controller *controller
 }
 
-func New(cfg config.Config) *Module {
+func New(cfg config.Config, settings Settings) *Module {
 	logger := slog.Default()
-	m := newMailer(newTransport(cfg, logger), logger)
+	m := newMailer(newTransport(cfg, settings, logger), logger)
 	go m.run()
 	return &Module{
 		Mailer:     m,

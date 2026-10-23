@@ -110,14 +110,14 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 12 | `GET /api/v1/admin/users` | `backend/internal/modules/access/controller.go:51` |
 | 13 | `GET /api/v1/admin/users/:id` | `backend/internal/modules/access/controller.go:52` |
 | 14 | `PATCH /api/v1/admin/users/:id` | `backend/internal/modules/access/controller.go:53` |
-| 15 | `POST /api/v1/admin/mail/messages` | `backend/internal/modules/mail/controller.go:36`（0.9.0 新增，域 `admin` 下资源 `mail/messages`，创建即发送） |
+| 15 | `POST /api/v1/admin/mail/messages` | `backend/internal/modules/mail/controller.go:36`（0.9.0 新增，域 `admin` 下资源 `mail/messages`，创建即发送；用当前 `mail` 设置组的 SMTP 配置，设置未填主机时回退 `SMTP_*` 环境变量） |
 | 16 | `POST /api/v1/sessions/current/verify` | `backend/internal/modules/auth/controller.go:29`（0.10.0 新增，公开路由，靠「待二段」会话；v1.5 改名：原 `POST /auth/2fa/verify`——二步验证 = 对当前（待二段）会话的验证） |
 | 17 | `POST /api/v1/users/me/2fa/setup` | `backend/internal/modules/auth/controller.go:39`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/setup`；0.21.0 起站级 `auth/totp_enabled` 关闭时返回 403 `two_factor_disabled`） |
 | 18 | `POST /api/v1/users/me/2fa/enable` | `backend/internal/modules/auth/controller.go:40`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/enable`；0.21.0 起站级 `auth/totp_enabled` 关闭时返回 403 `two_factor_disabled`） |
 | 19 | `POST /api/v1/users/me/2fa/disable` | `backend/internal/modules/auth/controller.go:41`（0.10.0 新增，守卫内；v1.5 改名：原 `POST /auth/2fa/disable`） |
 | 20 | `POST /api/v1/users/me/2fa/recovery-codes` | `backend/internal/modules/auth/controller.go:42`（0.10.0 新增，守卫内；资源名 `recovery-codes` 保持连字符小写；v1.5 改名：原 `POST /auth/2fa/recovery-codes`） |
-| 21 | `GET /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:33`（0.12.0 新增，守卫链 `RequireAuth → LoadIdentity → RequirePermission(system.settings.view)`；0.13.0 起返回组记录 `{group, values}`，`values` 为整组「默认值 ⊕ 覆盖」合并，含未标公开的项） |
-| 22 | `PATCH /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:34`（0.12.0 新增，`RequirePermission(system.settings.edit)`；只写请求体里出现的项，值类型以服务端清单为准；0.13.0 起返回更新后的组记录） |
+| 21 | `GET /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:33`（0.12.0 新增，守卫链 `RequireAuth → LoadIdentity → RequirePermission`；`site` / `mail` 组用 `system.settings.view`，`register` / `auth` 组用 `system.register.view`；0.13.0 起返回组记录 `{group, values}`，`values` 为整组当前值，含未标公开的项） |
+| 22 | `PATCH /api/v1/admin/settings/:group` | `backend/internal/modules/settings/controller.go:34`（0.12.0 新增，权限点同上但取 `edit` 档；只写请求体里出现的项，值类型以服务端清单为准；0.13.0 起返回更新后的组记录） |
 | 23 | `GET /api/v1/public/settings` | `backend/internal/modules/settings/controller.go:38`（0.13.0 新增，**无鉴权**聚合读：只出清单里标了 `Public` 的项，形如 `{"items":[{"group":"register","values":{"enabled":false}}]}`（节选）；无公开项的组整条不出现；不做按组点查，前台一次取全） |
 | 24 | `PATCH /api/v1/users/me` | `backend/internal/modules/auth/controller.go:35`（0.14.0 新增，改自己的用户名 / 邮箱：`/users/me` 是「当前用户」这条单资源的自指路径，声明在 auth 模块的 `RegisterProtected` 里，只挂 `RequireAuth + LoadIdentity`、**不挂权限点**；字段可选、部分更新；撞名复用注册的 `nickname_taken` / `email_taken`；**不校验当前密码**——用户 2026-10-13 裁定"不用"，留待将来按需加） |
 | 25 | `GET /api/v1/users/me/sessions` | `backend/internal/modules/auth/controller.go:36`（0.15.0 新增，`/users/me` 下的嵌套从属集合；只挂 `RequireAuth + LoadIdentity`、**不挂权限点**；响应 `{"items":[…]}`，`id` 为 `base64url(sha256(token))` 会话指纹、原始 token 永不出服务端；只见活跃会话，待二段 / 已过期 / 已吊销的都不出现） |
