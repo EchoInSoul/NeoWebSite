@@ -1,12 +1,21 @@
 "use client";
 
-import { type FormEvent } from "react";
-import { Fingerprint, Globe, LockKeyhole, ShieldCheck } from "lucide-react";
+import { type FormEvent, useState } from "react";
+import {
+  BadgeCheck,
+  Fingerprint,
+  Globe,
+  LockKeyhole,
+  ShieldCheck,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
+import { CaptchaDialog } from "@/components/auth/captcha-dialog";
 import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -17,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useCaptchaSettingsSave } from "@/hooks/use-captcha-settings-save";
+import { useCaptchaVerify } from "@/hooks/use-captcha-verify";
 import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
 import {
   CAPTCHA_PROVIDER_BUILTIN,
@@ -48,6 +58,8 @@ export function CaptchaSettingsForm({
     save,
   } = useCaptchaSettingsSave(settings);
   const captchaExpansion = useSwitchRowExpansion(values.captchaEnabled);
+  const { isVerifying, verify } = useCaptchaVerify();
+  const [isVerifyOpen, setIsVerifyOpen] = useState(false);
 
   const unknownCaptchaProvider = KNOWN_CAPTCHA_PROVIDERS.includes(
     values.captchaProvider,
@@ -66,6 +78,19 @@ export function CaptchaSettingsForm({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void save();
+  }
+
+  function handleVerifyClick() {
+    if (values.turnstileSiteKey === "" || values.turnstileSecretKey === "") {
+      toast.error(t("captchaVerifyMissingKeys"));
+      return;
+    }
+    setIsVerifyOpen(true);
+  }
+
+  function handleCaptchaSolved(token: string) {
+    setIsVerifyOpen(false);
+    void verify(values.turnstileSecretKey, token);
   }
 
   return (
@@ -139,7 +164,7 @@ export function CaptchaSettingsForm({
                         }
                         spellCheck={false}
                         value={values.turnstileSiteKey}
-                        disabled={isSaving}
+                        disabled={isSaving || isVerifying}
                       />
                     }
                     icon={<Globe />}
@@ -157,11 +182,27 @@ export function CaptchaSettingsForm({
                         spellCheck={false}
                         type="password"
                         value={values.turnstileSecretKey}
-                        disabled={isSaving}
+                        disabled={isSaving || isVerifying}
                       />
                     }
                     icon={<LockKeyhole />}
                     label={t("captchaTurnstileSecretKey")}
+                  />
+                  <ConsoleSettingsRow
+                    control={
+                      <Button
+                        aria-label={t("captchaVerifyConfig")}
+                        disabled={isSaving || isVerifying}
+                        onClick={handleVerifyClick}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        {t("captchaVerify")}
+                      </Button>
+                    }
+                    icon={<BadgeCheck />}
+                    label={t("captchaVerifyConfig")}
                   />
                 </>
               ) : null}
@@ -176,6 +217,12 @@ export function CaptchaSettingsForm({
         isDirty={isDirty}
         isPending={isSaving}
         label={t("save")}
+      />
+      <CaptchaDialog
+        open={isVerifyOpen}
+        siteKey={values.turnstileSiteKey}
+        onOpenChange={setIsVerifyOpen}
+        onSolved={handleCaptchaSolved}
       />
     </form>
   );
