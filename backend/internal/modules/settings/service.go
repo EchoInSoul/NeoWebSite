@@ -69,6 +69,7 @@ func (s *Service) getTyped[T any](ctx context.Context, group, name string, field
 		return zero, err
 	}
 	if !ok {
+		logMissingValue(group, name)
 		return zero, fmt.Errorf("settings: %s.%s: not configured", group, name)
 	}
 	value, err := decodeTyped(fieldType, raw)
@@ -139,6 +140,7 @@ func (s *Service) readGroup(ctx context.Context, group string, keep func(Definit
 		}
 		raw, ok := overrides[name]
 		if !ok {
+			logMissingValue(group, name)
 			return nil, fmt.Errorf("settings: %s.%s: not configured", group, name)
 		}
 		value, err := decodeTyped(def.Type, raw)
@@ -319,6 +321,10 @@ func (s *Service) ResetItem(ctx context.Context, group, name string) error {
 		return err
 	}
 	return s.repo.upsert(ctx, group, name, marshalJSON(def.Default))
+}
+
+func logMissingValue(group, name string) {
+	slog.Error("settings: value is not configured", "group", group, "name", name)
 }
 
 func decodeTyped(fieldType FieldType, raw json.RawMessage) (any, error) {
