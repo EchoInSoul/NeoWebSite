@@ -2,6 +2,7 @@ package apierror
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"io"
 	"math"
@@ -251,4 +252,15 @@ func Abort(ctx *gin.Context, err error) {
 	status, body := resolve(err)
 	writeRateLimitHeader(ctx, err)
 	ctx.AbortWithStatusJSON(status, gin.H{"error": body})
+}
+
+type httpEnvelope struct {
+	Error *Error `json:"error"`
+}
+
+func WriteHTTP(w http.ResponseWriter, err error) {
+	status, body := resolve(err)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(httpEnvelope{Error: body})
 }

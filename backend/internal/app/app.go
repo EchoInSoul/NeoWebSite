@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -46,7 +48,11 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 		return nil, err
 	}
 
-	gin.SetMode(ginMode(cfg.Environment))
+	mode, err := ginMode(cfg.Environment)
+	if err != nil {
+		return nil, err
+	}
+	gin.SetMode(mode)
 
 	engine := gin.New()
 	engine.Use(gin.Logger(), recoveryHandler())
@@ -85,7 +91,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 		apierror.Write(c, apierror.ErrMethodNotAllowed)
 	})
 
-	handler := sessions.LoadAndSave(engine)
+	handler := trackWrites(sessions.LoadAndSave(engine))
 
 	return &App{
 		handler: handler,
@@ -106,15 +112,14 @@ func recoveryHandler() gin.HandlerFunc {
 	})
 }
 
-func ginMode(environment string) string {
+func ginMode(environment string) (string, error) {
 	switch environment {
 	case config.EnvironmentProduction:
-		return gin.ReleaseMode
+		return gin.ReleaseMode, nil
 	case config.EnvironmentDevelopment:
-		return gin.DebugMode
-	default:
-		return gin.ReleaseMode
+		return gin.DebugMode, nil
 	}
+	return "", fmt.Errorf("unknown environment %q", environment)
 }
 
 func newSessionManager(cfg config.Config, db *database.Database) *scs.SessionManager {
@@ -126,7 +131,39 @@ func newSessionManager(cfg config.Config, db *database.Database) *scs.SessionMan
 	sm.Cookie.SameSite = http.SameSiteLaxMode
 	sm.Cookie.Path = "/"
 	sm.Cookie.Secure = cfg.IsProduction()
+	sm.ErrorFunc = func(w http.ResponseWriter, _ *http.Request, err error) {
+		if tracker, ok := w.(interface{ Written() bool }); ok && tracker.Written() {
+			slog.Error("session store failed after response was written", "error", err)
+			return
+		}
+		apierror.WriteHTTP(w, err)
+	}
 	return sm
+}
+
+type writeTracker struct {
+	http.ResponseWriter
+	written bool
+}
+
+func (w *writeTracker) WriteHeader(status int) {
+	w.written = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *writeTracker) Write(body []byte) (int, error) {
+	w.written = true
+	return w.ResponseWriter.Write(body)
+}
+
+func (w *writeTracker) Written() bool {
+	return w.written
+}
+
+func trackWrites(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&writeTracker{ResponseWriter: w}, r)
+	})
 }
 
 func (a *App) Handler() http.Handler {

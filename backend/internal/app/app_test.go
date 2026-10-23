@@ -251,22 +251,35 @@ func TestProductionCookieIsSecure(t *testing.T) {
 }
 
 func TestGinModeFollowsEnvironment(t *testing.T) {
-	previous := gin.Mode()
-	t.Cleanup(func() { gin.SetMode(previous) })
-
 	for _, tc := range []struct {
 		environment string
 		want        string
 	}{
 		{config.EnvironmentProduction, gin.ReleaseMode},
 		{config.EnvironmentDevelopment, gin.DebugMode},
-		{"test", gin.ReleaseMode},
-		{"bogus", gin.ReleaseMode},
 	} {
 		t.Run(tc.environment, func(t *testing.T) {
-			gin.SetMode(ginMode(tc.environment))
-			if got := gin.Mode(); got != tc.want {
-				t.Errorf("gin mode = %q, want %q for environment %q", got, tc.want, tc.environment)
+			mode, err := ginMode(tc.environment)
+			if err != nil {
+				t.Fatalf("ginMode(%q): %v", tc.environment, err)
+			}
+			if mode != tc.want {
+				t.Errorf("gin mode = %q, want %q for environment %q", mode, tc.want, tc.environment)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name        string
+		environment string
+	}{
+		{"test", "test"},
+		{"bogus", "bogus"},
+		{"empty", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ginMode(tc.environment); err == nil {
+				t.Fatalf("ginMode(%q) returned no error", tc.environment)
 			}
 		})
 	}
@@ -604,6 +617,43 @@ func TestDegradedServerStillServesRoutes(t *testing.T) {
 				t.Fatalf("code = %q, want %q", body.Error.Code, tc.wantCode)
 			}
 		})
+	}
+}
+
+func TestDegradedServerReturns503ForStoredSessionCookie(t *testing.T) {
+	ts := newDegradedServer(t)
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/users/me", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.AddCookie(&http.Cookie{Name: "session", Value: "stale-token"})
+
+	resp, err := newClient(t).Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", resp.StatusCode)
+	}
+	var body errorEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Error.Code != "service_unavailable" {
+		t.Fatalf("code = %q, want service_unavailable", body.Error.Code)
+	}
+
+	anonymous, err := newClient(t).Get(ts.URL + "/api/v1/users/me")
+	if err != nil {
+		t.Fatalf("anonymous request: %v", err)
+	}
+	defer anonymous.Body.Close()
+
+	if anonymous.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous status = %d, want 401", anonymous.StatusCode)
 	}
 }
 

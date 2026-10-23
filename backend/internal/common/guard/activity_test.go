@@ -106,17 +106,40 @@ func TestTrackSessionActivitySkipsWhenFresh(t *testing.T) {
 	}
 }
 
-func TestTrackSessionActivityWritesWhenMissing(t *testing.T) {
+func TestTrackSessionActivityRejectsMissingTimestamp(t *testing.T) {
 	ts := newActivityTestServer(t)
 	client := activityClient(t)
 	seedActivitySession(t, client, ts.URL, url.Values{"last_seen": {""}})
 
-	got := probeActivity(t, client, ts.URL)
-	if got == "" {
-		t.Fatal("last_seen was not written for a session without one")
+	resp, err := client.Get(ts.URL + "/probe")
+	if err != nil {
+		t.Fatalf("probe: %v", err)
 	}
-	if _, err := time.Parse(time.RFC3339, got); err != nil {
-		t.Fatalf("last_seen %q is not RFC3339: %v", got, err)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Error.Code != "unauthorized" {
+		t.Fatalf("code = %q, want unauthorized", body.Error.Code)
+	}
+
+	cleared := false
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "session" && cookie.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatal("session cookie was not cleared")
 	}
 }
 

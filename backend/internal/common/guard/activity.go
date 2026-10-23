@@ -5,6 +5,8 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
+
+	"website/backend/internal/common/apierror"
 )
 
 const (
@@ -21,7 +23,12 @@ func TrackSessionActivity(sm *scs.SessionManager) gin.HandlerFunc {
 		ctx := c.Request.Context()
 		if sm.GetString(ctx, SessionUserIDKey) != "" {
 			seen, err := time.Parse(time.RFC3339, sm.GetString(ctx, SessionLastSeenAtKey))
-			if err != nil || time.Since(seen) >= sessionActivityThrottle {
+			if err != nil {
+				_ = sm.Destroy(ctx)
+				apierror.Abort(c, apierror.ErrUnauthorized)
+				return
+			}
+			if time.Since(seen) >= sessionActivityThrottle {
 				sm.Put(ctx, SessionLastSeenAtKey, time.Now().UTC().Format(time.RFC3339))
 			}
 		}
