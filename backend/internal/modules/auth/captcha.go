@@ -45,10 +45,11 @@ type turnstileSiteverifyResponse struct {
 	ErrorCodes []string `json:"error-codes"`
 }
 
-var turnstileVisitorErrorCodes = map[string]bool{
+var turnstileRejectedErrorCodes = map[string]bool{
 	"missing-input-response": true,
 	"invalid-input-response": true,
 	"timeout-or-duplicate":   true,
+	"invalid-input-secret":   true,
 }
 
 func (v *turnstileVerifier) Verify(ctx context.Context, secret, token, remoteIP string) captchaOutcome {
@@ -81,7 +82,7 @@ func (v *turnstileVerifier) Verify(ctx context.Context, secret, token, remoteIP 
 		return captchaPassed
 	}
 	for _, code := range payload.ErrorCodes {
-		if turnstileVisitorErrorCodes[code] {
+		if turnstileRejectedErrorCodes[code] {
 			return captchaRejected
 		}
 	}

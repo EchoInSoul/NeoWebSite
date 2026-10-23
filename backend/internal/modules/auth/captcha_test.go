@@ -21,7 +21,7 @@ func TestTurnstileVerifierClassifiesResponses(t *testing.T) {
 		{name: "missing response", status: http.StatusOK, body: `{"success":false,"error-codes":["missing-input-response"]}`, want: captchaRejected},
 		{name: "invalid response", status: http.StatusOK, body: `{"success":false,"error-codes":["invalid-input-response"]}`, want: captchaRejected},
 		{name: "duplicate token", status: http.StatusOK, body: `{"success":false,"error-codes":["timeout-or-duplicate"]}`, want: captchaRejected},
-		{name: "invalid secret", status: http.StatusOK, body: `{"success":false,"error-codes":["invalid-input-secret"]}`, want: captchaUnavailable},
+		{name: "invalid secret", status: http.StatusOK, body: `{"success":false,"error-codes":["invalid-input-secret"]}`, want: captchaRejected},
 		{name: "no error codes", status: http.StatusOK, body: `{"success":false}`, want: captchaUnavailable},
 		{name: "server error", status: http.StatusInternalServerError, body: `{"success":false,"error-codes":["internal-error"]}`, want: captchaUnavailable},
 		{name: "unparseable body", status: http.StatusOK, body: `not-json`, want: captchaUnavailable},

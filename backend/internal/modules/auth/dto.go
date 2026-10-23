@@ -21,6 +21,15 @@ type RegisterRequest struct {
 	CaptchaToken string `json:"captcha_token"`
 }
 
+type CaptchaVerificationRequest struct {
+	SecretKey string `json:"secret_key"`
+	Token     string `json:"token"`
+}
+
+type CaptchaVerificationResponse struct {
+	Verified bool `json:"verified"`
+}
+
 type ProfileUpdateRequest struct {
 	Nickname *string `json:"nickname"`
 	Email    *string `json:"email"`

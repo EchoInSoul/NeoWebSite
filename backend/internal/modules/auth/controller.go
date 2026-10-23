@@ -12,6 +12,7 @@ import (
 	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/apiresponse"
 	"website/backend/internal/common/guard"
+	"website/backend/internal/common/rbac"
 )
 
 type controller struct {
@@ -40,6 +41,7 @@ func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.POST("/users/me/2fa/disable", c.disableTwoFactor)
 	r.POST("/users/me/2fa/recovery-codes", c.regenerateRecoveryCodes)
 	r.POST("/users/me/2fa/recovery-codes/email", c.emailRecoveryCodes)
+	r.POST("/admin/captcha/verifications", guard.RequirePermission(rbac.PermissionRegisterEdit), c.verifyCaptchaConfig)
 }
 
 func (c *controller) login(ctx *gin.Context) {
@@ -260,6 +262,26 @@ func (c *controller) verifySecondFactor(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, UserResponse{Email: user.Email, Nickname: user.Nickname, Bio: user.Bio})
+}
+
+func (c *controller) verifyCaptchaConfig(ctx *gin.Context) {
+	if !requireJSONRequest(ctx) {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	var req CaptchaVerificationRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.SecretKey == "" || req.Token == "" {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	if err := c.service.VerifyCaptchaConfig(ctx.Request.Context(), req.SecretKey, req.Token, requestSessionMeta(ctx)); err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, CaptchaVerificationResponse{Verified: true})
 }
 
 func (c *controller) listSessions(ctx *gin.Context) {

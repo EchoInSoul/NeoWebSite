@@ -677,3 +677,14 @@ func (s *Service) verifyCaptcha(ctx context.Context, token string, meta SessionM
 
 	return nil
 }
+
+func (s *Service) VerifyCaptchaConfig(ctx context.Context, secret, token string, meta SessionMeta) error {
+	switch s.captcha.Verify(ctx, secret, token, meta.IP) {
+	case captchaPassed:
+		return nil
+	case captchaRejected:
+		return apierror.ErrCaptchaVerifyFailed
+	default:
+		return apierror.ErrServiceUnavailable
+	}
+}
