@@ -140,7 +140,7 @@ bash scripts/db-migrate-diff.sh        # ent schema → 生成新迁移（之后
 
 应用启动绝不自动迁移；`ATLAS_DEV_URL` 缺省指向空的 `neoblog_atlas_dev`（脚本内默认值）。迁移文件里含数据（预设组 seed）或手工改造过 SQL 时，必须重算校验和：`atlas migrate hash --dir "file://migrations"` 再 `atlas migrate validate`（用户组与权限迁移是第一个带 seed 的）。工具链细节与已验证事实见 `docs/superpowers/specs/2026-10-11-neoblog-data-layer-design.md` 第 6、7 节。
 
-当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）→ `totp_last_counter`（`users` 加一列可空 bigint：TOTP 已认领的窗号，用于重放防护，纯 DDL 零数据）→ `totp_setup_at`（`users` 加一列可空 timestamptz：当前待验证密钥的生成时刻，setup 复用窗口用，纯 DDL 零数据）→ `user_bio`（`users` 加一列可空 varchar：用户简介，纯 DDL 零数据）→ `auth_version`（`users` 加一列非空 bigint 默认 0：认证版本，改密与启用 2FA 时 +1，旧版本会话在受保护请求上被 401 并销毁，纯 DDL 零数据）。
+当前迁移清单：`init_users_sessions`（users / sessions）→ `groups_and_permissions`（用户组与权限，含 seed 与回填）→ `totp_and_recovery_codes`（两步验证预留：`users` 加 `totp_secret` / `totp_enabled_at` 两个可空列 + 新表 `recovery_codes`，纯 DDL）→ `setting_values`（设置值单表：复合唯一 `(setting_group, name)` + jsonb `value`，纯 DDL 零数据，全仓第一列 `field.JSON`）→ `totp_last_counter`（`users` 加一列可空 bigint：TOTP 已认领的窗号，用于重放防护，纯 DDL 零数据）→ `totp_setup_at`（`users` 加一列可空 timestamptz：当前待验证密钥的生成时刻，setup 复用窗口用，纯 DDL 零数据）→ `user_bio`（`users` 加一列可空 varchar：用户简介，纯 DDL 零数据）→ `auth_version`（`users` 加一列非空 bigint 默认 0：认证版本，改密与启用 2FA 时 +1，旧版本会话在受保护请求上被 401 并销毁，纯 DDL 零数据）→ `seed_setting_values`（把内置设置清单的初始行种进 `setting_values`，纯数据、`ON CONFLICT DO NOTHING`）。
 
 ## 测试
 
@@ -288,9 +288,9 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 
 ## 设置
 
-模块 `internal/modules/settings/`：一张 `setting_values` 表只存"被显式写入过的值"，"有哪些设置"全部定义在代码内清单（`registry.go` 的 `builtinRegistry`）。构造入口 `settings.New(db) (*Module, error)`——清单自检不过启动即失败，能力挂 `m.Service`；错误哨兵 `ErrUnknownGroup` / `ErrUnknownItem` / `ErrTypeMismatch` / `ErrMethodMismatch`。三种类型（文字 / 数字 int64 / 开关）读写各按类型分方法，用错方法即报错；`GetGroup` 整组读取（默认值 ⊕ 覆盖逐项合并）；`PatchGroup` 整组部分更新（值类型以清单为准，任一项不合法即整组零落库）；`ResetItem` 删行恢复默认。库里没有某项的行 = 取代码里的默认值。
+模块 `internal/modules/settings/`：一张 `setting_values` 表存每个设置的当前值，"有哪些设置"定义在代码内清单（`registry.go` 的 `builtinRegistry`）。构造入口 `settings.New(db) (*Module, error)`——清单自检不过启动即失败，能力挂 `m.Service`；错误哨兵 `ErrUnknownGroup` / `ErrUnknownItem` / `ErrTypeMismatch` / `ErrMethodMismatch`。三种类型（文字 / 数字 int64 / 开关）读写各按类型分方法，用错方法即报错；`GetGroup` 整组读取；`PatchGroup` 整组部分更新（值类型以清单为准，任一项不合法即整组零落库）；`ResetItem` 把代码默认值写回该项。**读取不做任何兜底**：组内任一项没有行、或存的值解析不出声明类型，都直接返回错误（`settings: <group>.<name>: not configured` 或解码错误），不会退回代码默认值。初始行由迁移 `seed_setting_values` 种入，新库必须先跑迁移。
 
-**响应信封（两侧统一）**：一个组的记录固定是 `{ "group": "<组名>", "values": { …整组合并结果… } }`；集合外面套 `{ "items": [ 组记录… ] }`，与 `access` 模块的 `items` 列表同形。`values` 里是「默认值 ⊕ 覆盖」的合并结果，键是项名。
+**响应信封（两侧统一）**：一个组的记录固定是 `{ "group": "<组名>", "values": { …整组当前值… } }`；集合外面套 `{ "items": [ 组记录… ] }`，与 `access` 模块的 `items` 列表同形。`values` 的每一项都来自数据库行，键是项名。
 
 **对外接口**：
 
@@ -311,7 +311,7 @@ PATCH /api/v1/admin/settings/register        →  {"group":"register","values":{
 
 （两行响应都是节选：`GET` 的完整负载里 `site` 组六项、`register` 组的 `enabled` 和 `auth` 组的 `totp_enabled` 都在；`PATCH` 回的是整组合并结果，`register` 另四项非公开策略一并回显。）
 
-**怎么加一个设置**：在 `internal/modules/settings/registry.go` 的 `builtinRegistry` 里添加（组不存在就新增一个 `Group` 字面量）：
+**怎么加一个设置**：两处一起改。① 在 `internal/modules/settings/registry.go` 的 `builtinRegistry` 里添加定义（组不存在就新增一个 `Group` 字面量）：
 
 ```go
 var builtinRegistry = []Group{
@@ -326,7 +326,7 @@ var builtinRegistry = []Group{
 }
 ```
 
-保存后重启即生效：新设置立刻可读（默认值），**不需要任何数据库操作**。名字规则 `^[a-z][a-z0-9_]*$`；数字默认值必须写 `int64(...)`。防漂移测试 `TestRegistryRecipeShape` 按本配方字面形状把关，配方改了它就红。
+② 在 `migrations/` 里加一条 seed 迁移，把新键的默认值写进 `setting_values`（`ON CONFLICT (setting_group, name) DO NOTHING`），再跑 `atlas migrate hash --dir "file://migrations"`。读取不做兜底：只加定义不种行，读取会直接报 `settings: <group>.<name>: not configured`。名字规则 `^[a-z][a-z0-9_]*$`；数字默认值必须写 `int64(...)`。防漂移测试 `TestRegistryRecipeShape` 按本配方字面形状把关，配方改了它就红。
 
 **怎么加一个公开设置**（前台匿名要读的）：在上面的写法里多带一个 `Public: true`——
 

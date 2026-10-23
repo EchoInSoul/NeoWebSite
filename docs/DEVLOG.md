@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-10-23 · 设置读取不再兜底：坏值与缺行都直接报错
+
+**范围**：后端 `internal/modules/settings/{service.go,module.go,service_test.go,service_integration_test.go,controller_test.go,migration_test.go,repository_test.go}`、`internal/app/app_test.go`、新迁移 `migrations/20261023080025_seed_setting_values.sql` 与 `migrations/atlas.sum`、`README.md`；另加本条目。零依赖、零新接口、零前端。
+
+**动机**：此前设置读取有两层兜底——库里值解析失败时退回代码默认值，库里没有这一行时也退回代码默认值。用户裁定两层都不要：不使用旧数据、不做兼容，会从全新数据库开始，读不到就报错，不要任何兜底。
+
+**口径**：
+
+- 单项读取 `getTyped`：行不存在 → `settings: <group>.<name>: not configured`；值解析失败 → 同一前缀的解码错误。两种情况都返回零值加错误，不再取 `def.Default`。
+- 整组读取 `readGroup`：组内任一项缺行或解析失败 → 整组返回 `nil` 加错误，不返回半截 map、也不再用默认值补齐。
+- 默认值只剩两个用途：迁移里的初始数据、`ResetItem` 的写回值。`ResetItem` 从「删行」改为「把代码默认值 upsert 回该行」，否则 reset 之后读取会报缺行。
+- `PatchGroup` 保持「写入值覆盖已存值 → 组校验 → 落库 → 返回这份结果」的顺序；坏掉的那一项仍可被 PATCH 自己修好，组里其他项缺行或损坏则整次 PATCH 在写之前失败。
+- 新迁移 `seed_setting_values` 把清单里 22 项（`site` 6 / `register` 5 / `auth` 11）的默认值种进 `setting_values`，`ON CONFLICT (setting_group, name) DO NOTHING`，不覆盖既有值；`atlas.sum` 已重算，迁移已应用到开发库与测试库。
+- 测试不再依赖「缺行取默认」：样例组改名 `demo` 避开内置 `site`，`newIntegrationService` 建行后再跑；controller 用例的 `resetBuiltin` 先删再按清单种默认行，并在结束时恢复；`app` 的注册开关端到端用例改用 `ResetItem` 复位而不是删行；`migration_test` / `repository_test` 改用 `schema_probe` / `repo_probe` 组，避免碰到种子里已有的键。
+- README 同步：设置章节写明「读取不兜底、初始行由迁移种入」，`ResetItem` 语义改为写回默认值，「怎么加一个设置」从「只改 registry」变为「registry + seed 迁移」两步，迁移清单补上 `seed_setting_values`。
+
+**未做**：auth 里三处「读失败按默认继续」未动（`twoFactorAvailable` 返回 true、`applySessionDeadline` 直接返回、`verifyCaptcha` 返回 nil）；没有在启动时自动补行，缺行只能靠迁移、`ResetItem` 或 PATCH 修复；没有新增 `ErrCorruptValue` 哨兵；没有补 controller 层断言 500 的单独测试；前端未动。
+
+**验证**：
+
+- `bash scripts/test.sh` 全仓绿（app 3.8s、auth 26.4s、settings 3.2s）；`bash scripts/check.sh` 输出 `check ok`。
+- 新语义变异自检三条（改坏 → 确认红 → 还原）：`getTyped` 缺行改回默认值 → `TestServiceMissingRowReturnsError` 红；`readGroup` 缺行改回默认值 → 同一用例在 `GetGroup` 断言处红；`ResetItem` 改回删行 → `TestServiceResetItem` 与 `TestServiceResetItemWritesDefault` 双红。
+- 上一轮的坏值变异四条仍有效（`getTyped` / `readGroup` 改回默认值、`PatchGroup` 改回先落库再重读、`readGroup` 忽略写入覆盖），对应测试分别在错误、返回默认值、写完才报错、无法自修复处变红。
+- 测试库按组清点：`site` 6、`register` 5、`auth` 11，共 22 行，与清单一致；测试产生的临时组已清掉。
+
+**已知影响**：新库必须先 `bash scripts/db-migrate-apply.sh` 才有设置可读，否则 `GET /admin/settings/:group` 与 `/public/settings` 直接 500；手工删掉某行会让那一项在补回之前一直报 `not configured`（补回方式：`ResetItem`、PATCH 该项、或重跑迁移）；以后每加一个设置都必须同时加 seed 迁移。
+
+**提交状态**：待提交（改动已暂存）。
+
+---
+
 ## 2026-10-23 · 环境开关收成两值，移除 .env 自举
 
 **范围**：后端 10 文件——`internal/config/{config.go,config_test.go,dotenv.go,dotenv_test.go}`、`internal/app/{app.go,app_test.go}`、`main.go`、`scripts/{build.sh,dev.sh}`、`README.md`；另加本条目。零迁移、零依赖、零新接口、零前端、零版本进位。
