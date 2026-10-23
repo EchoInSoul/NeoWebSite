@@ -4,15 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 )
 
 func sampleGroups() []Group {
 	return []Group{
 		{
-			Name: "site",
+			Name: "demo",
 			Items: []Definition{
 				{Name: "title", Type: FieldTypeString, Default: "我的博客"},
 				{Name: "port", Type: FieldTypeNumber, Default: int64(8080)},
@@ -22,13 +20,9 @@ func sampleGroups() []Group {
 	}
 }
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
 func newUnitService(t *testing.T) *Service {
 	t.Helper()
-	svc, err := newServiceWith(nil, sampleGroups(), testLogger())
+	svc, err := newServiceWith(nil, sampleGroups())
 	if err != nil {
 		t.Fatalf("newServiceWith: %v", err)
 	}
@@ -39,25 +33,25 @@ func TestServiceMethodMisuse(t *testing.T) {
 	svc := newUnitService(t)
 	ctx := context.Background()
 
-	if _, err := svc.GetString(ctx, "site", "port"); !errors.Is(err, ErrMethodMismatch) {
+	if _, err := svc.GetString(ctx, "demo", "port"); !errors.Is(err, ErrMethodMismatch) {
 		t.Fatalf("GetString on number item = %v, want ErrMethodMismatch", err)
 	}
-	if _, err := svc.GetNumber(ctx, "site", "title"); !errors.Is(err, ErrMethodMismatch) {
+	if _, err := svc.GetNumber(ctx, "demo", "title"); !errors.Is(err, ErrMethodMismatch) {
 		t.Fatalf("GetNumber on string item = %v, want ErrMethodMismatch", err)
 	}
-	if _, err := svc.GetNumber(ctx, "site", "maintenance"); !errors.Is(err, ErrMethodMismatch) {
+	if _, err := svc.GetNumber(ctx, "demo", "maintenance"); !errors.Is(err, ErrMethodMismatch) {
 		t.Fatalf("GetNumber on bool item = %v, want ErrMethodMismatch", err)
 	}
-	if _, err := svc.GetBool(ctx, "site", "title"); !errors.Is(err, ErrMethodMismatch) {
+	if _, err := svc.GetBool(ctx, "demo", "title"); !errors.Is(err, ErrMethodMismatch) {
 		t.Fatalf("GetBool on string item = %v, want ErrMethodMismatch", err)
 	}
-	if err := svc.SetString(ctx, "site", "port", "x"); !errors.Is(err, ErrMethodMismatch) {
+	if err := svc.SetString(ctx, "demo", "port", "x"); !errors.Is(err, ErrMethodMismatch) {
 		t.Fatalf("SetString on number item = %v, want ErrMethodMismatch", err)
 	}
-	if err := svc.SetNumber(ctx, "site", "title", 1); !errors.Is(err, ErrMethodMismatch) {
+	if err := svc.SetNumber(ctx, "demo", "title", 1); !errors.Is(err, ErrMethodMismatch) {
 		t.Fatalf("SetNumber on string item = %v, want ErrMethodMismatch", err)
 	}
-	if err := svc.SetBool(ctx, "site", "title", true); !errors.Is(err, ErrMethodMismatch) {
+	if err := svc.SetBool(ctx, "demo", "title", true); !errors.Is(err, ErrMethodMismatch) {
 		t.Fatalf("SetBool on string item = %v, want ErrMethodMismatch", err)
 	}
 }
@@ -78,13 +72,13 @@ func TestServiceUnknown(t *testing.T) {
 	if _, err := svc.GetGroup(ctx, "nope"); !errors.Is(err, ErrUnknownGroup) {
 		t.Fatalf("GetGroup unknown group = %v, want ErrUnknownGroup", err)
 	}
-	if _, err := svc.GetString(ctx, "site", "ghost"); !errors.Is(err, ErrUnknownItem) {
+	if _, err := svc.GetString(ctx, "demo", "ghost"); !errors.Is(err, ErrUnknownItem) {
 		t.Fatalf("GetString unknown item = %v, want ErrUnknownItem", err)
 	}
-	if err := svc.SetString(ctx, "site", "ghost", "x"); !errors.Is(err, ErrUnknownItem) {
+	if err := svc.SetString(ctx, "demo", "ghost", "x"); !errors.Is(err, ErrUnknownItem) {
 		t.Fatalf("SetString unknown item = %v, want ErrUnknownItem", err)
 	}
-	if err := svc.ResetItem(ctx, "site", "ghost"); !errors.Is(err, ErrUnknownItem) {
+	if err := svc.ResetItem(ctx, "demo", "ghost"); !errors.Is(err, ErrUnknownItem) {
 		t.Fatalf("ResetItem unknown item = %v, want ErrUnknownItem", err)
 	}
 }
@@ -97,7 +91,7 @@ func TestPatchGroupValidation(t *testing.T) {
 		t.Fatalf("PatchGroup unknown group = %v, want ErrUnknownGroup", err)
 	}
 
-	_, err := svc.PatchGroup(ctx, "site", nil)
+	_, err := svc.PatchGroup(ctx, "demo", nil)
 	if !errors.Is(err, ErrUnknownItem) {
 		t.Fatalf("PatchGroup empty body = %v, want ErrUnknownItem", err)
 	}
@@ -106,7 +100,7 @@ func TestPatchGroupValidation(t *testing.T) {
 		t.Fatalf("empty body error must not carry an item name, got %+v", emptyItemErr)
 	}
 
-	_, err = svc.PatchGroup(ctx, "site", map[string]json.RawMessage{"nope": json.RawMessage(`1`)})
+	_, err = svc.PatchGroup(ctx, "demo", map[string]json.RawMessage{"nope": json.RawMessage(`1`)})
 	var unknownItemErr *ItemError
 	if !errors.As(err, &unknownItemErr) {
 		t.Fatalf("PatchGroup unknown item = %v, want *ItemError", err)
@@ -115,7 +109,7 @@ func TestPatchGroupValidation(t *testing.T) {
 		t.Fatalf("unknown item error = %+v, want item \"nope\" wrapping ErrUnknownItem", unknownItemErr)
 	}
 
-	_, err = svc.PatchGroup(ctx, "site", map[string]json.RawMessage{"port": json.RawMessage(`3.5`)})
+	_, err = svc.PatchGroup(ctx, "demo", map[string]json.RawMessage{"port": json.RawMessage(`3.5`)})
 	var typeItemErr *ItemError
 	if !errors.As(err, &typeItemErr) {
 		t.Fatalf("PatchGroup type mismatch = %v, want *ItemError", err)
@@ -175,16 +169,16 @@ func TestServiceItemWriteTypeMismatch(t *testing.T) {
 		{Name: "port", Type: FieldTypeString, Value: "x"},
 	}
 	for _, item := range cases {
-		if err := svc.SetGroup(ctx, "site", []ItemWrite{item}); !errors.Is(err, ErrTypeMismatch) {
+		if err := svc.SetGroup(ctx, "demo", []ItemWrite{item}); !errors.Is(err, ErrTypeMismatch) {
 			t.Fatalf("SetGroup %+v = %v, want ErrTypeMismatch", item, err)
 		}
 	}
 
 	good := ItemWrite{Name: "title", Type: FieldTypeString, Value: "ok"}
-	if err := svc.SetGroup(ctx, "site", []ItemWrite{good, {Name: "ghost", Type: FieldTypeString, Value: "x"}}); !errors.Is(err, ErrUnknownItem) {
+	if err := svc.SetGroup(ctx, "demo", []ItemWrite{good, {Name: "ghost", Type: FieldTypeString, Value: "x"}}); !errors.Is(err, ErrUnknownItem) {
 		t.Fatalf("SetGroup with unknown item = %v, want ErrUnknownItem", err)
 	}
-	if err := svc.SetGroup(ctx, "site", nil); err == nil {
+	if err := svc.SetGroup(ctx, "demo", nil); err == nil {
 		t.Fatal("SetGroup with no items accepted, want error")
 	}
 	if err := svc.SetGroup(ctx, "nope", []ItemWrite{good}); !errors.Is(err, ErrUnknownGroup) {

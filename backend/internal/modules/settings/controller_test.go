@@ -176,6 +176,59 @@ func registerRowCount(t *testing.T, db *database.Database) int {
 	return count
 }
 
+func assertRegisterEnabled(t *testing.T, db *database.Database, want bool) {
+	t.Helper()
+
+	row, err := db.Client.SettingValue.Query().
+		Where(settingvalue.SettingGroupEQ("register"), settingvalue.NameEQ("enabled")).
+		Only(context.Background())
+	if err != nil {
+		t.Fatalf("query register.enabled: %v", err)
+	}
+	wantValue := "false"
+	if want {
+		wantValue = "true"
+	}
+	if string(row.Value) != wantValue {
+		t.Fatalf("register.enabled = %s, want %s", row.Value, wantValue)
+	}
+}
+
+func builtinGroup(name string) (Group, bool) {
+	for _, group := range builtinRegistry {
+		if group.Name == name {
+			return group, true
+		}
+	}
+	return Group{}, false
+}
+
+func resetBuiltin(t *testing.T, db *database.Database, names ...string) {
+	t.Helper()
+
+	module, err := New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	groups := make([]Group, 0, len(names))
+	for _, name := range names {
+		group, ok := builtinGroup(name)
+		if !ok {
+			t.Fatalf("unknown builtin group %q", name)
+		}
+		groups = append(groups, group)
+	}
+
+	deleteGroups(t, db, names...)
+	seedGroupDefaults(t, module.Service, groups)
+	t.Cleanup(func() {
+		deleteGroups(t, db, names...)
+		if err := writeGroupDefaults(module.Service, groups); err != nil {
+			t.Errorf("reseed %v: %v", names, err)
+		}
+	})
+}
+
 func createUserInGroup(t *testing.T, db *database.Database, groupID uuid.UUID) uuid.UUID {
 	t.Helper()
 
@@ -220,7 +273,7 @@ func createGroupWithPermissions(t *testing.T, db *database.Database, label strin
 
 func TestSettingsGetAsOwner(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	ownerID := createUserInGroup(t, db, rbac.GroupIDOwner)
 
@@ -233,9 +286,10 @@ func TestSettingsGetAsOwner(t *testing.T) {
 	if values["enabled"] != true {
 		t.Fatalf("register.enabled = %v, want true merged from default", values["enabled"])
 	}
-	if count := registerRowCount(t, db); count != 0 {
-		t.Fatalf("register rows = %d, want 0 before any write", count)
+	if count := registerRowCount(t, db); count != 5 {
+		t.Fatalf("register rows = %d, want the five seeded rows", count)
 	}
+	assertRegisterEnabled(t, db, true)
 }
 
 func TestSettingsGetUnknownGroup(t *testing.T) {
@@ -275,7 +329,7 @@ func TestSettingsGetForbiddenForPlainUser(t *testing.T) {
 
 func TestSettingsGroupPermissionsSplitByGroup(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register", "site", "auth")
+	resetBuiltin(t, db, "register", "site", "auth")
 	ts := newSettingsTestApp(t, db)
 
 	registerGroupID := createGroupWithPermissions(t, db, "reg", []string{rbac.PermissionRegisterView, rbac.PermissionRegisterEdit})
@@ -339,7 +393,7 @@ func TestSettingsGroupPermissionsSplitByGroup(t *testing.T) {
 
 func TestSettingsPublicGetAnonymously(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "auth", "register", "site")
+	resetBuiltin(t, db, "auth", "register", "site")
 	ts := newSettingsTestApp(t, db)
 
 	resp := doJSON(t, &http.Client{}, http.MethodGet, ts.URL+"/api/v1/public/settings", nil)
@@ -391,7 +445,7 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 
 func TestSettingsPatchSiteReadsBackPublicly(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "auth", "register", "site")
+	resetBuiltin(t, db, "auth", "register", "site")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -425,7 +479,7 @@ func TestSettingsPatchSiteReadsBackPublicly(t *testing.T) {
 
 func TestSettingsAdminReadsRegisterDefaults(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -454,7 +508,7 @@ func TestSettingsAdminReadsRegisterDefaults(t *testing.T) {
 
 func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "auth")
+	resetBuiltin(t, db, "auth")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -503,7 +557,7 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 
 func TestSettingsPatchTurnstileKeysRoundtrip(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "auth")
+	resetBuiltin(t, db, "auth")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -531,7 +585,7 @@ func TestSettingsPatchTurnstileKeysRoundtrip(t *testing.T) {
 
 func TestSettingsPatchTurnsRegistrationOff(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -548,14 +602,15 @@ func TestSettingsPatchTurnsRegistrationOff(t *testing.T) {
 	if group != "register" || values["enabled"] != false {
 		t.Fatalf("get after patch = %q %v, want register with enabled false", group, values)
 	}
-	if count := registerRowCount(t, db); count != 1 {
-		t.Fatalf("register rows = %d, want the single explicit write", count)
+	if count := registerRowCount(t, db); count != 5 {
+		t.Fatalf("register rows = %d, want the five seeded rows", count)
 	}
+	assertRegisterEnabled(t, db, false)
 }
 
 func TestSettingsPatchUnknownItem(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -568,14 +623,12 @@ func TestSettingsPatchUnknownItem(t *testing.T) {
 	if errObj["param"] != "nope" {
 		t.Fatalf("param = %v, want nope", errObj["param"])
 	}
-	if count := registerRowCount(t, db); count != 0 {
-		t.Fatalf("register rows = %d, want 0 — the legal item must not be half-written", count)
-	}
+	assertRegisterEnabled(t, db, true)
 }
 
 func TestSettingsPatchTypeMismatch(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -585,14 +638,12 @@ func TestSettingsPatchTypeMismatch(t *testing.T) {
 	if errObj["code"] != "invalid_request" || errObj["param"] != "enabled" {
 		t.Fatalf("error = %v, want invalid_request with param enabled", errObj)
 	}
-	if count := registerRowCount(t, db); count != 0 {
-		t.Fatalf("register rows = %d, want 0 after rejected write", count)
-	}
+	assertRegisterEnabled(t, db, true)
 }
 
 func TestSettingsPatchEmptyBody(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -609,7 +660,7 @@ func TestSettingsPatchEmptyBody(t *testing.T) {
 
 func TestSettingsPatchMalformedBody(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -620,9 +671,7 @@ func TestSettingsPatchMalformedBody(t *testing.T) {
 			t.Fatalf("payload %q: code = %q, want invalid_request", payload, code)
 		}
 	}
-	if count := registerRowCount(t, db); count != 0 {
-		t.Fatalf("register rows = %d, want 0 after malformed bodies", count)
-	}
+	assertRegisterEnabled(t, db, true)
 }
 
 func TestSettingsPatchUnknownGroup(t *testing.T) {
@@ -639,7 +688,7 @@ func TestSettingsPatchUnknownGroup(t *testing.T) {
 
 func TestSettingsPatchNeedsEditPermission(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	plain := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDUser))
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
@@ -649,9 +698,7 @@ func TestSettingsPatchNeedsEditPermission(t *testing.T) {
 	if code := decodeErrorCode(t, denied); code != "forbidden" {
 		t.Fatalf("code = %q, want forbidden", code)
 	}
-	if count := registerRowCount(t, db); count != 0 {
-		t.Fatalf("register rows = %d, want 0 after forbidden patch", count)
-	}
+	assertRegisterEnabled(t, db, true)
 
 	allowed := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{"enabled": false})
 	expectStatus(t, allowed, http.StatusOK)
@@ -660,7 +707,7 @@ func TestSettingsPatchNeedsEditPermission(t *testing.T) {
 
 func TestSettingsPatchRegisterDomainControlAllowsEmptyList(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -691,7 +738,7 @@ func TestSettingsPatchRegisterDomainControlAllowsEmptyList(t *testing.T) {
 
 func TestSettingsPatchAuthMinLengthRange(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "auth")
+	resetBuiltin(t, db, "auth")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -714,7 +761,7 @@ func TestSettingsPatchAuthMinLengthRange(t *testing.T) {
 
 func TestSettingsPatchAuthSessionMaxAgeRange(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "auth")
+	resetBuiltin(t, db, "auth")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
@@ -737,7 +784,7 @@ func TestSettingsPatchAuthSessionMaxAgeRange(t *testing.T) {
 
 func TestSettingsPatchAuthSessionMaxAgeRejectsDirtyDaysOnEnable(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "auth")
+	resetBuiltin(t, db, "auth")
 	module, err := New(db)
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
@@ -758,7 +805,7 @@ func TestSettingsPatchAuthSessionMaxAgeRejectsDirtyDaysOnEnable(t *testing.T) {
 
 func TestSettingsPatchAuthSessionMaxAgeAllowsDisableWithDirtyDays(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "auth")
+	resetBuiltin(t, db, "auth")
 	module, err := New(db)
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
@@ -783,7 +830,7 @@ func TestSettingsPatchAuthSessionMaxAgeAllowsDisableWithDirtyDays(t *testing.T) 
 
 func TestSettingsPatchAuthMinLengthIgnoresDirtySessionDays(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "auth")
+	resetBuiltin(t, db, "auth")
 	module, err := New(db)
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
@@ -804,7 +851,7 @@ func TestSettingsPatchAuthMinLengthIgnoresDirtySessionDays(t *testing.T) {
 
 func TestSettingsPatchIgnoresDirtyStateOutsideValidateOn(t *testing.T) {
 	db := testDB(t)
-	resetGroups(t, db, "register")
+	resetBuiltin(t, db, "register")
 	module, err := New(db)
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)

@@ -2,7 +2,10 @@ package settings
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,11 +16,28 @@ import (
 func newIntegrationService(t *testing.T, groups []Group) (*Service, *database.Database) {
 	t.Helper()
 	db := testDB(t)
-	resetGroups(t, db, groupNames(groups)...)
-	svc, err := newServiceWith(db, groups, testLogger())
+	names := groupNames(groups)
+	deleteGroups(t, db, names...)
+	svc, err := newServiceWith(db, groups)
 	if err != nil {
 		t.Fatalf("newServiceWith: %v", err)
 	}
+	seedGroupDefaults(t, svc, groups)
+	t.Cleanup(func() {
+		deleteGroups(t, db, names...)
+		builtin := make([]Group, 0, len(groups))
+		for _, group := range groups {
+			if _, ok := builtinGroup(group.Name); ok {
+				builtin = append(builtin, group)
+			}
+		}
+		if len(builtin) == 0 {
+			return
+		}
+		if err := writeGroupDefaults(svc, builtin); err != nil {
+			t.Errorf("reseed %v: %v", names, err)
+		}
+	})
 	return svc, db
 }
 
@@ -29,38 +49,64 @@ func groupNames(groups []Group) []string {
 	return names
 }
 
-func resetGroups(t *testing.T, db *database.Database, names ...string) {
+func deleteGroups(t *testing.T, db *database.Database, names ...string) {
 	t.Helper()
-	cleanup := func() {
-		ctx := context.Background()
-		for _, name := range names {
-			_, _ = db.Client.SettingValue.Delete().Where(settingvalue.SettingGroupEQ(name)).Exec(ctx)
+	ctx := context.Background()
+	for _, name := range names {
+		_, _ = db.Client.SettingValue.Delete().Where(settingvalue.SettingGroupEQ(name)).Exec(ctx)
+	}
+}
+
+func seedGroupDefaults(t *testing.T, svc *Service, groups []Group) {
+	t.Helper()
+	if err := writeGroupDefaults(svc, groups); err != nil {
+		t.Fatalf("seed defaults: %v", err)
+	}
+}
+
+func writeGroupDefaults(svc *Service, groups []Group) error {
+	ctx := context.Background()
+	for _, group := range groups {
+		for _, item := range group.Items {
+			var err error
+			switch item.Type {
+			case FieldTypeString:
+				err = svc.SetString(ctx, group.Name, item.Name, item.Default.(string))
+			case FieldTypeNumber:
+				err = svc.SetNumber(ctx, group.Name, item.Name, item.Default.(int64))
+			case FieldTypeBool:
+				err = svc.SetBool(ctx, group.Name, item.Name, item.Default.(bool))
+			default:
+				return fmt.Errorf("unknown field type %d", item.Type)
+			}
+			if err != nil {
+				return err
+			}
 		}
 	}
-	cleanup()
-	t.Cleanup(cleanup)
+	return nil
 }
 
 func TestServiceWriteReadRoundtrip(t *testing.T) {
 	svc, _ := newIntegrationService(t, sampleGroups())
 	ctx := context.Background()
 
-	if err := svc.SetString(ctx, "site", "title", "新标题"); err != nil {
+	if err := svc.SetString(ctx, "demo", "title", "新标题"); err != nil {
 		t.Fatalf("SetString: %v", err)
 	}
-	if err := svc.SetNumber(ctx, "site", "port", 9090); err != nil {
+	if err := svc.SetNumber(ctx, "demo", "port", 9090); err != nil {
 		t.Fatalf("SetNumber: %v", err)
 	}
-	if err := svc.SetBool(ctx, "site", "maintenance", true); err != nil {
+	if err := svc.SetBool(ctx, "demo", "maintenance", true); err != nil {
 		t.Fatalf("SetBool: %v", err)
 	}
-	if got, err := svc.GetString(ctx, "site", "title"); err != nil || got != "新标题" {
+	if got, err := svc.GetString(ctx, "demo", "title"); err != nil || got != "新标题" {
 		t.Fatalf("GetString = (%q, %v), want 新标题", got, err)
 	}
-	if got, err := svc.GetNumber(ctx, "site", "port"); err != nil || got != 9090 {
+	if got, err := svc.GetNumber(ctx, "demo", "port"); err != nil || got != 9090 {
 		t.Fatalf("GetNumber = (%d, %v), want 9090", got, err)
 	}
-	if got, err := svc.GetBool(ctx, "site", "maintenance"); err != nil || !got {
+	if got, err := svc.GetBool(ctx, "demo", "maintenance"); err != nil || !got {
 		t.Fatalf("GetBool = (%v, %v), want true", got, err)
 	}
 }
@@ -69,13 +115,13 @@ func TestServiceDefaultRead(t *testing.T) {
 	svc, _ := newIntegrationService(t, sampleGroups())
 	ctx := context.Background()
 
-	if got, err := svc.GetString(ctx, "site", "title"); err != nil || got != "我的博客" {
+	if got, err := svc.GetString(ctx, "demo", "title"); err != nil || got != "我的博客" {
 		t.Fatalf("GetString default = (%q, %v)", got, err)
 	}
-	if got, err := svc.GetNumber(ctx, "site", "port"); err != nil || got != 8080 {
+	if got, err := svc.GetNumber(ctx, "demo", "port"); err != nil || got != 8080 {
 		t.Fatalf("GetNumber default = (%d, %v)", got, err)
 	}
-	if got, err := svc.GetBool(ctx, "site", "maintenance"); err != nil || got {
+	if got, err := svc.GetBool(ctx, "demo", "maintenance"); err != nil || got {
 		t.Fatalf("GetBool default = (%v, %v)", got, err)
 	}
 }
@@ -85,23 +131,23 @@ func TestServiceResetItem(t *testing.T) {
 	ctx := context.Background()
 	repo := &repository{client: db.Client}
 
-	if err := svc.SetString(ctx, "site", "title", "覆盖"); err != nil {
+	if err := svc.SetString(ctx, "demo", "title", "覆盖"); err != nil {
 		t.Fatalf("SetString: %v", err)
 	}
-	if err := svc.ResetItem(ctx, "site", "title"); err != nil {
+	if err := svc.ResetItem(ctx, "demo", "title"); err != nil {
 		t.Fatalf("ResetItem existing row: %v", err)
 	}
-	if _, ok, _ := repo.get(ctx, "site", "title"); ok {
-		t.Fatal("row still present after ResetItem")
+	if raw, ok, err := repo.get(ctx, "demo", "title"); err != nil || !ok || string(raw) != `"我的博客"` {
+		t.Fatalf("row after ResetItem = (%s, %v, %v), want the default value", raw, ok, err)
 	}
-	if got, err := svc.GetString(ctx, "site", "title"); err != nil || got != "我的博客" {
+	if got, err := svc.GetString(ctx, "demo", "title"); err != nil || got != "我的博客" {
 		t.Fatalf("GetString after reset = (%q, %v)", got, err)
 	}
 
-	if err := svc.ResetItem(ctx, "site", "port"); err != nil {
+	if err := svc.ResetItem(ctx, "demo", "port"); err != nil {
 		t.Fatalf("ResetItem never-written item = %v, want idempotent success", err)
 	}
-	if err := svc.ResetItem(ctx, "site", "ghost"); !errors.Is(err, ErrUnknownItem) {
+	if err := svc.ResetItem(ctx, "demo", "ghost"); !errors.Is(err, ErrUnknownItem) {
 		t.Fatalf("ResetItem unknown item = %v, want ErrUnknownItem", err)
 	}
 	if err := svc.ResetItem(ctx, "nope", "title"); !errors.Is(err, ErrUnknownGroup) {
@@ -113,10 +159,10 @@ func TestServiceGroupMerge(t *testing.T) {
 	svc, db := newIntegrationService(t, sampleGroups())
 	ctx := context.Background()
 
-	if err := svc.SetString(ctx, "site", "title", "覆盖标题"); err != nil {
+	if err := svc.SetString(ctx, "demo", "title", "覆盖标题"); err != nil {
 		t.Fatalf("SetString: %v", err)
 	}
-	values, err := svc.GetGroup(ctx, "site")
+	values, err := svc.GetGroup(ctx, "demo")
 	if err != nil {
 		t.Fatalf("GetGroup: %v", err)
 	}
@@ -133,18 +179,21 @@ func TestServiceGroupMerge(t *testing.T) {
 		t.Fatalf("merged maintenance = %v, want false", values["maintenance"])
 	}
 
-	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "3.5", "site", "port"); err != nil {
+	if err := svc.SetNumber(ctx, "demo", "port", 8080); err != nil {
+		t.Fatalf("SetNumber: %v", err)
+	}
+	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "3.5", "demo", "port"); err != nil {
 		t.Fatalf("plant bad row: %v", err)
 	}
-	values, err = svc.GetGroup(ctx, "site")
-	if err != nil {
-		t.Fatalf("GetGroup with bad row = %v, want nil error", err)
+	_, err = svc.GetGroup(ctx, "demo")
+	if err == nil {
+		t.Fatal("GetGroup with bad row succeeded, want error")
 	}
-	if values["port"] != int64(8080) {
-		t.Fatalf("bad-row port = %v, want default 8080", values["port"])
+	if !strings.Contains(err.Error(), "demo.port") {
+		t.Fatalf("GetGroup with bad row = %v, want error naming demo.port", err)
 	}
-	if values["title"] != "覆盖标题" {
-		t.Fatalf("bad-row poisoned other items: title = %v", values["title"])
+	if errors.Is(err, ErrTypeMismatch) {
+		t.Fatal("corrupt stored value must not be reported as ErrTypeMismatch")
 	}
 }
 
@@ -153,36 +202,36 @@ func TestServiceSetGroupAtomic(t *testing.T) {
 	ctx := context.Background()
 	repo := &repository{client: db.Client}
 
-	err := svc.SetGroup(ctx, "site", []ItemWrite{
+	err := svc.SetGroup(ctx, "demo", []ItemWrite{
 		{Name: "title", Type: FieldTypeString, Value: "整组标题"},
 		{Name: "ghost", Type: FieldTypeString, Value: "x"},
 	})
 	if !errors.Is(err, ErrUnknownItem) {
 		t.Fatalf("SetGroup with unknown item = %v, want ErrUnknownItem", err)
 	}
-	if _, ok, _ := repo.get(ctx, "site", "title"); ok {
-		t.Fatal("bad SetGroup left a row behind, want zero writes")
+	if raw, ok, _ := repo.get(ctx, "demo", "title"); !ok || string(raw) != `"我的博客"` {
+		t.Fatalf("bad SetGroup changed title to %s, want the seeded default", raw)
 	}
 
-	err = svc.SetGroup(ctx, "site", []ItemWrite{
+	err = svc.SetGroup(ctx, "demo", []ItemWrite{
 		{Name: "port", Type: FieldTypeNumber, Value: int64(1)},
 		{Name: "maintenance", Type: FieldTypeBool, Value: "x"},
 	})
 	if !errors.Is(err, ErrTypeMismatch) {
 		t.Fatalf("SetGroup with type mismatch = %v, want ErrTypeMismatch", err)
 	}
-	if _, ok, _ := repo.get(ctx, "site", "port"); ok {
-		t.Fatal("type-mismatch SetGroup left a row behind, want zero writes")
+	if raw, ok, _ := repo.get(ctx, "demo", "port"); !ok || string(raw) != `8080` {
+		t.Fatalf("type-mismatch SetGroup changed port to %s, want the seeded 8080", raw)
 	}
 
-	if err := svc.SetGroup(ctx, "site", []ItemWrite{
+	if err := svc.SetGroup(ctx, "demo", []ItemWrite{
 		{Name: "title", Type: FieldTypeString, Value: "整组标题"},
 		{Name: "port", Type: FieldTypeNumber, Value: int64(1234)},
 		{Name: "maintenance", Type: FieldTypeBool, Value: true},
 	}); err != nil {
 		t.Fatalf("SetGroup happy path: %v", err)
 	}
-	values, err := svc.GetGroup(ctx, "site")
+	values, err := svc.GetGroup(ctx, "demo")
 	if err != nil {
 		t.Fatalf("GetGroup after SetGroup: %v", err)
 	}
@@ -191,14 +240,14 @@ func TestServiceSetGroupAtomic(t *testing.T) {
 	}
 }
 
-func TestServiceBadRowFallback(t *testing.T) {
+func TestServiceBadRowReturnsError(t *testing.T) {
 	svc, db := newIntegrationService(t, sampleGroups())
 	ctx := context.Background()
 
-	if err := svc.SetNumber(ctx, "site", "port", 9090); err != nil {
+	if err := svc.SetNumber(ctx, "demo", "port", 9090); err != nil {
 		t.Fatalf("SetNumber: %v", err)
 	}
-	if err := svc.SetString(ctx, "site", "title", "标题"); err != nil {
+	if err := svc.SetString(ctx, "demo", "title", "标题"); err != nil {
 		t.Fatalf("SetString: %v", err)
 	}
 
@@ -206,51 +255,113 @@ func TestServiceBadRowFallback(t *testing.T) {
 		"decimal":  "3.5",
 		"overflow": "9223372036854775808",
 	} {
-		if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", raw, "site", "port"); err != nil {
+		if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", raw, "demo", "port"); err != nil {
 			t.Fatalf("plant %s bad row: %v", name, err)
 		}
-		got, err := svc.GetNumber(ctx, "site", "port")
-		if err != nil || got != 8080 {
-			t.Fatalf("GetNumber with %s bad row = (%d, %v), want default 8080 no error", name, got, err)
+		if got, err := svc.GetNumber(ctx, "demo", "port"); err == nil {
+			t.Fatalf("GetNumber with %s bad row = %d, want error", name, got)
+		} else if got != 0 {
+			t.Fatalf("GetNumber with %s bad row = %d, want zero value", name, got)
+		} else if !strings.Contains(err.Error(), "settings: demo.port") {
+			t.Fatalf("GetNumber with %s bad row = %v, want error naming the item", name, err)
 		}
 	}
 
-	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "1e3", "site", "port"); err != nil {
-		t.Fatalf("plant scientific row: %v", err)
+	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "1e3", "demo", "port"); err != nil {
+		t.Fatalf("plant normalized row: %v", err)
 	}
-	if got, err := svc.GetNumber(ctx, "site", "port"); err != nil || got != 1000 {
-		t.Fatalf("GetNumber with scientific row = (%d, %v), want 1000 (jsonb normalizes 1e3)", got, err)
+	if got, err := svc.GetNumber(ctx, "demo", "port"); err != nil || got != 1000 {
+		t.Fatalf("GetNumber with normalized row = (%d, %v), want 1000 (jsonb normalizes 1e3)", got, err)
 	}
 
-	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "3", "site", "title"); err != nil {
+	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "3", "demo", "title"); err != nil {
 		t.Fatalf("plant type-mismatch row: %v", err)
 	}
-	if got, err := svc.GetString(ctx, "site", "title"); err != nil || got != "我的博客" {
-		t.Fatalf("GetString with type-mismatch row = (%q, %v), want default no error", got, err)
+	if got, err := svc.GetString(ctx, "demo", "title"); err == nil {
+		t.Fatalf("GetString with type-mismatch row = %q, want error", got)
+	} else if !strings.Contains(err.Error(), "settings: demo.title") {
+		t.Fatalf("GetString with type-mismatch row = %v, want error naming the item", err)
 	}
 
-	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "null", "site", "title"); err != nil {
+	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "null", "demo", "title"); err != nil {
 		t.Fatalf("plant null row (string): %v", err)
 	}
-	if got, err := svc.GetString(ctx, "site", "title"); err != nil || got != "我的博客" {
-		t.Fatalf("GetString with null row = (%q, %v), want default no error", got, err)
+	if got, err := svc.GetString(ctx, "demo", "title"); err == nil {
+		t.Fatalf("GetString with null row = %q, want error", got)
 	}
 
-	if err := svc.SetBool(ctx, "site", "maintenance", true); err != nil {
+	if err := svc.SetBool(ctx, "demo", "maintenance", true); err != nil {
 		t.Fatalf("SetBool: %v", err)
 	}
-	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "null", "site", "maintenance"); err != nil {
+	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "null", "demo", "maintenance"); err != nil {
 		t.Fatalf("plant null row (bool): %v", err)
 	}
-	if got, err := svc.GetBool(ctx, "site", "maintenance"); err != nil || got {
-		t.Fatalf("GetBool with null row = (%v, %v), want default false no error", got, err)
+	if got, err := svc.GetBool(ctx, "demo", "maintenance"); err == nil {
+		t.Fatalf("GetBool with null row = %v, want error", got)
+	} else if got {
+		t.Fatal("GetBool with null row returned true, want zero value")
+	}
+}
+
+func TestPatchGroupRepairsCorruptValue(t *testing.T) {
+	svc, db := newIntegrationService(t, builtinRegistry)
+	ctx := context.Background()
+
+	if err := svc.SetNumber(ctx, "auth", "session_max_age_days", 7); err != nil {
+		t.Fatalf("SetNumber: %v", err)
+	}
+	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", `"abc"`, "auth", "session_max_age_days"); err != nil {
+		t.Fatalf("plant bad row: %v", err)
+	}
+	if _, err := svc.GetNumber(ctx, "auth", "session_max_age_days"); err == nil {
+		t.Fatal("GetNumber with corrupt row succeeded, want error")
+	}
+
+	values, err := svc.PatchGroup(ctx, "auth", map[string]json.RawMessage{
+		"session_max_age_days": json.RawMessage(`14`),
+	})
+	if err != nil {
+		t.Fatalf("PatchGroup repair = %v, want success", err)
+	}
+	if values["session_max_age_days"] != int64(14) {
+		t.Fatalf("repaired days = %v, want 14", values["session_max_age_days"])
+	}
+	if got, err := svc.GetNumber(ctx, "auth", "session_max_age_days"); err != nil || got != 14 {
+		t.Fatalf("GetNumber after repair = (%d, %v), want 14", got, err)
+	}
+}
+
+func TestPatchGroupRejectsCorruptSiblingBeforeWrite(t *testing.T) {
+	svc, db := newIntegrationService(t, sampleGroups())
+	ctx := context.Background()
+
+	if err := svc.SetNumber(ctx, "demo", "port", 8080); err != nil {
+		t.Fatalf("SetNumber: %v", err)
+	}
+	if _, err := db.SQL().Exec("UPDATE setting_values SET value = $1::jsonb WHERE setting_group = $2 AND name = $3", "3.5", "demo", "port"); err != nil {
+		t.Fatalf("plant bad row: %v", err)
+	}
+
+	if _, err := svc.PatchGroup(ctx, "demo", map[string]json.RawMessage{"title": json.RawMessage(`"新标题"`)}); err == nil {
+		t.Fatal("PatchGroup with corrupt sibling succeeded, want error")
+	}
+	if raw, ok, _ := (&repository{client: db.Client}).get(ctx, "demo", "title"); !ok || string(raw) != `"我的博客"` {
+		t.Fatalf("failed PatchGroup wrote title = %s, want the seeded default", raw)
+	}
+
+	values, err := svc.PatchGroup(ctx, "demo", map[string]json.RawMessage{"port": json.RawMessage(`1234`)})
+	if err != nil {
+		t.Fatalf("PatchGroup repair = %v, want success", err)
+	}
+	if values["port"] != int64(1234) {
+		t.Fatalf("repaired port = %v, want 1234", values["port"])
 	}
 }
 
 func TestServicePublicSettings(t *testing.T) {
 	groups := []Group{
 		{
-			Name:  "site",
+			Name:  "demo",
 			Items: []Definition{{Name: "title", Type: FieldTypeString, Default: "我的博客"}},
 		},
 		{
@@ -270,7 +381,7 @@ func TestServicePublicSettings(t *testing.T) {
 
 	listed, err := svc.PublicSettings(ctx)
 	if err != nil {
-		t.Fatalf("PublicSettings with no rows = %v", err)
+		t.Fatalf("PublicSettings = %v, want no error", err)
 	}
 	if len(listed) != 2 {
 		t.Fatalf("PublicSettings = %#v, want the two groups carrying a public item", listed)
@@ -297,16 +408,48 @@ func TestServicePublicSettings(t *testing.T) {
 	}
 }
 
-func TestServiceExtraGroupNoMigration(t *testing.T) {
+func TestServiceMissingRowReturnsError(t *testing.T) {
 	groups := append(sampleGroups(), Group{
 		Name:  "extra",
 		Items: []Definition{{Name: "flag", Type: FieldTypeBool, Default: true}},
 	})
-	svc, _ := newIntegrationService(t, groups)
+	svc, db := newIntegrationService(t, groups)
 	ctx := context.Background()
 
-	if got, err := svc.GetBool(ctx, "extra", "flag"); err != nil || !got {
-		t.Fatalf("GetBool extra group = (%v, %v), want default true", got, err)
+	if _, err := db.Client.SettingValue.Delete().
+		Where(settingvalue.SettingGroupEQ("extra"), settingvalue.NameEQ("flag")).
+		Exec(ctx); err != nil {
+		t.Fatalf("delete extra.flag: %v", err)
+	}
+
+	if _, err := svc.GetBool(ctx, "extra", "flag"); err == nil {
+		t.Fatal("GetBool without a row succeeded, want error")
+	} else if !strings.Contains(err.Error(), "extra.flag") {
+		t.Fatalf("GetBool without a row = %v, want error naming extra.flag", err)
+	}
+	if _, err := svc.GetGroup(ctx, "extra"); err == nil {
+		t.Fatal("GetGroup without a row succeeded, want error")
+	}
+}
+
+func TestServiceResetItemWritesDefault(t *testing.T) {
+	svc, db := newIntegrationService(t, sampleGroups())
+	ctx := context.Background()
+
+	if _, err := db.Client.SettingValue.Delete().
+		Where(settingvalue.SettingGroupEQ("demo"), settingvalue.NameEQ("port")).
+		Exec(ctx); err != nil {
+		t.Fatalf("delete demo.port: %v", err)
+	}
+	if _, err := svc.GetNumber(ctx, "demo", "port"); err == nil {
+		t.Fatal("GetNumber without a row succeeded, want error")
+	}
+
+	if err := svc.ResetItem(ctx, "demo", "port"); err != nil {
+		t.Fatalf("ResetItem: %v", err)
+	}
+	if got, err := svc.GetNumber(ctx, "demo", "port"); err != nil || got != 8080 {
+		t.Fatalf("GetNumber after ResetItem = (%d, %v), want 8080", got, err)
 	}
 }
 
@@ -314,21 +457,21 @@ func TestServiceUpdatedAtRefresh(t *testing.T) {
 	svc, db := newIntegrationService(t, sampleGroups())
 	ctx := context.Background()
 
-	if err := svc.SetString(ctx, "site", "title", "第一次"); err != nil {
+	if err := svc.SetString(ctx, "demo", "title", "第一次"); err != nil {
 		t.Fatalf("SetString 1: %v", err)
 	}
 	first, err := db.Client.SettingValue.Query().
-		Where(settingvalue.SettingGroupEQ("site"), settingvalue.NameEQ("title")).
+		Where(settingvalue.SettingGroupEQ("demo"), settingvalue.NameEQ("title")).
 		Only(ctx)
 	if err != nil {
 		t.Fatalf("query first: %v", err)
 	}
 	time.Sleep(20 * time.Millisecond)
-	if err := svc.SetString(ctx, "site", "title", "第二次"); err != nil {
+	if err := svc.SetString(ctx, "demo", "title", "第二次"); err != nil {
 		t.Fatalf("SetString 2: %v", err)
 	}
 	second, err := db.Client.SettingValue.Query().
-		Where(settingvalue.SettingGroupEQ("site"), settingvalue.NameEQ("title")).
+		Where(settingvalue.SettingGroupEQ("demo"), settingvalue.NameEQ("title")).
 		Only(ctx)
 	if err != nil {
 		t.Fatalf("query second: %v", err)
@@ -336,7 +479,7 @@ func TestServiceUpdatedAtRefresh(t *testing.T) {
 	if !second.UpdatedAt.After(first.UpdatedAt) {
 		t.Fatalf("updated_at not refreshed: %v -> %v", first.UpdatedAt, second.UpdatedAt)
 	}
-	if got, _ := svc.GetString(ctx, "site", "title"); got != "第二次" {
+	if got, _ := svc.GetString(ctx, "demo", "title"); got != "第二次" {
 		t.Fatalf("value after second write = %q", got)
 	}
 }

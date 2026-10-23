@@ -25,6 +25,7 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/settings"
 )
 
 func testConfig(t *testing.T, environment string) config.Config {
@@ -1201,14 +1202,29 @@ func TestRegistrationControlEndToEnd(t *testing.T) {
 	regBody := map[string]any{"email": email, "nickname": "regctl" + tag, "password": "pass-12345"}
 	endpoint := ts.URL + "/api/v1/admin/settings/register"
 
-	clearSettings := func() {
-		if _, err := db.SQL().Exec("DELETE FROM setting_values WHERE setting_group = $1", "register"); err != nil {
-			t.Fatalf("clear register settings: %v", err)
+	resetRegister := func() error {
+		module, err := settings.New(db)
+		if err != nil {
+			return err
 		}
+		for _, name := range []string{
+			"enabled",
+			"default_group",
+			"email_domain_control_enabled",
+			"allowed_email_domains",
+			"email_verification_enabled",
+		} {
+			if err := module.Service.ResetItem(context.Background(), "register", name); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	clearSettings()
+	if err := resetRegister(); err != nil {
+		t.Fatalf("reset register settings: %v", err)
+	}
 	t.Cleanup(func() {
-		_, _ = db.SQL().Exec("DELETE FROM setting_values WHERE setting_group = $1", "register")
+		_ = resetRegister()
 		_, _ = db.SQL().Exec("DELETE FROM users WHERE email = $1", email)
 	})
 

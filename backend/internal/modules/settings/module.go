@@ -1,8 +1,6 @@
 package settings
 
 import (
-	"log/slog"
-
 	"github.com/gin-gonic/gin"
 
 	"website/backend/internal/database"
@@ -15,7 +13,7 @@ type Module struct {
 }
 
 func New(db *database.Database) (*Module, error) {
-	service, err := newServiceWith(db, builtinRegistry, slog.Default())
+	service, err := newServiceWith(db, builtinRegistry)
 	if err != nil {
 		return nil, err
 	}

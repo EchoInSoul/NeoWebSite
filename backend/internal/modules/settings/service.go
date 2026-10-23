@@ -29,10 +29,9 @@ type ItemWrite struct {
 type Service struct {
 	repo     *repository
 	registry Registry
-	logger   *slog.Logger
 }
 
-func newServiceWith(db *database.Database, groups []Group, logger *slog.Logger) (*Service, error) {
+func newServiceWith(db *database.Database, groups []Group) (*Service, error) {
 	registry, err := compileRegistry(groups)
 	if err != nil {
 		return nil, err
@@ -41,7 +40,7 @@ func newServiceWith(db *database.Database, groups []Group, logger *slog.Logger) 
 	if db != nil {
 		repo = &repository{client: db.Client}
 	}
-	return &Service{repo: repo, registry: registry, logger: logger}, nil
+	return &Service{repo: repo, registry: registry}, nil
 }
 
 func (s *Service) lookup(group, name string) (Definition, error) {
@@ -70,12 +69,12 @@ func (s *Service) getTyped[T any](ctx context.Context, group, name string, field
 		return zero, err
 	}
 	if !ok {
-		return def.Default.(T), nil
+		return zero, fmt.Errorf("settings: %s.%s: not configured", group, name)
 	}
 	value, err := decodeTyped(fieldType, raw)
 	if err != nil {
-		s.fallback(group, name)
-		return def.Default.(T), nil
+		slog.Error("settings: stored value is corrupt", "group", group, "name", name, "error", err)
+		return zero, fmt.Errorf("settings: %s.%s: %w", group, name, err)
 	}
 	return value.(T), nil
 }
@@ -98,13 +97,13 @@ type GroupValues struct {
 }
 
 func (s *Service) GetGroup(ctx context.Context, group string) (map[string]any, error) {
-	return s.readGroup(ctx, group, func(Definition) bool { return true })
+	return s.readGroup(ctx, group, func(Definition) bool { return true }, nil)
 }
 
 func (s *Service) PublicSettings(ctx context.Context) ([]GroupValues, error) {
 	out := make([]GroupValues, 0, len(s.registry.order))
 	for _, group := range s.registry.order {
-		values, err := s.readGroup(ctx, group, func(def Definition) bool { return def.Public })
+		values, err := s.readGroup(ctx, group, func(def Definition) bool { return def.Public }, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +115,7 @@ func (s *Service) PublicSettings(ctx context.Context) ([]GroupValues, error) {
 	return out, nil
 }
 
-func (s *Service) readGroup(ctx context.Context, group string, keep func(Definition) bool) (map[string]any, error) {
+func (s *Service) readGroup(ctx context.Context, group string, keep func(Definition) bool, written map[string]any) (map[string]any, error) {
 	items, ok := s.registry.groups[group]
 	if !ok {
 		return nil, ErrUnknownGroup
@@ -134,16 +133,18 @@ func (s *Service) readGroup(ctx context.Context, group string, keep func(Definit
 		if !keep(def) {
 			continue
 		}
+		if value, ok := written[name]; ok {
+			out[name] = value
+			continue
+		}
 		raw, ok := overrides[name]
 		if !ok {
-			out[name] = def.Default
-			continue
+			return nil, fmt.Errorf("settings: %s.%s: not configured", group, name)
 		}
 		value, err := decodeTyped(def.Type, raw)
 		if err != nil {
-			s.fallback(group, name)
-			out[name] = def.Default
-			continue
+			slog.Error("settings: stored value is corrupt", "group", group, "name", name, "error", err)
+			return nil, fmt.Errorf("settings: %s.%s: %w", group, name, err)
 		}
 		out[name] = value
 	}
@@ -232,13 +233,13 @@ func (s *Service) PatchGroup(ctx context.Context, group string, raw map[string]j
 	if err != nil {
 		return nil, err
 	}
+	merged, err := s.mergedGroupValues(ctx, group, writes)
+	if err != nil {
+		return nil, err
+	}
 	if validator, ok := s.registry.validators[group]; ok {
 		touched := touchedNames(writes)
 		if validatorApplies(validator, touched) {
-			merged, err := s.mergedGroupValues(ctx, group, writes)
-			if err != nil {
-				return nil, err
-			}
 			if err := validator.check(merged, touched); err != nil {
 				return nil, err
 			}
@@ -247,7 +248,7 @@ func (s *Service) PatchGroup(ctx context.Context, group string, raw map[string]j
 	if err := s.repo.upsertMany(ctx, group, values); err != nil {
 		return nil, err
 	}
-	return s.GetGroup(ctx, group)
+	return merged, nil
 }
 
 func (s *Service) resolveGroupWrites(group string, items []ItemWrite) (map[string]json.RawMessage, error) {
@@ -305,26 +306,19 @@ func validatorApplies(validator groupValidator, touched map[string]bool) bool {
 }
 
 func (s *Service) mergedGroupValues(ctx context.Context, group string, items []ItemWrite) (map[string]any, error) {
-	merged, err := s.readGroup(ctx, group, func(Definition) bool { return true })
-	if err != nil {
-		return nil, err
-	}
+	written := make(map[string]any, len(items))
 	for _, item := range items {
-		merged[item.Name] = item.Value
+		written[item.Name] = item.Value
 	}
-	return merged, nil
+	return s.readGroup(ctx, group, func(Definition) bool { return true }, written)
 }
 
 func (s *Service) ResetItem(ctx context.Context, group, name string) error {
-	if _, err := s.lookup(group, name); err != nil {
+	def, err := s.lookup(group, name)
+	if err != nil {
 		return err
 	}
-	_, err := s.repo.delete(ctx, group, name)
-	return err
-}
-
-func (s *Service) fallback(group, name string) {
-	s.logger.Warn("settings: bad row, using default", "group", group, "name", name, "category", "type_mismatch")
+	return s.repo.upsert(ctx, group, name, marshalJSON(def.Default))
 }
 
 func decodeTyped(fieldType FieldType, raw json.RawMessage) (any, error) {
@@ -338,23 +332,23 @@ func decodeTyped(fieldType FieldType, raw json.RawMessage) (any, error) {
 	case FieldTypeString:
 		s, ok := out.(string)
 		if !ok {
-			return nil, fmt.Errorf("settings: not a JSON string")
+			return nil, errors.New("not a JSON string")
 		}
 		return s, nil
 	case FieldTypeNumber:
 		number, ok := out.(json.Number)
 		if !ok {
-			return nil, fmt.Errorf("settings: not a JSON number")
+			return nil, errors.New("not a JSON number")
 		}
 		return strconv.ParseInt(string(number), 10, 64)
 	case FieldTypeBool:
 		b, ok := out.(bool)
 		if !ok {
-			return nil, fmt.Errorf("settings: not a JSON bool")
+			return nil, errors.New("not a JSON bool")
 		}
 		return b, nil
 	}
-	return nil, fmt.Errorf("settings: unknown field type %d", fieldType)
+	return nil, fmt.Errorf("unknown field type %d", fieldType)
 }
 
 func decodeNumber(raw json.RawMessage) (int64, error) {
