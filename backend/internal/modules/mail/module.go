@@ -20,7 +20,7 @@ func New(cfg config.Config, settings Settings) *Module {
 	go m.run()
 	return &Module{
 		Mailer:     m,
-		controller: newController(m),
+		controller: newController(m, settings),
 	}
 }
 

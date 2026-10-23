@@ -1315,6 +1315,14 @@ func TestMailSettingsEndToEnd(t *testing.T) {
 		t.Fatalf("default values = %v, want enabled true, port 587, starttls, NeoBlog", defaults)
 	}
 
+	status, values = exchangeJSON(t, ownerClient, http.MethodPost, ts.URL+"/api/v1/admin/mail/messages", map[string]any{
+		"to":       owner.Email,
+		"template": "signup_code",
+	})
+	if status != http.StatusCreated || values["subject"] != "NeoBlog 注册验证码" {
+		t.Fatalf("template send = %d %v, want 201 with default signup subject", status, values)
+	}
+
 	status, values = exchangeJSON(t, ownerClient, http.MethodPatch, endpoint, map[string]any{
 		"enabled":         true,
 		"smtp_host":       "smtp.example.com",

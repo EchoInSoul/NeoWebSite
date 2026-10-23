@@ -102,6 +102,23 @@ func TestResolveTransportConfigFallsBackToEnvironmentWhenHostEmpty(t *testing.T)
 	}
 }
 
+func TestResolveTransportConfigLogModeKeepsStoredSender(t *testing.T) {
+	values := mailSettingsValues()
+	values["smtp_host"] = ""
+	stub := &settingsStub{values: values}
+
+	cfg, send, err := resolveTransportConfig(context.Background(), config.Config{}, stub)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if send {
+		t.Fatal("empty host without environment SMTP must use log mode")
+	}
+	if cfg.SMTPFrom != "sender@example.com" || cfg.SMTPFromName != "Example" {
+		t.Fatalf("log sender = %q/%q, want stored sender", cfg.SMTPFrom, cfg.SMTPFromName)
+	}
+}
+
 func TestResolveTransportConfigDisabledUsesLogMode(t *testing.T) {
 	values := mailSettingsValues()
 	values["enabled"] = false

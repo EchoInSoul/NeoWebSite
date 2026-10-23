@@ -30,8 +30,29 @@ func (s *stubMailer) SendSync(_ context.Context, msg Message) error {
 
 func (s *stubMailer) Close(_ context.Context) error { return nil }
 
-func newControllerTestServer(t *testing.T, mailer Mailer, groupKey string) *httptest.Server {
+type controllerSettingsStub struct {
+	groups map[string]map[string]any
+	errs   map[string]error
+}
+
+func (s *controllerSettingsStub) GetGroup(_ context.Context, group string) (map[string]any, error) {
+	if err, ok := s.errs[group]; ok {
+		return nil, err
+	}
+	values, ok := s.groups[group]
+	if !ok {
+		return nil, errors.New("settings group not found")
+	}
+	return values, nil
+}
+
+func newControllerTestServer(t *testing.T, mailer Mailer, groupKey string, settings ...Settings) *httptest.Server {
 	t.Helper()
+
+	var settingsService Settings
+	if len(settings) > 0 {
+		settingsService = settings[0]
+	}
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -39,7 +60,7 @@ func newControllerTestServer(t *testing.T, mailer Mailer, groupKey string) *http
 		c.Set(guard.SessionIdentityKey, guard.Identity{UserID: "u1", GroupKey: groupKey})
 		c.Next()
 	})
-	newController(mailer).registerProtected(engine.Group(""))
+	newController(mailer, settingsService).registerProtected(engine.Group(""))
 
 	return httptest.NewServer(engine)
 }
@@ -109,6 +130,73 @@ func TestCreateMessageExtractsAddressFromDisplayName(t *testing.T) {
 	}
 	if mailer.got.To != "me@example.com" {
 		t.Fatalf("sent to = %q, want me@example.com", mailer.got.To)
+	}
+}
+
+func TestCreateMessageRendersSelectedTemplate(t *testing.T) {
+	mailer := &stubMailer{}
+	settings := &controllerSettingsStub{groups: map[string]map[string]any{
+		"site": {
+			"title": "My Blog",
+			"url":   "https://blog.example.com",
+		},
+		"mail": {
+			"signup_code_subject": "自定义注册验证码",
+			"signup_code_body":    "<p>{{.siteTitle}} / {{.username}} / {{.code}} / {{.expiresMinutes}} / {{.siteUrl}}</p>",
+		},
+	}}
+	ts := newControllerTestServer(t, mailer, "owner", settings)
+
+	resp := postMessage(t, ts, `{"to":"me@example.com","template":"signup_code"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	if mailer.calls != 1 {
+		t.Fatalf("send sync calls = %d, want 1", mailer.calls)
+	}
+	if mailer.got.Subject != "自定义注册验证码" {
+		t.Fatalf("subject = %q, want custom subject", mailer.got.Subject)
+	}
+	for _, want := range []string{"My Blog", "me", "123456", "10", "https://blog.example.com"} {
+		if !strings.Contains(mailer.got.Body.HTML, want) {
+			t.Fatalf("html body %q missing %q", mailer.got.Body.HTML, want)
+		}
+	}
+	if !strings.Contains(mailer.got.Body.Text, "注册验证码") || !strings.Contains(mailer.got.Body.Text, "123456") {
+		t.Fatalf("text body = %q, want built-in signup preview", mailer.got.Body.Text)
+	}
+}
+
+func TestCreateMessageUsesBuiltinTemplateDefaults(t *testing.T) {
+	mailer := &stubMailer{}
+	ts := newControllerTestServer(t, mailer, "owner")
+
+	resp := postMessage(t, ts, `{"to":"me@example.com","template":"password_reset"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	if mailer.got.Subject != "NeoBlog 密码重置验证码" {
+		t.Fatalf("subject = %q, want default password reset subject", mailer.got.Subject)
+	}
+	if !strings.Contains(mailer.got.Body.HTML, "密码重置验证码") || !strings.Contains(mailer.got.Body.Text, "123456") {
+		t.Fatalf("body not rendered: html=%q text=%q", mailer.got.Body.HTML, mailer.got.Body.Text)
+	}
+}
+
+func TestCreateMessageRejectsUnknownTemplate(t *testing.T) {
+	mailer := &stubMailer{}
+	ts := newControllerTestServer(t, mailer, "owner")
+
+	resp := postMessage(t, ts, `{"to":"me@example.com","template":"bogus"}`)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	errObj := decodeErrorEnvelope(t, resp)
+	if errObj["code"] != "invalid_request" || errObj["param"] != "template" {
+		t.Fatalf("error = %v, want invalid_request param template", errObj)
+	}
+	if mailer.calls != 0 {
+		t.Fatalf("send sync calls = %d, want 0", mailer.calls)
 	}
 }
 

@@ -26,6 +26,23 @@ func TestRenderMissingTemplate(t *testing.T) {
 	}
 }
 
+func TestRenderCustomHTMLEscapesData(t *testing.T) {
+	html, err := renderHTML("<p>{{.code}}</p>", map[string]string{"code": "<script>alert(1)</script>"})
+	if err != nil {
+		t.Fatalf("render custom html: %v", err)
+	}
+	if strings.Contains(html, "<script>alert(1)</script>") {
+		t.Fatalf("custom html must escape data: %s", html)
+	}
+	if !strings.Contains(html, "&lt;script&gt;") {
+		t.Fatalf("custom html must contain escaped data: %s", html)
+	}
+
+	if _, err := renderHTML("{{.code", map[string]string{"code": "x"}); err == nil {
+		t.Fatal("expected an error for an invalid custom template")
+	}
+}
+
 func TestRenderEscapesHTML(t *testing.T) {
 	body, err := Render("example", map[string]string{"Time": "<script>alert(1)</script>", "Site": "NeoBlog"})
 	if err != nil {

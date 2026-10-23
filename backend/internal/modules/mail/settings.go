@@ -107,7 +107,10 @@ func resolveTransportConfig(ctx context.Context, env config.Config, settings Set
 		return cfg, false, nil
 	}
 	if cfg.SMTPHost == "" {
-		return env, env.SMTPHost != "", nil
+		if env.SMTPHost == "" {
+			return cfg, false, nil
+		}
+		return env, true, nil
 	}
 	if err := validateEffectiveConfig(cfg); err != nil {
 		return config.Config{}, false, err

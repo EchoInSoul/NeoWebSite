@@ -1,7 +1,8 @@
 package mail
 
 type createMessageRequest struct {
-	To string `json:"to"`
+	To       string `json:"to"`
+	Template string `json:"template"`
 }
 
 type createMessageResponse struct {

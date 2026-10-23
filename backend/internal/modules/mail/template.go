@@ -34,3 +34,16 @@ func Render(name string, data any) (Body, error) {
 
 	return Body{Text: textBuffer.String(), HTML: htmlBuffer.String()}, nil
 }
+
+func renderHTML(source string, data any) (string, error) {
+	template, err := htmltemplate.New("custom").Parse(source)
+	if err != nil {
+		return "", fmt.Errorf("mail: parse custom html: %w", err)
+	}
+
+	var buffer bytes.Buffer
+	if err := template.Execute(&buffer, data); err != nil {
+		return "", fmt.Errorf("mail: render custom html: %w", err)
+	}
+	return buffer.String(), nil
+}
