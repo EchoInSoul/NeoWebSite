@@ -18,6 +18,18 @@ import { useTranslations } from "next-intl";
 import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -29,6 +41,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useMailSettingsSave } from "@/hooks/use-mail-settings-save";
+import { useMailTestSend } from "@/hooks/use-mail-test-send";
 import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
 import {
   MAIL_ENCRYPTION_SSL,
@@ -50,12 +63,19 @@ const controlClassName = "w-70";
 
 export function MailSettingsForm({
   settings,
+  currentUserEmail,
+  canSendTestEmail,
 }: {
   settings: MailSettingsValues;
+  currentUserEmail: string;
+  canSendTestEmail: boolean;
 }) {
   const t = useTranslations("settings");
+  const tCommon = useTranslations("common");
   const { values, isDirty, isSaving, update, save } =
     useMailSettingsSave(settings);
+  const { target, isSending, requestSend, close, confirmSend } =
+    useMailTestSend(currentUserEmail);
   const smtpExpansion = useSwitchRowExpansion(values.enabled);
 
   const unknownEncryption = MAIL_ENCRYPTIONS.includes(values.smtpEncryption)
@@ -76,6 +96,7 @@ export function MailSettingsForm({
       label: t("mailTemplateSignupCode"),
       subjectField: "signupCodeSubject",
       bodyField: "signupCodeBody",
+      apiName: "signup_code",
     },
     {
       key: "passwordReset",
@@ -83,12 +104,24 @@ export function MailSettingsForm({
       label: t("mailTemplatePasswordReset"),
       subjectField: "passwordResetSubject",
       bodyField: "passwordResetBody",
+      apiName: "password_reset",
     },
   ] as const;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void save();
+  }
+
+  async function handleConfirmSend() {
+    if (isDirty) {
+      const saved = await save();
+      if (!saved) {
+        close();
+        return;
+      }
+    }
+    await confirmSend();
   }
 
   return (
@@ -253,6 +286,33 @@ export function MailSettingsForm({
         {templateRows.map((template) => (
           <ConsoleSettingsRow
             key={template.key}
+            control={
+              canSendTestEmail ? (
+                <Button
+                  aria-label={t("mailSendTest", { template: template.label })}
+                  disabled={
+                    !values.enabled || isSaving || currentUserEmail === ""
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    requestSend({
+                      template: template.apiName,
+                      label: template.label,
+                    });
+                  }}
+                  size="icon-sm"
+                  title={
+                    values.enabled
+                      ? t("mailSendTest", { template: template.label })
+                      : t("mailSendTestEnableFirst")
+                  }
+                  type="button"
+                  variant="ghost"
+                >
+                  <Send aria-hidden="true" />
+                </Button>
+              ) : undefined
+            }
             defaultCollapsed
             expandedContent={
               <div className="flex w-full flex-col gap-4 px-5 py-4">
@@ -325,6 +385,43 @@ export function MailSettingsForm({
         isPending={isSaving}
         label={t("save")}
       />
+      <AlertDialog
+        open={target !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            close();
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <Send aria-hidden="true" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>{t("mailSendTestConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("mailSendTestConfirmDescription", {
+                template: target?.label ?? "",
+                email: currentUserEmail,
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSending}>
+              {tCommon("cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isSaving || isSending}
+              onClick={() => void handleConfirmSend()}
+              type="button"
+            >
+              {isDirty
+                ? t("mailSendTestSaveAndSend")
+                : t("mailSendTestConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

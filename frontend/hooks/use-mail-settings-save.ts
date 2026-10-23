@@ -58,16 +58,19 @@ export function useMailSettingsSave(initial: MailSettingsValues) {
     setValues((previous) => ({ ...previous, [field]: value }));
   }
 
-  async function save() {
-    if (isSaving || !isDirty) {
-      return;
+  async function save(): Promise<boolean> {
+    if (isSaving) {
+      return false;
+    }
+    if (!isDirty) {
+      return true;
     }
 
     const issue = validateMailSettings(values, baseline);
 
     if (issue !== null) {
       toast.error(issueMessage(issue));
-      return;
+      return false;
     }
 
     setIsSaving(true);
@@ -80,30 +83,32 @@ export function useMailSettingsSave(initial: MailSettingsValues) {
 
       if (parsed === null) {
         toast.error(t("saveFailed"));
-        return;
+        return false;
       }
 
       setValues(parsed);
       setBaseline(parsed);
       toast.success(t("saved"));
       router.refresh();
+      return true;
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        return;
+        return false;
       }
       if (error instanceof ApiError && error.status === 403) {
         toast.error(t("noPermissionToSave"));
-        return;
+        return false;
       }
       if (error instanceof ApiError && error.code === "setting_conflict") {
         toast.error(conflictMessage(error));
-        return;
+        return false;
       }
       if (looksLikeServiceFailure(error)) {
         toast.error(tCommon("serviceUnavailable"));
-        return;
+        return false;
       }
       toast.error(t("saveFailed"));
+      return false;
     } finally {
       setIsSaving(false);
     }
