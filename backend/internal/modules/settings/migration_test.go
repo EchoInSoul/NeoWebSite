@@ -38,7 +38,7 @@ func TestSettingValueSchema(t *testing.T) {
 	ctx := context.Background()
 
 	created, err := db.Client.SettingValue.Create().
-		SetSettingGroup("site").
+		SetSettingGroup("schema_probe").
 		SetName("title").
 		SetValue(json.RawMessage(`"我的博客"`)).
 		Save(ctx)
@@ -53,7 +53,7 @@ func TestSettingValueSchema(t *testing.T) {
 	}
 
 	dup, err := db.Client.SettingValue.Create().
-		SetSettingGroup("site").
+		SetSettingGroup("schema_probe").
 		SetName("title").
 		SetValue(json.RawMessage(`"x"`)).
 		Save(ctx)
