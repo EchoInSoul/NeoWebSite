@@ -4,6 +4,46 @@
 
 ---
 
+## 2026-10-23 · 兜底/回退清理与 AI 开发约束落盘
+
+**范围**：后端 `internal/modules/auth/{service.go,session.go,settings_consumers_test.go}`、`internal/app/{app.go,app_test.go}`、`internal/common/apierror/apierror.go`、`internal/common/guard/{activity.go,activity_test.go}`、`internal/config/{config.go,config_test.go}`、`.env.example`、`README.md`；新增仓库根 `AGENTS.md`；另加本条目。前端零改动。
+
+**动机**：用户为 AI 开发定新规——未经授权的兜底/回退逻辑一律不允许存在。先逐条裁定存量，再把规则写进 `backend/README.md` 硬性规则第 9 条与根 `AGENTS.md`。
+
+**已移除的兜底**：
+
+- **2FA 站级开关**：`twoFactorAvailable` 读 `auth.totp_enabled` 失败不再当「开着」，签名改为返回 `(bool, error)`，`SetupTOTP` / `EnableTOTP` 原样上抛；设置/启用 2FA 在读失败时返回 500。
+- **会话有效期**：`establishSession` 先读设置再生效会话；`session_max_age_enabled` 关闭时正常跳过，读开关或读天数失败直接上抛（登录 500）。登录路径不再做 1–30 范围检查；保存时的校验仍由后端 `validateAuthGroup` 与前端 `validateLoginSettings` 承担。
+- **人机验证**：`verifyCaptcha` 三处 `err != nil` 分支删除，读失败走零值（开关视为关、provider 为空、密钥为空）→ 放行；密钥为空继续放行。行为与改造前一致，只是不再保留显式的错误兜底分支。
+- **数据库与会话**：库不可用时，scs 读会话失败不再落成 401/500。新增 `apierror.WriteHTTP`，`newSessionManager` 设 `ErrorFunc` 把连接级错误写成 503 `service_unavailable`；响应已写出时只记日志，避免二次写坏 body（`writeTracker`）。README 原文「带 cookie 仍是 401」实测为 500，已改成 503 口径。
+- **Gin 模式**：`ginMode` 对未知环境返回错误，`app.New` 启动失败，不再静默退回 `release`。
+- **配置**：`DB_MAX_OPEN_CONNS=10`、`DB_MAX_IDLE_CONNS=5`、`DB_CONN_MAX_LIFETIME=30m`、`SESSION_LIFETIME=168h` 改为 `internal/config` 常量，同名环境变量不再读取；`.env` 与 `.env.example` 的四个键删除。`SMTP_PORT` / `SMTP_TLS` 仍为环境变量，只在 `SMTP_HOST` 非空时必填。
+- **会话活跃时间**：`auth.last_seen_at` 解析失败改为销毁会话并返回 401，不再重写成当前时间继续。
+- **dummy 哈希**：启动生成失败直接 panic，不再把 `dummyHash` 置 nil 继续。
+
+**保留并记明**：
+
+- **降级启动**（第 6 条）：库首次 Ping 失败照常监听、读库端点 503、库恢复自愈。用户明确保留。
+- **限流 `limit <= 0`**（第 8 条）：作为「关闭限流」的显式测试开关保留；生产阈值都是正数常量。
+- **`APP_ENV` 默认 production**（第 10 条）：沿用 2026-10-23 环境轮的裁定。
+- **未知 `system_key` 空权限 / 预设组权限走代码**（第 13 条）：失败关闭，用户明确保留。
+- **事务 Rollback 错误忽略（8 处）、`database.Close` 只返回第一个错误、panic → 500**（第 15–17 条）：属清理与 HTTP 兜底，不是失败后换路执行业务；未收到用户选择，按常规做法保留。
+- **前端存量（第 18–28 条）**：公开设置 fail-open、控制台/登录/注册页后端挂了照常出壳或表单、Turnstile 不可用拒绝、读失败显示加载失败、健康探测文案、主题 localStorage 失败退 system，均保留未改。第 22 条（页级身份查询失败当无用户）与第 25 条（未知错误码落通用文案）没有单独授权记录，但撑着「后端挂了控制台外壳不掉」的既有行为，暂未改动。
+- **邮件第 4 条**（SMTP 为空走日志 sender）暂时后置；**第 5 条**（异步重试后丢弃）按「不做发信」跳过。
+
+**验证**：`gofmt -l` 干净、`go build ./...` 通过、`bash scripts/test.sh` 全绿（app / apierror / apiresponse / guard / ratelimit / rbac / config / database / access / auth / health / mail / settings）、`bash scripts/check.sh` 输出 `check ok`。新增/改写的用例覆盖：settings 不可用时登录 500、2FA setup 500、degraded server 带 cookie 503、未知环境 `ginMode` 返回错误、坏活跃时间 401、固定连接池/会话常量忽略同名环境变量。
+
+**已知影响**：
+
+- 现有会话若 `auth.last_seen_at` 为空或损坏，会在下一次受保护请求被销毁并 401；本仓登录路径一直写该键，正常会话不受影响。
+- 连接池与会话默认有效期不再可调；`auth.session_max_age_enabled` 开启时仍由 `session_max_age_days`（1–30）决定新会话 deadline。
+- `SMTP_PORT` / `SMTP_TLS` 仍是环境变量；设置 `SMTP_HOST` 后缺失会启动失败并点名变量。
+- 2026-10-23 的 `auth` 设置读取失败三处已全部处理；邮件两条留待后续。
+
+**提交状态**：主体随 `d24580e` / `b538ad4` / `33e5552` 三笔提交入库，本条目随 docs 提交；均未推送。工作区同时存在并行会话的 mail / 前端改动，不属于本批。
+
+---
+
 ## 2026-10-23 · 邮件模板测试发送（行内发送按钮 + 确认弹窗）
 
 **范围**：后端 `internal/modules/mail/{controller.go,controller_test.go,dto.go,module.go,template.go}`、新增 `templates/{signup_code,password_reset}.{html,txt}`、`internal/app/app_test.go`、`README.md`、API 规范；前端 `app/console/settings/mail/{page.tsx,mail-settings-form.tsx}`、新增 `hooks/use-mail-test-send.ts`、`hooks/use-mail-settings-save.ts`、`messages/{zh-CN,en}.json`；另加本条目。

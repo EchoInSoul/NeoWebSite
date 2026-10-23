@@ -42,6 +42,7 @@
 6. 代码零注释（只有 Go 工具链自动生成的注释例外）；缩进一律走 gofmt。
 7. 模块禁止自建数据库连接（禁止 `sql.Open` 等），只能用注入进来的连接；**同理禁止自建 SMTP 客户端，发信一律用注入的 `mail.Mailer`**。
 8. `internal/database` 不得 import 任何业务模块。
+9. **AI 不得自行添加兜底/回退逻辑**：主路径失败（缺数据、坏值、依赖不可用、超时、报错）时，不得静默改用默认值、降级实现、空状态、重试后丢弃或放行。失败就按错误上抛；启动期问题就让启动失败。确需兜底时，必须由用户在对话/需求/规格中明确授权，并在 `docs/DEVLOG.md` 记明授权来源与适用范围。
 
 ## 新增一个功能模块的顺序
 
@@ -62,13 +63,9 @@ postsModule.Register(api)
 | `SERVICE_NAME` | `website-backend` | 服务名 |
 | `DATABASE_URL` | 无（必需） | Postgres 连接串；可写在 `backend/.env`（启动时自动加载，环境变量优先；文件不存在时**不会**自动生成，见「运行」）；取不到值时**启动即失败**，串本身不可达时照常启动、进降级态（见「运行」的降级启动） |
 | `DATABASE_URL_TEST` | 无 | 集成测试专用连接串；不设置时集成用例自动 skip |
-| `DB_MAX_OPEN_CONNS` | `10` | 连接池最大连接数 |
-| `DB_MAX_IDLE_CONNS` | `5` | 连接池空闲连接数（不得超过最大连接数） |
-| `DB_CONN_MAX_LIFETIME` | `30m` | 连接最长存活时间 |
-| `SESSION_LIFETIME` | `168h` | 会话默认有效期（`auth.session_max_age_enabled` 关闭时生效；开启时由 `session_max_age_days` 决定）。浏览器 cookie 的 `Max-Age` 跟随当前会话 deadline |
 | `SMTP_HOST` | 空 | SMTP 服务器；**`mail.smtp_host` 为空时才作为回退**；两者都为空时邮件只写日志、不影响启动 |
-| `SMTP_PORT` | `587` | SMTP 端口（正整数 ≤ 65535；**25 不受支持**——会被 go-mail 视为未设置并改写成 587/465） |
-| `SMTP_TLS` | `starttls` | `starttls`（配 587）或 `ssl`（配 465） |
+| `SMTP_PORT` | 无（设置 `SMTP_HOST` 时必填） | SMTP 端口（正整数 ≤ 65535；**25 不受支持**——会被 go-mail 视为未设置并改写成 587/465） |
+| `SMTP_TLS` | 无（设置 `SMTP_HOST` 时必填） | `starttls`（配 587）或 `ssl`（配 465） |
 | `SMTP_USERNAME` | 空 | 认证用户名；为空则不做 AUTH（自建中继场景） |
 | `SMTP_PASSWORD` | 空 | 认证密码（QQ/163 为授权码）；用户名非空时必填 |
 | `SMTP_FROM` | 无 | 发件地址；`SMTP_HOST` 非空时必填 |
@@ -77,7 +74,9 @@ postsModule.Register(api)
 | `TOTP_ENCRYPTION_KEY` | 无（必需） | 两步验证密钥的 AES-256-GCM 加密钥匙；base64 且解码后恰 32 字节；缺失或非法都**启动即失败**；丢失后已启用 2FA 的用户验码报 500，只能清列重置 |
 | `POSTGRES_PASSWORD` | `neoblog` | 本地容器密码（compose 读 `.env`）；改动需同步 `DATABASE_URL` |
 
-`SMTP_*` 只在 `mail.smtp_host` 为空时整组生效；设置组填了主机就整组使用设置组，不逐项合并。`mail.enabled=false` 时无论环境变量如何都只写日志。
+`SMTP_*` 只在 `mail.smtp_host` 为空时整组生效；设置组填了主机就整组使用设置组，不逐项合并。`mail.enabled=false` 时无论环境变量如何都只写日志。`SMTP_PORT` / `SMTP_TLS` 只在 `SMTP_HOST` 非空时必填；`SMTP_HOST` 为空时这两项不读、不校验。
+
+连接池与默认会话有效期不是环境变量：`DB_MAX_OPEN_CONNS=10` / `DB_MAX_IDLE_CONNS=5` / `DB_CONN_MAX_LIFETIME=30m` / `SESSION_LIFETIME=168h` 是 `internal/config` 里的常量，设置同名环境变量也不会生效。`SESSION_LIFETIME` 仅在 `auth.session_max_age_enabled` 关闭时作为默认有效期。
 
 ## 环境与构建
 
@@ -385,4 +384,4 @@ ADDR=:9090 bash scripts/dev.sh  # 自定义端口
 
 **降级启动**：`database.Open` 只在驱动 / DSN 语法层面失败才返回错误；首次 Ping 失败被记在 `Database.StartupError()` 里，`main.go` 打一条 `degraded start: …` 日志后照常监听端口，所有路由照常注册。要读写库的端点在此期间统一 503 `service_unavailable`（判定见「认证」章节的错误信封段），连不上那一刻起的请求不会退化成 401 或 HTML 错误页。连接池是惰性的，库恢复后无需重启进程：下一次取连接即成功（已实测：进程不变，`/healthy` 从 503 翻回 200、登录从 503 回到 401 `invalid_credentials`）。
 
-已知取舍：会话本身存在 Postgres（scs 的 `postgresstore`），库不可用时 scs 把「读不到会话」与「没有会话」一视同仁，带 cookie 打受保护端点仍是 401 `unauthorized`，不是 503。
+会话本身存在 Postgres（scs 的 `postgresstore`）：库不可用时带 cookie 打受保护端点返回 503 `service_unavailable`（`newSessionManager` 的 `ErrorFunc` 把会话存储的连接级错误交回统一错误信封）；不带 cookie 的请求不碰会话存储，仍按路由自身校验返回（例如未登录 401）。
