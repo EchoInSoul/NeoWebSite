@@ -87,92 +87,20 @@ func TestLoadRejectsUnknownEnvironment(t *testing.T) {
 	}
 }
 
-func TestLoadDatabaseDefaults(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgresql://neoblog:neoblog@127.0.0.1:5434/neoblog?sslmode=disable")
+func TestLoadUsesFixedPoolAndSessionSettings(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
 	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
+	t.Setenv("DB_MAX_OPEN_CONNS", "99")
+	t.Setenv("DB_MAX_IDLE_CONNS", "99")
+	t.Setenv("DB_CONN_MAX_LIFETIME", "1s")
+	t.Setenv("SESSION_LIFETIME", "1s")
+
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DatabaseURL == "" || cfg.DBMaxOpenConns != 10 || cfg.DBMaxIdleConns != 5 || cfg.DBConnMaxLifetime != 30*time.Minute {
-		t.Fatalf("unexpected defaults: %+v", cfg)
-	}
-}
-
-func TestLoadReadsPoolOverrides(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
-	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
-	t.Setenv("DB_MAX_OPEN_CONNS", "20")
-	t.Setenv("DB_MAX_IDLE_CONNS", "8")
-	t.Setenv("DB_CONN_MAX_LIFETIME", "1h")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.DBMaxOpenConns != 20 || cfg.DBMaxIdleConns != 8 || cfg.DBConnMaxLifetime != time.Hour {
-		t.Fatalf("unexpected overrides: %+v", cfg)
-	}
-}
-
-func TestLoadRejectsInvalidPoolValues(t *testing.T) {
-	cases := []struct {
-		key, value, wantMention string
-	}{
-		{"DB_MAX_OPEN_CONNS", "0", "DB_MAX_OPEN_CONNS"},
-		{"DB_MAX_OPEN_CONNS", "abc", "DB_MAX_OPEN_CONNS"},
-		{"DB_MAX_IDLE_CONNS", "-1", "DB_MAX_IDLE_CONNS"},
-		{"DB_CONN_MAX_LIFETIME", "soon", "DB_CONN_MAX_LIFETIME"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.key+"/"+tc.value, func(t *testing.T) {
-			t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
-			t.Setenv(tc.key, tc.value)
-			if _, err := Load(); err == nil || !strings.Contains(err.Error(), tc.wantMention) {
-				t.Fatalf("expected error mentioning %s, got %v", tc.wantMention, err)
-			}
-		})
-	}
-}
-
-func TestLoadRejectsIdleGreaterThanOpen(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
-	t.Setenv("DB_MAX_OPEN_CONNS", "5")
-	t.Setenv("DB_MAX_IDLE_CONNS", "9")
-	if _, err := Load(); err == nil {
-		t.Fatal("expected error when DB_MAX_IDLE_CONNS > DB_MAX_OPEN_CONNS")
-	}
-}
-
-func TestLoadSessionLifetimeDefaultsToSevenDays(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
-	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.SessionLifetime != 168*time.Hour {
-		t.Fatalf("SessionLifetime = %v, want 168h", cfg.SessionLifetime)
-	}
-}
-
-func TestLoadReadsSessionLifetimeOverride(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
-	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
-	t.Setenv("SESSION_LIFETIME", "1h")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.SessionLifetime != time.Hour {
-		t.Fatalf("SessionLifetime = %v, want 1h", cfg.SessionLifetime)
-	}
-}
-
-func TestLoadRejectsInvalidSessionLifetime(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
-	t.Setenv("SESSION_LIFETIME", "soon")
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SESSION_LIFETIME") {
-		t.Fatalf("expected error mentioning SESSION_LIFETIME, got %v", err)
+	if cfg.DBMaxOpenConns != 10 || cfg.DBMaxIdleConns != 5 || cfg.DBConnMaxLifetime != 30*time.Minute || cfg.SessionLifetime != 168*time.Hour {
+		t.Fatalf("unexpected fixed settings: %+v", cfg)
 	}
 }
 
@@ -183,7 +111,7 @@ func clearSMTPEnv(t *testing.T) {
 	}
 }
 
-func TestLoadSMTPDefaultsWhenHostUnset(t *testing.T) {
+func TestLoadSMTPLeavesPortAndTLSUnsetWhenHostUnset(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
 	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
 	clearSMTPEnv(t)
@@ -192,8 +120,8 @@ func TestLoadSMTPDefaultsWhenHostUnset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.SMTPHost != "" || cfg.SMTPPort != 587 || cfg.SMTPTLS != SMTPTLSStartTLS || cfg.SMTPUsername != "" || cfg.SMTPPassword != "" || cfg.SMTPFrom != "" {
-		t.Fatalf("unexpected SMTP defaults: %+v", cfg)
+	if cfg.SMTPHost != "" || cfg.SMTPPort != 0 || cfg.SMTPTLS != "" || cfg.SMTPUsername != "" || cfg.SMTPPassword != "" || cfg.SMTPFrom != "" {
+		t.Fatalf("unexpected SMTP config: %+v", cfg)
 	}
 	if cfg.SMTPFromName != "NeoBlog" {
 		t.Fatalf("SMTPFromName = %q, want NeoBlog", cfg.SMTPFromName)
@@ -216,9 +144,33 @@ func TestLoadRequiresSMTPFromWhenHostSet(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
 	clearSMTPEnv(t)
 	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "587")
+	t.Setenv("SMTP_TLS", "starttls")
 
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_FROM") {
 		t.Fatalf("expected error mentioning SMTP_FROM, got %v", err)
+	}
+}
+
+func TestLoadRequiresSMTPPortAndTLSWhenHostSet(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
+	t.Setenv("TOTP_ENCRYPTION_KEY", validTOTPEncryptionKey)
+	clearSMTPEnv(t)
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_FROM", "noreply@example.com")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_PORT") {
+		t.Fatalf("expected error mentioning SMTP_PORT, got %v", err)
+	}
+
+	t.Setenv("SMTP_PORT", "587")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_TLS") {
+		t.Fatalf("expected error mentioning SMTP_TLS, got %v", err)
+	}
+
+	t.Setenv("SMTP_TLS", "starttls")
+	if _, err := Load(); err != nil {
+		t.Fatalf("expected no error with SMTP_PORT and SMTP_TLS set, got %v", err)
 	}
 }
 
@@ -226,6 +178,8 @@ func TestLoadRequiresSMTPPasswordWhenUsernameSet(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
 	clearSMTPEnv(t)
 	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "587")
+	t.Setenv("SMTP_TLS", "starttls")
 	t.Setenv("SMTP_FROM", "noreply@example.com")
 	t.Setenv("SMTP_USERNAME", "noreply@example.com")
 
@@ -254,6 +208,7 @@ func TestLoadRejectsInvalidSMTPTLS(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:5434/db")
 	clearSMTPEnv(t)
 	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "587")
 	t.Setenv("SMTP_FROM", "noreply@example.com")
 	t.Setenv("SMTP_TLS", "bogus")
 

@@ -27,10 +27,13 @@ const (
 const DefaultEnvironment = EnvironmentProduction
 
 const (
-	defaultSMTPPort     = 587
-	defaultSMTPFromName = "NeoBlog"
-	maxSMTPPort         = 65535
-	totpKeyBytes        = 32
+	defaultDBMaxOpenConns    = 10
+	defaultDBMaxIdleConns    = 5
+	defaultDBConnMaxLifetime = 30 * time.Minute
+	defaultSessionLifetime   = 168 * time.Hour
+	defaultSMTPFromName      = "NeoBlog"
+	maxSMTPPort              = 65535
+	totpKeyBytes             = 32
 )
 
 type Config struct {
@@ -68,33 +71,14 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	maxOpen, err := getEnvInt("DB_MAX_OPEN_CONNS", 10)
-	if err != nil {
-		return Config{}, err
-	}
-
-	maxIdle, err := getEnvInt("DB_MAX_IDLE_CONNS", 5)
-	if err != nil {
-		return Config{}, err
-	}
-
-	lifetime, err := getEnvDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute)
-	if err != nil {
-		return Config{}, err
-	}
-
-	sessionLifetime, err := getEnvDuration("SESSION_LIFETIME", 168*time.Hour)
-	if err != nil {
-		return Config{}, err
-	}
+	maxOpen := defaultDBMaxOpenConns
+	maxIdle := defaultDBMaxIdleConns
+	lifetime := defaultDBConnMaxLifetime
+	sessionLifetime := defaultSessionLifetime
 
 	smtp, err := loadSMTP()
 	if err != nil {
 		return Config{}, err
-	}
-
-	if maxIdle > maxOpen {
-		return Config{}, fmt.Errorf("DB_MAX_IDLE_CONNS (%d) must not exceed DB_MAX_OPEN_CONNS (%d)", maxIdle, maxOpen)
 	}
 
 	totpKey, err := loadTOTPKey()
@@ -149,13 +133,11 @@ func loadSMTP() (smtpConfig, error) {
 	host := os.Getenv("SMTP_HOST")
 	if host == "" {
 		return smtpConfig{
-			Port:     defaultSMTPPort,
-			TLS:      SMTPTLSStartTLS,
 			FromName: getEnv("SMTP_FROM_NAME", defaultSMTPFromName),
 		}, nil
 	}
 
-	port, err := getEnvInt("SMTP_PORT", defaultSMTPPort)
+	port, err := requireEnvInt("SMTP_PORT")
 	if err != nil {
 		return smtpConfig{}, err
 	}
@@ -163,7 +145,11 @@ func loadSMTP() (smtpConfig, error) {
 		return smtpConfig{}, fmt.Errorf("SMTP_PORT must be at most %d, got %d", maxSMTPPort, port)
 	}
 
-	tlsMode := SMTPTLSMode(getEnv("SMTP_TLS", string(SMTPTLSStartTLS)))
+	tlsValue, err := requireEnv("SMTP_TLS")
+	if err != nil {
+		return smtpConfig{}, err
+	}
+	tlsMode := SMTPTLSMode(tlsValue)
 	if tlsMode != SMTPTLSStartTLS && tlsMode != SMTPTLSSSL {
 		return smtpConfig{}, fmt.Errorf("SMTP_TLS must be %q or %q, got %q", SMTPTLSStartTLS, SMTPTLSSSL, tlsMode)
 	}
@@ -213,28 +199,23 @@ func getEnv(key string, fallback string) string {
 	return fallback
 }
 
-func getEnvInt(key string, fallback int) (int, error) {
-	value := os.Getenv(key)
+func requireEnv(key string) (string, error) {
+	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
-		return fallback, nil
+		return "", fmt.Errorf("%s is required", key)
+	}
+	return value, nil
+}
+
+func requireEnvInt(key string) (int, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return 0, fmt.Errorf("%s is required", key)
 	}
 
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed < 1 {
 		return 0, fmt.Errorf("%s must be a positive integer, got %q", key, value)
-	}
-	return parsed, nil
-}
-
-func getEnvDuration(key string, fallback time.Duration) (time.Duration, error) {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback, nil
-	}
-
-	parsed, err := time.ParseDuration(value)
-	if err != nil || parsed <= 0 {
-		return 0, fmt.Errorf("%s must be a positive duration, got %q", key, value)
 	}
 	return parsed, nil
 }
