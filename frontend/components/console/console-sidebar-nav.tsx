@@ -13,6 +13,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CircleUserRound,
+  Code,
   LogIn,
   Mail,
   MonitorSmartphone,
@@ -56,7 +57,8 @@ const PANEL_PREFIXES = {
   settings: "/console/settings",
 } as const satisfies Record<SidebarSubPanel, string>;
 
-const SETTINGS_GENERAL_HREF = `${PANEL_PREFIXES.settings}/general`;
+const SETTINGS_INFO_HREF = `${PANEL_PREFIXES.settings}/info`;
+const SETTINGS_DEVELOPER_HREF = `${PANEL_PREFIXES.settings}/developer`;
 const SETTINGS_REGISTER_HREF = `${PANEL_PREFIXES.settings}/register`;
 const SETTINGS_LOGIN_HREF = `${PANEL_PREFIXES.settings}/login`;
 const SETTINGS_GROUPS_HREF = `${PANEL_PREFIXES.settings}/groups`;
@@ -152,7 +154,7 @@ export function ConsoleSidebarNav({
   const isCollapsed = state === "collapsed";
 
   const settingsFallbackHref = canViewSettings
-    ? SETTINGS_GENERAL_HREF
+    ? SETTINGS_INFO_HREF
     : canViewRegister
       ? SETTINGS_REGISTER_HREF
       : canViewUsers
@@ -276,9 +278,15 @@ export function ConsoleSidebarNav({
               items: canViewSettings
                 ? [
                     {
-                      href: SETTINGS_GENERAL_HREF,
+                      href: SETTINGS_INFO_HREF,
                       label: ts("general"),
                       icon: <SlidersHorizontal />,
+                      className: "mb-1",
+                    } satisfies ConsoleSidebarSectionItem,
+                    {
+                      href: SETTINGS_DEVELOPER_HREF,
+                      label: ts("developer"),
+                      icon: <Code />,
                     } satisfies ConsoleSidebarSectionItem,
                   ]
                 : [],

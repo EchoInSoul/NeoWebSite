@@ -32,7 +32,8 @@
     "mail": "Mail"
   },
   "settings": {
-    "general": "Information",
+    "general": "Site information",
+    "developer": "Developer settings",
     "noPermission": "You do not have permission to view settings",
     "loadFailed": "Failed to load settings. Please refresh and try again.",
     "save": "Save",

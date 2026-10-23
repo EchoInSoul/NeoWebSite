@@ -15,7 +15,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function SettingsGeneralPage() {
+export default async function SettingsInfoPage() {
   const t = await getTranslations("settings");
   const read = await getSiteSettings();
 

@@ -32,7 +32,8 @@
     "mail": "邮件"
   },
   "settings": {
-    "general": "信息",
+    "general": "站点信息",
+    "developer": "开发者设置",
     "noPermission": "无权查看设置",
     "loadFailed": "设置读取失败，请刷新重试",
     "save": "保存",
