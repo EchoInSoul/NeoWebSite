@@ -1,44 +1,21 @@
 "use client";
 
 import { type FormEvent } from "react";
-import {
-  CalendarClock,
-  Fingerprint,
-  Globe,
-  Hourglass,
-  KeyRound,
-  LockKeyhole,
-  ShieldCheck,
-  ShieldUser,
-} from "lucide-react";
+import { CalendarClock, Hourglass, KeyRound, ShieldUser } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { ConsoleFloatingSaveButton } from "@/components/console/console-floating-save-button";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useLoginSettingsSave } from "@/hooks/use-login-settings-save";
 import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
 import {
-  CAPTCHA_PROVIDER_BUILTIN,
-  CAPTCHA_PROVIDER_TURNSTILE,
   SESSION_MAX_AGE_DAYS_MAX,
   SESSION_MAX_AGE_DAYS_MIN,
   type LoginSettingsValues,
 } from "@/lib/login-settings";
-
-const KNOWN_CAPTCHA_PROVIDERS: string[] = [
-  CAPTCHA_PROVIDER_BUILTIN,
-  CAPTCHA_PROVIDER_TURNSTILE,
-];
 
 export function LoginControlForm({
   settings,
@@ -54,29 +31,11 @@ export function LoginControlForm({
     updateSessionMaxAgeDays,
     setTotpEnabled,
     setPasswordResetEnabled,
-    setCaptchaEnabled,
-    setCaptchaProvider,
-    setTurnstileSiteKey,
-    setTurnstileSecretKey,
     save,
   } = useLoginSettingsSave(settings);
   const sessionMaxAgeExpansion = useSwitchRowExpansion(
     values.sessionMaxAgeEnabled,
   );
-  const captchaExpansion = useSwitchRowExpansion(values.captchaEnabled);
-
-  const unknownCaptchaProvider = KNOWN_CAPTCHA_PROVIDERS.includes(
-    values.captchaProvider,
-  )
-    ? null
-    : values.captchaProvider;
-  const captchaProviderItems = {
-    [CAPTCHA_PROVIDER_BUILTIN]: t("captchaProviderBuiltin"),
-    [CAPTCHA_PROVIDER_TURNSTILE]: t("captchaProviderTurnstile"),
-    ...(unknownCaptchaProvider === null
-      ? {}
-      : { [unknownCaptchaProvider]: unknownCaptchaProvider }),
-  };
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -153,105 +112,6 @@ export function LoginControlForm({
           }
           icon={<KeyRound />}
           label={t("passwordReset")}
-        />
-      </ConsoleSettingsGroup>
-      <ConsoleSettingsGroup title={t("captchaGroup")}>
-        <ConsoleSettingsRow
-          control={
-            <Switch
-              aria-label={t("captchaEnabled")}
-              checked={values.captchaEnabled}
-              onCheckedChange={(checked) => {
-                setCaptchaEnabled(checked);
-                captchaExpansion.expandOnEnable(checked);
-              }}
-              disabled={isSaving}
-            />
-          }
-          expanded={captchaExpansion.expanded}
-          expandedContent={
-            <>
-              <ConsoleSettingsRow
-                control={
-                  <Select
-                    items={captchaProviderItems}
-                    value={values.captchaProvider}
-                    onValueChange={(value) => {
-                      if (value !== null) {
-                        setCaptchaProvider(value);
-                      }
-                    }}
-                    disabled={isSaving}
-                  >
-                    <SelectTrigger
-                      aria-label={t("captchaProvider")}
-                      className="w-50"
-                      size="sm"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={CAPTCHA_PROVIDER_BUILTIN}>
-                        {t("captchaProviderBuiltin")}
-                      </SelectItem>
-                      <SelectItem value={CAPTCHA_PROVIDER_TURNSTILE}>
-                        {t("captchaProviderTurnstile")}
-                      </SelectItem>
-                      {unknownCaptchaProvider === null ? null : (
-                        <SelectItem value={unknownCaptchaProvider}>
-                          {unknownCaptchaProvider}
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                }
-                icon={<ShieldCheck />}
-                label={t("captchaProvider")}
-              />
-              {values.captchaProvider === CAPTCHA_PROVIDER_TURNSTILE ? (
-                <>
-                  <ConsoleSettingsRow
-                    control={
-                      <Input
-                        aria-label={t("captchaTurnstileSiteKey")}
-                        autoComplete="off"
-                        className="w-64"
-                        onChange={(event) =>
-                          setTurnstileSiteKey(event.target.value)
-                        }
-                        spellCheck={false}
-                        value={values.turnstileSiteKey}
-                        disabled={isSaving}
-                      />
-                    }
-                    icon={<Globe />}
-                    label={t("captchaTurnstileSiteKey")}
-                  />
-                  <ConsoleSettingsRow
-                    control={
-                      <Input
-                        aria-label={t("captchaTurnstileSecretKey")}
-                        autoComplete="new-password"
-                        className="w-64"
-                        onChange={(event) =>
-                          setTurnstileSecretKey(event.target.value)
-                        }
-                        spellCheck={false}
-                        type="password"
-                        value={values.turnstileSecretKey}
-                        disabled={isSaving}
-                      />
-                    }
-                    icon={<LockKeyhole />}
-                    label={t("captchaTurnstileSecretKey")}
-                  />
-                </>
-              ) : null}
-            </>
-          }
-          icon={<Fingerprint />}
-          label={t("captchaEnabled")}
-          onExpandedChange={captchaExpansion.setExpanded}
         />
       </ConsoleSettingsGroup>
       <ConsoleFloatingSaveButton

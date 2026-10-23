@@ -3,16 +3,9 @@ export type LoginSettingsValues = {
   sessionMaxAgeDays: string;
   totpEnabled: boolean;
   passwordResetEnabled: boolean;
-  captchaEnabled: boolean;
-  captchaProvider: string;
-  turnstileSiteKey: string;
-  turnstileSecretKey: string;
 };
 
 export type LoginSettingsIssue = "sessionMaxAgeDaysRange";
-
-export const CAPTCHA_PROVIDER_BUILTIN = "builtin";
-export const CAPTCHA_PROVIDER_TURNSTILE = "turnstile";
 
 export const SESSION_MAX_AGE_DAYS_MIN = 1;
 export const SESSION_MAX_AGE_DAYS_MAX = 30;
@@ -22,10 +15,6 @@ const LOGIN_PATCH_KEYS: Record<keyof LoginSettingsValues, string> = {
   sessionMaxAgeDays: "session_max_age_days",
   totpEnabled: "totp_enabled",
   passwordResetEnabled: "password_reset_enabled",
-  captchaEnabled: "captcha_enabled",
-  captchaProvider: "captcha_provider",
-  turnstileSiteKey: "turnstile_site_key",
-  turnstileSecretKey: "turnstile_secret_key",
 };
 
 export function parseLoginGroupValues(
@@ -44,11 +33,7 @@ export function parseLoginGroupValues(
     typeof raw.session_max_age_days !== "number" ||
     !Number.isInteger(raw.session_max_age_days) ||
     typeof raw.totp_enabled !== "boolean" ||
-    typeof raw.password_reset_enabled !== "boolean" ||
-    typeof raw.captcha_enabled !== "boolean" ||
-    typeof raw.captcha_provider !== "string" ||
-    typeof raw.turnstile_site_key !== "string" ||
-    typeof raw.turnstile_secret_key !== "string"
+    typeof raw.password_reset_enabled !== "boolean"
   ) {
     return null;
   }
@@ -58,13 +43,6 @@ export function parseLoginGroupValues(
     sessionMaxAgeDays: String(raw.session_max_age_days),
     totpEnabled: raw.totp_enabled,
     passwordResetEnabled: raw.password_reset_enabled,
-    captchaEnabled: raw.captcha_enabled,
-    captchaProvider:
-      raw.captcha_provider === ""
-        ? CAPTCHA_PROVIDER_BUILTIN
-        : raw.captcha_provider,
-    turnstileSiteKey: raw.turnstile_site_key,
-    turnstileSecretKey: raw.turnstile_secret_key,
   };
 }
 
@@ -124,10 +102,6 @@ export function buildLoginSettingsPatch(
       patch[LOGIN_PATCH_KEYS[field]] = values[field];
     }
   }
-
-  patch[LOGIN_PATCH_KEYS.captchaProvider] = values.captchaProvider;
-  patch[LOGIN_PATCH_KEYS.turnstileSiteKey] = values.turnstileSiteKey;
-  patch[LOGIN_PATCH_KEYS.turnstileSecretKey] = values.turnstileSecretKey;
 
   return patch;
 }

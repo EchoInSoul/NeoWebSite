@@ -61,22 +61,6 @@ export function useLoginSettingsSave(initial: LoginSettingsValues) {
     }));
   }
 
-  function setCaptchaEnabled(checked: boolean) {
-    setValues((previous) => ({ ...previous, captchaEnabled: checked }));
-  }
-
-  function setCaptchaProvider(value: string) {
-    setValues((previous) => ({ ...previous, captchaProvider: value }));
-  }
-
-  function setTurnstileSiteKey(value: string) {
-    setValues((previous) => ({ ...previous, turnstileSiteKey: value }));
-  }
-
-  function setTurnstileSecretKey(value: string) {
-    setValues((previous) => ({ ...previous, turnstileSecretKey: value }));
-  }
-
   async function save() {
     if (isSaving || !isDirty) {
       return;
@@ -136,10 +120,6 @@ export function useLoginSettingsSave(initial: LoginSettingsValues) {
     updateSessionMaxAgeDays,
     setTotpEnabled,
     setPasswordResetEnabled,
-    setCaptchaEnabled,
-    setCaptchaProvider,
-    setTurnstileSiteKey,
-    setTurnstileSecretKey,
     save,
   };
 }

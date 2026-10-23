@@ -1,6 +1,10 @@
 import { cookies } from "next/headers";
 
 import { backendUrl } from "@/lib/backend-url";
+import {
+  parseCaptchaSettingsValues,
+  type CaptchaSettingsValues,
+} from "@/lib/captcha-settings";
 import { parseAdminGroups } from "@/lib/groups";
 import type { AdminGroup } from "@/lib/groups";
 import {
@@ -116,5 +120,14 @@ export async function getLoginSettings(): Promise<LoginSettingsRead> {
   return toAdminSettingsRead(
     await fetchAdminPayload("/api/v1/admin/settings/auth"),
     parseLoginGroupValues,
+  );
+}
+
+export type CaptchaSettingsRead = AdminSettingsRead<CaptchaSettingsValues>;
+
+export async function getCaptchaSettings(): Promise<CaptchaSettingsRead> {
+  return toAdminSettingsRead(
+    await fetchAdminPayload("/api/v1/admin/settings/auth"),
+    parseCaptchaSettingsValues,
   );
 }

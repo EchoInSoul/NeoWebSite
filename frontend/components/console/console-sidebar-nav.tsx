@@ -18,6 +18,7 @@ import {
   Mail,
   MonitorSmartphone,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
   UserRoundCog,
   UserRoundPlus,
@@ -61,6 +62,7 @@ const SETTINGS_INFO_HREF = `${PANEL_PREFIXES.settings}/info`;
 const SETTINGS_DEVELOPER_HREF = `${PANEL_PREFIXES.settings}/developer`;
 const SETTINGS_REGISTER_HREF = `${PANEL_PREFIXES.settings}/register`;
 const SETTINGS_LOGIN_HREF = `${PANEL_PREFIXES.settings}/login`;
+const SETTINGS_CAPTCHA_HREF = `${PANEL_PREFIXES.settings}/captcha`;
 const SETTINGS_GROUPS_HREF = `${PANEL_PREFIXES.settings}/groups`;
 const SETTINGS_USERS_HREF = `${PANEL_PREFIXES.settings}/users`;
 const SETTINGS_MAIL_HREF = `${PANEL_PREFIXES.settings}/mail`;
@@ -305,6 +307,12 @@ export function ConsoleSidebarNav({
                       href: SETTINGS_LOGIN_HREF,
                       label: ts("loginControl"),
                       icon: <LogIn />,
+                      className: "mb-1",
+                    } satisfies ConsoleSidebarSectionItem,
+                    {
+                      href: SETTINGS_CAPTCHA_HREF,
+                      label: ts("captchaGroup"),
+                      icon: <ShieldCheck />,
                     } satisfies ConsoleSidebarSectionItem,
                   ]
                 : [],
