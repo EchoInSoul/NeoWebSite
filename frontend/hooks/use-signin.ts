@@ -74,6 +74,8 @@ export function useSigninForm(
       switch (error.code) {
         case "invalid_credentials":
           return t("invalidCredentials");
+        case "email_not_verified":
+          return t("emailNotVerified");
         case "two_factor_invalid_code":
           return t("invalidCode");
         case "two_factor_locked":

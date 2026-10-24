@@ -7,7 +7,7 @@ import { useServiceHealth } from "@/hooks/use-service-health";
 import { ApiError, apiRequest } from "@/lib/api";
 import { isStrongPassword } from "@/lib/password";
 import { formatRetryDuration } from "@/lib/rate-limit";
-import { markSignupSuccess } from "@/lib/signup-notice";
+import { markSignupPending, markSignupSuccess } from "@/lib/signup-notice";
 
 const NAME_MIN_LENGTH = 2;
 const NAME_MAX_LENGTH = 32;
@@ -99,6 +99,8 @@ export function useSignupForm(
           return { message: t("rateLimited") };
         case "captcha_failed":
           return { message: t("captchaFailed") };
+        case "mail_unavailable":
+          return { message: t("mailUnavailable") };
       }
     }
 
@@ -156,7 +158,7 @@ export function useSignupForm(
 
     setIsPending(true);
     try {
-      await apiRequest("/api/v1/users", {
+      const payload = await apiRequest<{ status?: string }>("/api/v1/users", {
         method: "POST",
         body: {
           email,
@@ -165,6 +167,12 @@ export function useSignupForm(
           ...(captchaToken === "" ? {} : { captcha_token: captchaToken }),
         },
       });
+      if (payload?.status === "verification_pending") {
+        markSignupPending();
+        setValues(EMPTY_VALUES);
+        router.push("/signin");
+        return undefined;
+      }
       markSignupSuccess();
       setValues(EMPTY_VALUES);
       router.push("/signin");
