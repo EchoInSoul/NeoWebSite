@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-10-25 · 人机验证新增「启用范围」（登录 / 注册多选）
+
+**范围**：后端 `internal/modules/settings/{registry.go,registry_test.go,controller_test.go}`、`internal/modules/auth/{service.go,captcha_flow_test.go}`、新迁移 `migrations/20261025120000_seed_captcha_scopes.sql` 与 `migrations/atlas.sum`、`README.md`；前端 `lib/{captcha-settings.ts,public-settings.ts}`、`hooks/use-captcha-settings-save.ts`、`app/console/settings/captcha/captcha-settings-form.tsx`、`app/{signin,signup}/page.tsx`、`messages/{zh-CN,en}.json`；另加本条目。零 DDL、零新接口、零依赖。
+
+**动机**：此前「启用人机验证」一开，`auth.Service.Login` 与 `Register` 都无条件校验 captcha，登录和注册绑死在一起，无法只拦其中一处。用户要求加选择器，自行决定哪些入口需要人机验证。
+
+**口径**：
+
+- 新增设置 `auth.captcha_scopes`（文字、逗号分隔、默认 `login,register`、标 `Public`），合法项只有 `login` / `register`；`PatchGroup` 只拒绝未知项（409 `setting_conflict`），空清单合法、表示两个入口都不拦。新增 seed 迁移 `seed_captcha_scopes` 把默认行种进 `setting_values`（`ON CONFLICT DO NOTHING`，不覆盖已有配置），零 DDL。
+- `verifyCaptcha` 增加场景参数：登录传 `login`、注册传 `register`；判定顺序仍是「开关 → provider 为 turnstile → 私钥非空 → 入口在 `captcha_scopes` 里」，未命中直接放行。原有三处设置读取仍然吞错误放行（未改动），新增的 `captcha_scopes` 读取失败上抛报错，不静默当成「未勾选」。
+- 设置页在「验证服务」下、「站点密钥」上新增「启用范围」行，只在验证服务选 Cloudflare Turnstile 时出现；Base UI `Select` 多选（点选即开关、弹层不关），勾选项显示为「登录、注册」；两个都取消时存空串，等于两个入口都不拦。
+- 保存时 `captcha_scopes` 与 `captcha_provider`、两把密钥一起无条件回写；排序固定为 `login` 在前、`register` 在后。
+- 前台 `getCaptchaConfig(settings, scope)` 按入口过滤：登录页只认 `login`、注册页只认 `register`；未勾选的那一页不渲染挑战弹窗、不传 token。公开设置缓存 60 秒，改完最多约一分钟才在前台生效（与既有开关一致）。
+- 找回密码、注册邮箱验证码这两个流程尚未实现，故选项暂只有登录与注册，不列空头项。
+
+**验证**：后端 `gofmt -l` 干净、`go build ./...` 与 `go vet` 通过、`bash scripts/test.sh ./internal/modules/settings/ ./internal/modules/auth/` 全绿；新增范围测试（仅勾注册时登录免挑战、仅勾登录时注册免挑战、空清单时两处都免挑战）、校验测试（未知项 409、空清单可保存并读回）与公开设置计数断言。变异自检三条：去掉范围判断、放行未知项、把空清单当全拦，对应测试分别变红，恢复后全绿。新迁移已用 `atlas migrate hash` 重算并应用到开发库与测试库。前端 `npx tsc --noEmit`、ESLint、Prettier 通过；前端无自动化测试，运行期观感（多选下拉、两个都取消后的显示、只勾一处时对应页面不再弹窗）归用户实机确认。
+
+**提交状态**：未提交。
+
+---
+
 ## 2026-10-24 · 人机验证配置自检（控制台「验证配置」行）
 
 **范围**：后端 `internal/common/apierror/{apierror.go,apierror_test.go}`、`internal/modules/auth/{captcha.go,captcha_test.go,controller.go,dto.go,service.go}`、新 `internal/modules/auth/captcha_verify_test.go`、`README.md`；前端 `app/console/settings/captcha/captcha-settings-form.tsx`、新 `hooks/use-captcha-verify.ts`、`messages/{zh-CN,en}.json`；另加本条目。零迁移、零依赖。
