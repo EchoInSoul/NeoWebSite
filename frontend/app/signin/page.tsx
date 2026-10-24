@@ -23,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function SigninPage() {
   const settings = await getPublicSettings();
   const signupOpen = isSignupOpen(settings);
-  const captcha = getCaptchaConfig(settings);
+  const captcha = getCaptchaConfig(settings, "login");
 
   let user;
   try {

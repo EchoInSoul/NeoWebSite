@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { backendUrl } from "@/lib/backend-url";
+import { parseCaptchaScopes, type CaptchaScope } from "@/lib/captcha-settings";
 
 export type PublicSettingValue = boolean | number | string;
 
@@ -67,10 +68,20 @@ export type CaptchaConfig = {
 
 export function getCaptchaConfig(
   settings: PublicSettings,
+  scope: CaptchaScope,
 ): CaptchaConfig | null {
   const auth = settings.auth;
 
   if (auth?.captcha_enabled !== true || auth.captcha_provider !== "turnstile") {
+    return null;
+  }
+
+  const scopes = auth.captcha_scopes;
+
+  if (
+    typeof scopes !== "string" ||
+    !parseCaptchaScopes(scopes).includes(scope)
+  ) {
     return null;
   }
 

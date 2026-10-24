@@ -27,7 +27,7 @@ export default async function SignupPage() {
     notFound();
   }
 
-  const captcha = getCaptchaConfig(settings);
+  const captcha = getCaptchaConfig(settings, "register");
 
   let user;
   try {
