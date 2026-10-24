@@ -137,7 +137,7 @@ export function CaptchaSettingsForm({
                   >
                     <SelectTrigger
                       aria-label={t("captchaProvider")}
-                      className="w-50"
+                      className="w-64"
                       size="sm"
                     >
                       <SelectValue />
@@ -178,7 +178,7 @@ export function CaptchaSettingsForm({
                       >
                         <SelectTrigger
                           aria-label={t("captchaScopes")}
-                          className="w-50"
+                          className="w-64"
                           size="sm"
                         >
                           <SelectValue>
