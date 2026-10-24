@@ -10,3 +10,8 @@ type createMessageResponse struct {
 	Subject string `json:"subject"`
 	Sent    bool   `json:"sent"`
 }
+
+type statusResponse struct {
+	SMTPConfigured    bool `json:"smtp_configured"`
+	SiteURLConfigured bool `json:"site_url_configured"`
+}

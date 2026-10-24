@@ -1,8 +1,10 @@
-{{.siteTitle}} 注册验证码
+{{.siteTitle}} 注册验证
 
 你好 {{.username}}，
 
-你的注册验证码是 {{.code}}，{{.expiresMinutes}} 分钟内有效。
+请点击下面的链接完成邮箱验证（{{.expiresMinutes}} 分钟内有效）：
+
+{{.verifyUrl}}
 
 如果不是你本人操作，请忽略这封邮件。
 

@@ -33,3 +33,7 @@ func (s *logSender) deliver(_ context.Context, msg Message) error {
 	)
 	return nil
 }
+
+func (s *logSender) configured(context.Context) (bool, error) {
+	return false, nil
+}

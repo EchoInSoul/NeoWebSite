@@ -175,3 +175,40 @@ func TestSettingsTransportPropagatesSettingsErrors(t *testing.T) {
 		t.Fatalf("deliver = %v, want settings read error", err)
 	}
 }
+
+func TestSettingsTransportConfiguredReadError(t *testing.T) {
+	tr := newSettingsTransport(config.Config{}, &settingsStub{err: errors.New("database down")}, discardLogger())
+	ok, err := tr.configured(context.Background())
+	if err == nil || ok {
+		t.Fatalf("configured = (%v, %v), want error", ok, err)
+	}
+}
+
+func TestSettingsTransportConfiguredEnvFallback(t *testing.T) {
+	env := config.Config{SMTPHost: "env.example.com", SMTPPort: 587, SMTPFrom: ""}
+	values := mailSettingsValues()
+	values["smtp_host"] = ""
+	tr := newSettingsTransport(env, &settingsStub{values: values}, discardLogger())
+
+	ok, err := tr.configured(context.Background())
+	if err == nil && ok {
+		t.Fatal("configured = true with missing SMTP_FROM, want false or error")
+	}
+}
+
+func TestSettingsTransportRejectsRequireSMTPWhenLog(t *testing.T) {
+	logger, buffer := testLogger(t)
+	values := mailSettingsValues()
+	values["enabled"] = false
+	tr := newSettingsTransport(config.Config{}, &settingsStub{values: values}, logger)
+
+	msg := testMessage()
+	msg.Body = Body{Text: "secret-token", HTML: "<p>secret-token</p>"}
+	msg.RequireSMTP = true
+	if err := tr.deliver(context.Background(), msg); err == nil {
+		t.Fatal("deliver with RequireSMTP to log sender = nil, want error")
+	}
+	if strings.Contains(buffer.String(), "secret-token") {
+		t.Fatalf("log contains message body: %s", buffer.String())
+	}
+}

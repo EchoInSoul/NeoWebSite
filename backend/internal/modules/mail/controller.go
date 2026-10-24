@@ -2,6 +2,7 @@ package mail
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/mail"
@@ -17,13 +18,14 @@ import (
 
 const (
 	selfCheckSubject      = "邮件配置自检"
+	TemplateSignupCode    = "signup_code"
 	exampleTemplate       = "example"
-	signupCodeTemplate    = "signup_code"
+	signupCodeTemplate    = TemplateSignupCode
 	passwordResetTemplate = "password_reset"
 )
 
 var previewSubjects = map[string]string{
-	signupCodeTemplate:    "注册验证码",
+	signupCodeTemplate:    "注册验证邮件",
 	passwordResetTemplate: "密码重置验证码",
 }
 
@@ -38,6 +40,7 @@ func newController(mailer Mailer, settings Settings) *controller {
 
 func (c *controller) registerProtected(r *gin.RouterGroup) {
 	r.POST("/admin/mail/messages", guard.RequirePresetGroup(rbac.GroupKeyOwner, rbac.GroupKeyAdmin), c.create)
+	r.GET("/admin/mail/status", guard.RequirePermission(rbac.PermissionRegisterView), c.status)
 }
 
 func (c *controller) create(ctx *gin.Context) {
@@ -62,7 +65,13 @@ func (c *controller) create(ctx *gin.Context) {
 		return
 	}
 
-	subject, body, err := c.renderMessage(ctx.Request.Context(), templateName, addr.Address)
+	data, err := c.previewData(ctx.Request.Context(), addr.Address)
+	if err != nil {
+		slog.Error("mail: read preview data", "template", templateName, "err", err)
+		apierror.Write(ctx, apierror.ErrInternal)
+		return
+	}
+	subject, body, err := Compose(ctx.Request.Context(), c.settings, templateName, data)
 	if err != nil {
 		slog.Error("mail: render message", "template", templateName, "err", err)
 		apierror.Write(ctx, apierror.ErrInternal)
@@ -78,9 +87,30 @@ func (c *controller) create(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, createMessageResponse{To: msg.To, Subject: msg.Subject, Sent: true})
 }
 
-func (c *controller) renderMessage(ctx context.Context, templateName, to string) (string, Body, error) {
-	data := c.previewData(ctx, to)
+func (c *controller) status(ctx *gin.Context) {
+	configured, err := c.mailer.Configured(ctx.Request.Context())
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
 
+	siteURLConfigured := false
+	if c.settings != nil {
+		values, err := c.settings.GetGroup(ctx.Request.Context(), "site")
+		if err != nil {
+			apierror.Write(ctx, err)
+			return
+		}
+		raw, _ := values["url"].(string)
+		if _, err := SiteURL(raw); err == nil {
+			siteURLConfigured = true
+		}
+	}
+
+	ctx.JSON(http.StatusOK, statusResponse{SMTPConfigured: configured, SiteURLConfigured: siteURLConfigured})
+}
+
+func Compose(ctx context.Context, settings Settings, templateName string, data map[string]string) (string, Body, error) {
 	body, err := Render(templateName, data)
 	if err != nil {
 		return "", Body{}, err
@@ -90,14 +120,13 @@ func (c *controller) renderMessage(ctx context.Context, templateName, to string)
 	}
 
 	subject := previewSubjects[templateName]
-	if c.settings == nil {
+	if settings == nil {
 		return subject, body, nil
 	}
 
-	values, err := c.settings.GetGroup(ctx, "mail")
+	values, err := settings.GetGroup(ctx, settingsGroup)
 	if err != nil {
-		slog.Warn("mail: read template settings", "err", err)
-		return subject, body, nil
+		return "", Body{}, fmt.Errorf("mail: read template settings: %w", err)
 	}
 
 	if custom, ok := values[templateName+"_subject"].(string); ok && strings.TrimSpace(custom) != "" {
@@ -114,21 +143,20 @@ func (c *controller) renderMessage(ctx context.Context, templateName, to string)
 	return subject, body, nil
 }
 
-func (c *controller) previewData(ctx context.Context, to string) map[string]string {
+func (c *controller) previewData(ctx context.Context, to string) (map[string]string, error) {
 	var siteTitle string
-	siteURL := "https://example.com"
+	var siteURL string
 
 	if c.settings != nil {
 		site, err := c.settings.GetGroup(ctx, "site")
 		if err != nil {
-			slog.Warn("mail: read site settings", "err", err)
-		} else {
-			if value, ok := site["title"].(string); ok && strings.TrimSpace(value) != "" {
-				siteTitle = value
-			}
-			if value, ok := site["url"].(string); ok && strings.TrimSpace(value) != "" {
-				siteURL = value
-			}
+			return nil, fmt.Errorf("mail: read site settings: %w", err)
+		}
+		if value, ok := site["title"].(string); ok {
+			siteTitle = value
+		}
+		if value, ok := site["url"].(string); ok {
+			siteURL = value
 		}
 	}
 
@@ -143,12 +171,13 @@ func (c *controller) previewData(ctx context.Context, to string) map[string]stri
 		"Site":           siteTitle,
 		"Time":           now,
 		"code":           "123456",
-		"expiresMinutes": "10",
+		"expiresMinutes": "30",
 		"siteTitle":      siteTitle,
 		"siteUrl":        siteURL,
 		"username":       username,
 		"sentAt":         now,
-	}
+		"verifyUrl":      "https://example.com/signup/verify?token=preview-token",
+	}, nil
 }
 
 func isSupportedTemplate(name string) bool {

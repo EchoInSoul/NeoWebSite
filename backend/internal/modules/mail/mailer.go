@@ -24,19 +24,22 @@ type Body struct {
 }
 
 type Message struct {
-	To      string
-	Subject string
-	Body    Body
+	To          string
+	Subject     string
+	Body        Body
+	RequireSMTP bool
 }
 
 type Mailer interface {
 	Send(ctx context.Context, msg Message) error
 	SendSync(ctx context.Context, msg Message) error
+	Configured(ctx context.Context) (bool, error)
 	Close(ctx context.Context) error
 }
 
 type transport interface {
 	deliver(ctx context.Context, msg Message) error
+	configured(ctx context.Context) (bool, error)
 }
 
 type deliveryError struct {
@@ -116,6 +119,10 @@ func (m *mailer) SendSync(ctx context.Context, msg Message) error {
 		return err
 	}
 	return nil
+}
+
+func (m *mailer) Configured(ctx context.Context) (bool, error) {
+	return m.transport.configured(ctx)
 }
 
 func (m *mailer) Close(ctx context.Context) error {

@@ -10,18 +10,25 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"website/backend/internal/config"
 )
 
 type stubTransport struct {
-	mu      sync.Mutex
-	calls   int
-	results []error
-	block   chan struct{}
-	signal  chan struct{}
+	mu              sync.Mutex
+	calls           int
+	results         []error
+	block           chan struct{}
+	signal          chan struct{}
+	configuredValue bool
 }
 
 func newStubTransport(results ...error) *stubTransport {
 	return &stubTransport{results: results, signal: make(chan struct{}, 64)}
+}
+
+func (s *stubTransport) configured(_ context.Context) (bool, error) {
+	return s.configuredValue, nil
 }
 
 func (s *stubTransport) deliver(_ context.Context, _ Message) error {
@@ -310,7 +317,15 @@ func TestSendSyncLogsFailure(t *testing.T) {
 }
 
 type funcTransport struct {
-	deliverFunc func(ctx context.Context, msg Message) error
+	deliverFunc    func(ctx context.Context, msg Message) error
+	configuredFunc func(ctx context.Context) (bool, error)
+}
+
+func (f *funcTransport) configured(ctx context.Context) (bool, error) {
+	if f.configuredFunc != nil {
+		return f.configuredFunc(ctx)
+	}
+	return true, nil
 }
 
 func (f *funcTransport) deliver(ctx context.Context, msg Message) error {
@@ -358,5 +373,34 @@ func TestSendSyncPropagatesParentCancellation(t *testing.T) {
 	}
 	if !errors.Is(gotErr, context.Canceled) {
 		t.Fatalf("transport ctx err = %v, want context.Canceled", gotErr)
+	}
+}
+
+func TestMailerConfiguredDelegates(t *testing.T) {
+	m := newMailer(&stubTransport{configuredValue: true}, discardLogger())
+	ok, err := m.Configured(context.Background())
+	if err != nil || !ok {
+		t.Fatalf("Configured = (%v, %v), want true", ok, err)
+	}
+}
+
+func TestLogSenderConfiguredFalse(t *testing.T) {
+	sender := newLogSender(config.Config{}, discardLogger())
+	ok, err := sender.configured(context.Background())
+	if err != nil || ok {
+		t.Fatalf("log sender configured = (%v, %v), want false", ok, err)
+	}
+}
+
+func TestSMTPTransportConfigured(t *testing.T) {
+	tr := newSMTPTransport(config.Config{
+		SMTPHost: "smtp.example.com",
+		SMTPPort: 587,
+		SMTPTLS:  config.SMTPTLSStartTLS,
+		SMTPFrom: "a@example.com",
+	})
+	ok, err := tr.configured(context.Background())
+	if err != nil || !ok {
+		t.Fatalf("smtp transport configured = (%v, %v), want true", ok, err)
 	}
 }

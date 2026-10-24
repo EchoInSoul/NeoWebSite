@@ -12,12 +12,15 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"website/backend/internal/common/guard"
+	"website/backend/internal/common/rbac"
 )
 
 type stubMailer struct {
-	err   error
-	got   Message
-	calls int
+	err           error
+	got           Message
+	calls         int
+	configured    bool
+	configuredErr error
 }
 
 func (s *stubMailer) Send(_ context.Context, _ Message) error { return nil }
@@ -26,6 +29,10 @@ func (s *stubMailer) SendSync(_ context.Context, msg Message) error {
 	s.calls++
 	s.got = msg
 	return s.err
+}
+
+func (s *stubMailer) Configured(_ context.Context) (bool, error) {
+	return s.configured, s.configuredErr
 }
 
 func (s *stubMailer) Close(_ context.Context) error { return nil }
@@ -57,7 +64,7 @@ func newControllerTestServer(t *testing.T, mailer Mailer, groupKey string, setti
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.Use(func(c *gin.Context) {
-		c.Set(guard.SessionIdentityKey, guard.Identity{UserID: "u1", GroupKey: groupKey})
+		c.Set(guard.SessionIdentityKey, guard.Identity{UserID: "u1", GroupKey: groupKey, Permissions: rbac.PresetPermissions(groupKey)})
 		c.Next()
 	})
 	newController(mailer, settingsService).registerProtected(engine.Group(""))
@@ -157,13 +164,29 @@ func TestCreateMessageRendersSelectedTemplate(t *testing.T) {
 	if mailer.got.Subject != "自定义注册验证码" {
 		t.Fatalf("subject = %q, want custom subject", mailer.got.Subject)
 	}
-	for _, want := range []string{"My Blog", "me", "123456", "10", "https://blog.example.com"} {
+	for _, want := range []string{"My Blog", "me", "123456", "30", "https://blog.example.com"} {
 		if !strings.Contains(mailer.got.Body.HTML, want) {
 			t.Fatalf("html body %q missing %q", mailer.got.Body.HTML, want)
 		}
 	}
-	if !strings.Contains(mailer.got.Body.Text, "注册验证码") || !strings.Contains(mailer.got.Body.Text, "123456") {
+	if !strings.Contains(mailer.got.Body.Text, "https://example.com/signup/verify?token=preview-token") {
 		t.Fatalf("text body = %q, want built-in signup preview", mailer.got.Body.Text)
+	}
+}
+
+func TestCreateMessageUsesDefaultSignupSubject(t *testing.T) {
+	mailer := &stubMailer{}
+	ts := newControllerTestServer(t, mailer, "owner")
+
+	resp := postMessage(t, ts, `{"to":"me@example.com","template":"signup_code"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	if mailer.got.Subject != "注册验证邮件" {
+		t.Fatalf("subject = %q, want default signup subject", mailer.got.Subject)
+	}
+	if !strings.Contains(mailer.got.Body.Text, "https://example.com/signup/verify?token=preview-token") {
+		t.Fatalf("text body = %q, want verify link", mailer.got.Body.Text)
 	}
 }
 
@@ -269,5 +292,110 @@ func TestCreateMessageMapsDeliveryFailure(t *testing.T) {
 	}
 	if mailer.calls != 1 {
 		t.Fatalf("send sync calls = %d, want 1", mailer.calls)
+	}
+}
+
+func TestMailStatus(t *testing.T) {
+	settings := &controllerSettingsStub{groups: map[string]map[string]any{
+		"site": {"url": "https://example.com"},
+	}}
+	mailer := &stubMailer{configured: true}
+	ts := newControllerTestServer(t, mailer, rbac.GroupKeyOwner, settings)
+
+	resp, err := http.Get(ts.URL + "/admin/mail/status")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body struct {
+		SMTPConfigured    bool `json:"smtp_configured"`
+		SiteURLConfigured bool `json:"site_url_configured"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !body.SMTPConfigured || !body.SiteURLConfigured {
+		t.Fatalf("body = %+v, want both true", body)
+	}
+}
+
+func TestMailStatusSMTPFalseAndReadError(t *testing.T) {
+	siteSettings := &controllerSettingsStub{groups: map[string]map[string]any{
+		"site": {"url": "https://example.com"},
+	}}
+
+	t.Run("smtp false", func(t *testing.T) {
+		ts := newControllerTestServer(t, &stubMailer{configured: false}, rbac.GroupKeyOwner, siteSettings)
+		resp, err := http.Get(ts.URL + "/admin/mail/status")
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		defer resp.Body.Close()
+		var body struct {
+			SMTPConfigured    bool `json:"smtp_configured"`
+			SiteURLConfigured bool `json:"site_url_configured"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if body.SMTPConfigured || !body.SiteURLConfigured {
+			t.Fatalf("body = %+v, want smtp false and site true", body)
+		}
+	})
+
+	t.Run("configured read error", func(t *testing.T) {
+		ts := newControllerTestServer(t, &stubMailer{configuredErr: errors.New("db down")}, rbac.GroupKeyOwner, siteSettings)
+		resp, err := http.Get(ts.URL + "/admin/mail/status")
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want 500", resp.StatusCode)
+		}
+	})
+
+	t.Run("site read error", func(t *testing.T) {
+		settings := &controllerSettingsStub{errs: map[string]error{"site": errors.New("db down")}}
+		ts := newControllerTestServer(t, &stubMailer{configured: true}, rbac.GroupKeyOwner, settings)
+		resp, err := http.Get(ts.URL + "/admin/mail/status")
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want 500", resp.StatusCode)
+		}
+	})
+
+	t.Run("forbidden", func(t *testing.T) {
+		ts := newControllerTestServer(t, &stubMailer{configured: true}, rbac.GroupKeyUser, siteSettings)
+		resp, err := http.Get(ts.URL + "/admin/mail/status")
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403", resp.StatusCode)
+		}
+	})
+}
+
+func TestComposeSettingsReadError(t *testing.T) {
+	settings := &controllerSettingsStub{errs: map[string]error{"mail": errors.New("db down")}}
+	if _, _, err := Compose(context.Background(), settings, TemplateSignupCode, map[string]string{}); err == nil {
+		t.Fatal("Compose returned nil error when mail settings read failed")
+	}
+}
+
+func TestComposeRejectsBadCustomBody(t *testing.T) {
+	settings := &controllerSettingsStub{groups: map[string]map[string]any{
+		"mail": {"signup_code_body": "{{"},
+	}}
+	if _, _, err := Compose(context.Background(), settings, TemplateSignupCode, map[string]string{"verifyUrl": "https://example.com/x"}); err == nil {
+		t.Fatal("Compose accepted bad custom body")
 	}
 }

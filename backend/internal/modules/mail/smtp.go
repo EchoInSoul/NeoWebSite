@@ -97,3 +97,7 @@ func newSMTPDeliveryError(err error) error {
 
 	return &deliveryError{err: err, temporary: true}
 }
+
+func (t *smtpTransport) configured(_ context.Context) (bool, error) {
+	return t.initErr == nil, nil
+}

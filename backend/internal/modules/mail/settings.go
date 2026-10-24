@@ -2,6 +2,7 @@ package mail
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	netmail "net/mail"
@@ -11,6 +12,8 @@ import (
 )
 
 const settingsGroup = "mail"
+
+var errSMTPRequired = errors.New("mail: SMTP is required")
 
 type Settings interface {
 	GetGroup(ctx context.Context, group string) (map[string]any, error)
@@ -32,9 +35,20 @@ func (t *settingsTransport) deliver(ctx context.Context, msg Message) error {
 		return err
 	}
 	if !send {
+		if msg.RequireSMTP {
+			return &deliveryError{err: errSMTPRequired, temporary: false}
+		}
 		return newLogSender(cfg, t.logger).deliver(ctx, msg)
 	}
 	return newSMTPTransport(cfg).deliver(ctx, msg)
+}
+
+func (t *settingsTransport) configured(ctx context.Context) (bool, error) {
+	_, send, err := resolveTransportConfig(ctx, t.env, t.settings)
+	if err != nil {
+		return false, err
+	}
+	return send, nil
 }
 
 func resolveTransportConfig(ctx context.Context, env config.Config, settings Settings) (config.Config, bool, error) {
@@ -106,6 +120,9 @@ func resolveTransportConfig(ctx context.Context, env config.Config, settings Set
 	if cfg.SMTPHost == "" {
 		if env.SMTPHost == "" {
 			return cfg, false, nil
+		}
+		if err := validateEffectiveConfig(env); err != nil {
+			return config.Config{}, false, err
 		}
 		return env, true, nil
 	}
