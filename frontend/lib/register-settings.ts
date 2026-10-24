@@ -5,6 +5,7 @@ export type RegisterGroupValues = {
   emailDomainControlEnabled: boolean;
   allowedEmailDomains: string;
   defaultGroup: string;
+  emailVerificationEnabled: boolean;
 };
 
 export type AuthGroupValues = {
@@ -27,6 +28,7 @@ const REGISTER_PATCH_KEYS: Record<keyof RegisterGroupValues, string> = {
   emailDomainControlEnabled: "email_domain_control_enabled",
   allowedEmailDomains: "allowed_email_domains",
   defaultGroup: "default_group",
+  emailVerificationEnabled: "email_verification_enabled",
 };
 
 const AUTH_PATCH_KEYS: Record<keyof AuthGroupValues, string> = {
@@ -50,7 +52,8 @@ export function parseRegisterGroupValues(
     typeof raw.enabled !== "boolean" ||
     typeof raw.email_domain_control_enabled !== "boolean" ||
     typeof raw.allowed_email_domains !== "string" ||
-    typeof raw.default_group !== "string"
+    typeof raw.default_group !== "string" ||
+    typeof raw.email_verification_enabled !== "boolean"
   ) {
     return null;
   }
@@ -60,6 +63,31 @@ export function parseRegisterGroupValues(
     emailDomainControlEnabled: raw.email_domain_control_enabled,
     allowedEmailDomains: raw.allowed_email_domains,
     defaultGroup: raw.default_group,
+    emailVerificationEnabled: raw.email_verification_enabled,
+  };
+}
+
+export type MailStatus = {
+  smtpConfigured: boolean;
+  siteUrlConfigured: boolean;
+};
+
+export function parseMailStatus(payload: unknown): MailStatus | null {
+  const raw = payload as {
+    smtp_configured?: unknown;
+    site_url_configured?: unknown;
+  } | null;
+
+  if (
+    typeof raw?.smtp_configured !== "boolean" ||
+    typeof raw?.site_url_configured !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    smtpConfigured: raw.smtp_configured,
+    siteUrlConfigured: raw.site_url_configured,
   };
 }
 

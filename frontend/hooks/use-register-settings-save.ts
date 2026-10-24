@@ -62,6 +62,13 @@ export function useRegisterSettingsSave(initial: RegisterSettingsValues) {
     }));
   }
 
+  function setEmailVerificationEnabled(checked: boolean) {
+    setValues((previous) => ({
+      ...previous,
+      emailVerificationEnabled: checked,
+    }));
+  }
+
   function setPasswordRequirementsEnabled(checked: boolean) {
     setValues((previous) => ({
       ...previous,
@@ -159,6 +166,7 @@ export function useRegisterSettingsSave(initial: RegisterSettingsValues) {
     setEmailDomainControlEnabled,
     updateAllowedEmailDomains,
     setDefaultGroup,
+    setEmailVerificationEnabled,
     setPasswordRequirementsEnabled,
     updatePasswordMinLength,
     updatePasswordComplexity,

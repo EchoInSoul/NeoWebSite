@@ -8,6 +8,7 @@ export type AdminUser = {
   id: string;
   email: string;
   nickname: string;
+  emailVerificationStatus: "verified" | "not_required";
   group: AdminUserGroup;
   extraPermissions: string[];
 };
@@ -43,6 +44,8 @@ export function parseAdminUser(payload: unknown): AdminUser | null {
     typeof raw.id !== "string" ||
     typeof raw.email !== "string" ||
     typeof raw.nickname !== "string" ||
+    (raw.email_verification_status !== "verified" &&
+      raw.email_verification_status !== "not_required") ||
     !Array.isArray(raw.extra_permissions) ||
     !raw.extra_permissions.every((permission) => typeof permission === "string")
   ) {
@@ -59,6 +62,8 @@ export function parseAdminUser(payload: unknown): AdminUser | null {
     id: raw.id,
     email: raw.email,
     nickname: raw.nickname,
+    emailVerificationStatus: raw.email_verification_status as
+      "verified" | "not_required",
     group,
     extraPermissions: raw.extra_permissions as string[],
   };

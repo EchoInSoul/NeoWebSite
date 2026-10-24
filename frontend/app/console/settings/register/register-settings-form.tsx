@@ -7,6 +7,7 @@ import {
   Hash,
   KeyRound,
   Mail,
+  MailCheck,
   Unlock,
   UsersRound,
 } from "lucide-react";
@@ -30,6 +31,7 @@ import type { AdminGroup } from "@/lib/groups";
 import {
   groupSelectionMap,
   selectableGroups,
+  type MailStatus,
   type RegisterSettingsValues,
 } from "@/lib/register-settings";
 
@@ -41,9 +43,11 @@ const inputClassName = "w-70";
 export function RegisterSettingsForm({
   settings,
   groups,
+  prerequisites,
 }: {
   settings: RegisterSettingsValues;
   groups: AdminGroup[];
+  prerequisites: MailStatus | null;
 }) {
   const t = useTranslations("settings");
   const {
@@ -54,6 +58,7 @@ export function RegisterSettingsForm({
     setEmailDomainControlEnabled,
     updateAllowedEmailDomains,
     setDefaultGroup,
+    setEmailVerificationEnabled,
     setPasswordRequirementsEnabled,
     updatePasswordMinLength,
     updatePasswordComplexity,
@@ -75,6 +80,22 @@ export function RegisterSettingsForm({
     values.defaultGroup,
   );
 
+  const canEnable =
+    prerequisites?.smtpConfigured === true &&
+    prerequisites?.siteUrlConfigured === true;
+  const missingHints =
+    prerequisites === null
+      ? [t("emailVerificationUnknownHint")]
+      : [
+          prerequisites.smtpConfigured ? null : t("emailVerificationSmtpHint"),
+          prerequisites.siteUrlConfigured
+            ? null
+            : t("emailVerificationSiteUrlHint"),
+        ].filter((value): value is string => value !== null);
+  const emailVerificationDescription = values.emailVerificationEnabled
+    ? undefined
+    : missingHints.join(" ");
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void save();
@@ -82,6 +103,11 @@ export function RegisterSettingsForm({
 
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+      {values.emailVerificationEnabled && !canEnable ? (
+        <p className="rounded-md border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
+          {t("emailVerificationWarning")}
+        </p>
+      ) : null}
       <ConsoleSettingsGroup title={t("registerGroup")}>
         <ConsoleSettingsRow
           control={
@@ -160,6 +186,21 @@ export function RegisterSettingsForm({
           icon={<Mail />}
           label={t("emailDomainControl")}
           onExpandedChange={emailDomainExpansion.setExpanded}
+        />
+        <ConsoleSettingsRow
+          control={
+            <Switch
+              aria-label={t("emailVerification")}
+              checked={values.emailVerificationEnabled}
+              onCheckedChange={setEmailVerificationEnabled}
+              disabled={
+                isSaving || (!values.emailVerificationEnabled && !canEnable)
+              }
+            />
+          }
+          description={emailVerificationDescription}
+          icon={<MailCheck />}
+          label={t("emailVerification")}
         />
       </ConsoleSettingsGroup>
       <ConsoleSettingsGroup title={t("passwordGroup")}>

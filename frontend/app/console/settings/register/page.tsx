@@ -23,7 +23,11 @@ export default async function SettingsRegisterPage() {
     <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-4 p-4 min-[1200px]:p-6">
       <h1 className="text-xl font-semibold tracking-tight">{t("register")}</h1>
       {read.status === "ok" ? (
-        <RegisterSettingsForm settings={read.values} groups={read.groups} />
+        <RegisterSettingsForm
+          settings={read.values}
+          groups={read.groups}
+          prerequisites={read.prerequisites}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">
           {read.status === "forbidden" ? t("noPermission") : t("loadFailed")}

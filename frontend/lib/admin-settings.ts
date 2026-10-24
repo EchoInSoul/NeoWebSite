@@ -16,7 +16,9 @@ import {
   type MailSettingsValues,
 } from "@/lib/mail-settings";
 import {
+  parseMailStatus,
   parseRegisterSettingsValues,
+  type MailStatus,
   type RegisterSettingsValues,
 } from "@/lib/register-settings";
 import {
@@ -82,15 +84,21 @@ export async function getSiteSettings(): Promise<SiteSettingsRead> {
 }
 
 export type RegisterSettingsRead =
-  | { status: "ok"; values: RegisterSettingsValues; groups: AdminGroup[] }
+  | {
+      status: "ok";
+      values: RegisterSettingsValues;
+      groups: AdminGroup[];
+      prerequisites: MailStatus | null;
+    }
   | { status: "forbidden" }
   | { status: "failed" };
 
 export async function getRegisterSettings(): Promise<RegisterSettingsRead> {
-  const [register, auth, groups] = await Promise.all([
+  const [register, auth, groups, mail] = await Promise.all([
     fetchAdminPayload("/api/v1/admin/settings/register"),
     fetchAdminPayload("/api/v1/admin/settings/auth"),
     fetchAdminPayload("/api/v1/admin/groups"),
+    fetchAdminPayload("/api/v1/admin/mail/status"),
   ]);
 
   if (
@@ -110,12 +118,14 @@ export async function getRegisterSettings(): Promise<RegisterSettingsRead> {
 
   const values = parseRegisterSettingsValues(register.payload, auth.payload);
   const adminGroups = parseAdminGroups(groups.payload);
+  const prerequisites =
+    mail.status === "ok" ? parseMailStatus(mail.payload) : null;
 
   if (values === null || adminGroups === null) {
     return { status: "failed" };
   }
 
-  return { status: "ok", values, groups: adminGroups };
+  return { status: "ok", values, groups: adminGroups, prerequisites };
 }
 
 export type LoginSettingsRead = AdminSettingsRead<LoginSettingsValues>;

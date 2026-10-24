@@ -117,6 +117,18 @@ export function UsersPanel({
       cellClassName: "px-4 text-xs text-muted-foreground",
       render: (user) => user.group.name,
     },
+    {
+      key: "emailVerification",
+      header: t("columnEmailVerification"),
+      headerClassName: "px-4",
+      cellClassName: "px-4 text-xs text-muted-foreground",
+      render: (user) =>
+        t(
+          user.emailVerificationStatus === "verified"
+            ? "emailVerificationVerified"
+            : "emailVerificationNotRequired",
+        ),
+    },
   ];
 
   return (
