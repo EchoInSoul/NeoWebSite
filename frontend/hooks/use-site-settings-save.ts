@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ApiError, apiRequest, looksLikeServiceFailure } from "@/lib/api";
 import {
   buildSiteSettingsPatch,
+  isValidSiteUrl,
   parseSiteSettingsValues,
   type SiteSettingsValues,
 } from "@/lib/site-settings";
@@ -37,6 +38,11 @@ export function useSiteSettingsSave(initial: SiteSettingsValues) {
       return;
     }
 
+    if (values.url !== baseline.url && !isValidSiteUrl(values.url)) {
+      toast.error(t("siteUrlInvalid"));
+      return;
+    }
+
     setIsSaving(true);
     try {
       const payload = await apiRequest("/api/v1/admin/settings/site", {
@@ -56,6 +62,16 @@ export function useSiteSettingsSave(initial: SiteSettingsValues) {
       router.refresh();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
+        return;
+      }
+      if (error instanceof ApiError && error.status === 403) {
+        toast.error(t("noPermissionToSave"));
+        return;
+      }
+      if (error instanceof ApiError && error.code === "setting_conflict") {
+        toast.error(
+          error.param === "url" ? t("siteUrlInvalid") : t("saveFailed"),
+        );
         return;
       }
       if (looksLikeServiceFailure(error)) {

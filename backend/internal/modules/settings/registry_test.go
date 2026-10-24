@@ -382,6 +382,38 @@ func TestValidateMailGroup(t *testing.T) {
 	}
 }
 
+func TestValidateSiteGroup(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		value   string
+		touched bool
+		wantErr bool
+	}{
+		{"empty is allowed", "", true, false},
+		{"http", "http://example.com", true, false},
+		{"https with path", "https://example.com/blog", true, false},
+		{"uppercase scheme", "HTTPS://example.com", true, false},
+		{"scheme only", "https://", true, false},
+		{"empty host with port", "http://:8080", true, false},
+		{"trailing space", "https://example.com ", true, false},
+		{"javascript", "javascript:alert(1)", true, true},
+		{"data", "data:text/html,x", true, true},
+		{"ftp", "ftp://example.com", true, true},
+		{"protocol relative", "//example.com", true, true},
+		{"relative path", "/blog", true, true},
+		{"missing scheme", "example.com", true, true},
+		{"scheme prefix only", "httpfoo", true, true},
+		{"leading space", " https://example.com", true, true},
+		{"untouched invalid value", "javascript:alert(1)", false, false},
+	} {
+		touched := map[string]bool{"url": tc.touched}
+		err := validateSiteGroup(map[string]any{"url": tc.value}, touched)
+		if (err != nil) != tc.wantErr {
+			t.Fatalf("%s: err = %v, wantErr = %v", tc.name, err, tc.wantErr)
+		}
+	}
+}
+
 func TestSplitListValue(t *testing.T) {
 	cases := []struct {
 		raw  string

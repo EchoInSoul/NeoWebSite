@@ -12,7 +12,9 @@ import (
 
 var builtinRegistry = []Group{
 	{
-		Name: "site",
+		Name:       "site",
+		ValidateOn: []string{"url"},
+		Validate:   validateSiteGroup,
 		Items: []Definition{
 			{Name: "title", Type: FieldTypeString, Default: "", Public: true},
 			{Name: "subtitle", Type: FieldTypeString, Default: "", Public: true},
@@ -245,6 +247,28 @@ func validSenderAddress(raw string) bool {
 	}
 	address, err := netmail.ParseAddress(trimmed)
 	return err == nil && address.Name == "" && address.Address == trimmed
+}
+
+func validateSiteGroup(values map[string]any, touched map[string]bool) error {
+	if !touched["url"] {
+		return nil
+	}
+
+	raw, ok := values["url"].(string)
+	if !ok {
+		return fmt.Errorf("settings: site.url is not a string")
+	}
+
+	if raw != "" && !hasHTTPScheme(raw) {
+		return &ItemError{Item: "url", Err: apierror.ErrSettingConflict}
+	}
+
+	return nil
+}
+
+func hasHTTPScheme(raw string) bool {
+	lower := strings.ToLower(raw)
+	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
 }
 
 func SplitListValue(raw string) []string {

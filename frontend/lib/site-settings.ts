@@ -48,6 +48,16 @@ export function parseSiteSettingsValues(
   };
 }
 
+export function isValidSiteUrl(value: string): boolean {
+  if (value === "") {
+    return true;
+  }
+
+  const lower = value.toLowerCase();
+
+  return lower.startsWith("http://") || lower.startsWith("https://");
+}
+
 export function buildSiteSettingsPatch(
   values: SiteSettingsValues,
   baseline: SiteSettingsValues,

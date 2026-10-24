@@ -480,6 +480,47 @@ func TestSettingsPatchSiteReadsBackPublicly(t *testing.T) {
 	}
 }
 
+func TestSettingsPatchSiteURLValidation(t *testing.T) {
+	db := testDB(t)
+	resetBuiltin(t, db, "site")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	for _, value := range []string{"javascript:alert(1)", "example.com", " https://example.com"} {
+		resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/site", map[string]any{"url": value})
+		expectStatus(t, resp, http.StatusConflict)
+		body := decodeError(t, resp)
+		if body["code"] != "setting_conflict" || body["param"] != "url" {
+			t.Fatalf("url %q: conflict body = %v", value, body)
+		}
+	}
+
+	ok := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/site", map[string]any{"url": "https://example.com/blog"})
+	expectStatus(t, ok, http.StatusOK)
+	_, values := decodeGroup(t, ok)
+	if values["url"] != "https://example.com/blog" {
+		t.Fatalf("site.url = %v, want the written URL", values["url"])
+	}
+}
+
+func TestSettingsPatchSiteSkipsDirtyURLWhenUntouched(t *testing.T) {
+	db := testDB(t)
+	resetBuiltin(t, db, "site")
+	module, err := New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	if err := module.Service.SetString(context.Background(), "site", "url", "javascript:alert(1)"); err != nil {
+		t.Fatalf("seed dirty url: %v", err)
+	}
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/site", map[string]any{"title": "我的博客"})
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+}
+
 func TestSettingsAdminReadsRegisterDefaults(t *testing.T) {
 	db := testDB(t)
 	resetBuiltin(t, db, "register")

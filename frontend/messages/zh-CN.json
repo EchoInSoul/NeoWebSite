@@ -134,6 +134,7 @@
     "siteDescription": "站点描述",
     "siteKeywords": "站点关键词",
     "siteUrl": "站点 URL",
+    "siteUrlInvalid": "非法的 URL 地址",
     "useCurrentSiteUrl": "使用当前地址",
     "blockSearchEngines": "屏蔽搜索引擎",
     "siteLogo": "Logo",

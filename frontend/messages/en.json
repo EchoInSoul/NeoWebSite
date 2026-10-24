@@ -134,6 +134,7 @@
     "siteDescription": "Site description",
     "siteKeywords": "Site keywords",
     "siteUrl": "Site URL",
+    "siteUrlInvalid": "Invalid URL address",
     "useCurrentSiteUrl": "Use current address",
     "blockSearchEngines": "Block search engines",
     "siteLogo": "Logo",
