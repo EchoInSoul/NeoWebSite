@@ -51,6 +51,9 @@ func TestRegistryMatchesSpec(t *testing.T) {
 		{"last_owner", ErrLastOwner, TypeConflict, "last_owner", http.StatusConflict, nil},
 		{"setting_conflict", ErrSettingConflict, TypeConflict, "setting_conflict", http.StatusConflict, nil},
 		{"mail_delivery_failed", ErrMailDeliveryFailed, TypeServer, "mail_delivery_failed", http.StatusInternalServerError, nil},
+		{"mail_unavailable", ErrMailUnavailable, TypeServer, "mail_unavailable", http.StatusServiceUnavailable, nil},
+		{"email_verification_invalid", ErrEmailVerificationInvalid, TypeInvalidRequest, "email_verification_invalid", http.StatusBadRequest, strPtr("token")},
+		{"email_not_verified", ErrEmailNotVerified, TypePermission, "email_not_verified", http.StatusForbidden, nil},
 		{"service_unavailable", ErrServiceUnavailable, TypeServer, "service_unavailable", http.StatusServiceUnavailable, nil},
 		{"internal_error", ErrInternal, TypeServer, "internal_error", http.StatusInternalServerError, nil},
 	}
@@ -315,13 +318,14 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrOwnerProtected, ErrCannotModifySelf, ErrRegistrationClosed, ErrTwoFactorDisabled, ErrNotFound, ErrPresetGroupLocked,
 		ErrEmailTaken, ErrNicknameTaken, ErrAlreadyTaken, ErrGroupNameTaken,
 		ErrGroupNotEmpty, ErrLastOwner, ErrSettingConflict, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
-		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrNotImplemented, ErrServiceUnavailable, ErrInternal,
+		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrMailUnavailable, ErrEmailVerificationInvalid,
+		ErrEmailNotVerified, ErrNotImplemented, ErrServiceUnavailable, ErrInternal,
 	}
-	if len(all) != 36 {
-		t.Fatalf("sentinel count = %d, want 36", len(all))
+	if len(all) != 39 {
+		t.Fatalf("sentinel count = %d, want 39", len(all))
 	}
-	if len(statusByCode) != 36 {
-		t.Fatalf("statusByCode entries = %d, want 36", len(statusByCode))
+	if len(statusByCode) != 39 {
+		t.Fatalf("statusByCode entries = %d, want 39", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,

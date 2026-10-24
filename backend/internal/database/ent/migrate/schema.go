@@ -50,6 +50,29 @@ var (
 			},
 		},
 	}
+	// PendingRegistrationsColumns holds the columns for the "pending_registrations" table.
+	PendingRegistrationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "email", Type: field.TypeString, Unique: true},
+		{Name: "nickname", Type: field.TypeString},
+		{Name: "password_hash", Type: field.TypeString},
+		{Name: "token_hash", Type: field.TypeString, Unique: true},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// PendingRegistrationsTable holds the schema information for the "pending_registrations" table.
+	PendingRegistrationsTable = &schema.Table{
+		Name:       "pending_registrations",
+		Columns:    PendingRegistrationsColumns,
+		PrimaryKey: []*schema.Column{PendingRegistrationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "pendingregistration_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{PendingRegistrationsColumns[5]},
+			},
+		},
+	}
 	// RecoveryCodesColumns holds the columns for the "recovery_codes" table.
 	RecoveryCodesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -127,6 +150,7 @@ var (
 		{Name: "nickname", Type: field.TypeString, Unique: true},
 		{Name: "bio", Type: field.TypeString, Nullable: true},
 		{Name: "password_hash", Type: field.TypeString},
+		{Name: "email_verification_status", Type: field.TypeString},
 		{Name: "auth_version", Type: field.TypeInt, Default: 0},
 		{Name: "totp_secret", Type: field.TypeString, Nullable: true},
 		{Name: "totp_enabled_at", Type: field.TypeTime, Nullable: true},
@@ -144,7 +168,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "users_groups_users",
-				Columns:    []*schema.Column{UsersColumns[12]},
+				Columns:    []*schema.Column{UsersColumns[13]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -153,12 +177,12 @@ var (
 			{
 				Name:    "user_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[10]},
+				Columns: []*schema.Column{UsersColumns[11]},
 			},
 			{
 				Name:    "user_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[12]},
+				Columns: []*schema.Column{UsersColumns[13]},
 			},
 		},
 	}
@@ -194,6 +218,7 @@ var (
 	Tables = []*schema.Table{
 		GroupsTable,
 		GroupPermissionsTable,
+		PendingRegistrationsTable,
 		RecoveryCodesTable,
 		SessionsTable,
 		SettingValuesTable,

@@ -237,6 +237,7 @@ func createUserInGroup(t *testing.T, db *database.Database, groupID uuid.UUID) u
 		SetEmail("u+" + tag + "@test.local").
 		SetNickname("nick" + tag).
 		SetPasswordHash("hash-" + tag).
+		SetEmailVerificationStatus("not_required").
 		SetGroupID(groupID).
 		Save(context.Background())
 	if err != nil {
@@ -653,6 +654,23 @@ func TestSettingsPatchTurnsRegistrationOff(t *testing.T) {
 		t.Fatalf("register rows = %d, want the five seeded rows", count)
 	}
 	assertRegisterEnabled(t, db, false)
+}
+
+func TestRegisterSettingAllowsEnableWithoutSMTP(t *testing.T) {
+	db := testDB(t)
+	resetBuiltin(t, db, "register")
+	t.Cleanup(func() { resetBuiltin(t, db, "register") })
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	resp := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/register", map[string]any{
+		"email_verification_enabled": true,
+	})
+	expectStatus(t, resp, http.StatusOK)
+	_, values := decodeGroup(t, resp)
+	if values["email_verification_enabled"] != true {
+		t.Fatalf("email_verification_enabled = %v, want true", values["email_verification_enabled"])
+	}
 }
 
 func TestSettingsPatchUnknownItem(t *testing.T) {

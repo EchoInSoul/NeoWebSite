@@ -11,6 +11,7 @@ import (
 	"time"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/predicate"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/session"
@@ -32,13 +33,14 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypeGroup           = "Group"
-	TypeGroupPermission = "GroupPermission"
-	TypeRecoveryCode    = "RecoveryCode"
-	TypeSession         = "Session"
-	TypeSettingValue    = "SettingValue"
-	TypeUser            = "User"
-	TypeUserPermission  = "UserPermission"
+	TypeGroup               = "Group"
+	TypeGroupPermission     = "GroupPermission"
+	TypePendingRegistration = "PendingRegistration"
+	TypeRecoveryCode        = "RecoveryCode"
+	TypeSession             = "Session"
+	TypeSettingValue        = "SettingValue"
+	TypeUser                = "User"
+	TypeUserPermission      = "UserPermission"
 )
 
 // GroupMutation represents an operation that mutates the Group nodes in the graph.
@@ -1225,6 +1227,608 @@ func (m *GroupPermissionMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown GroupPermission edge %s", name)
+}
+
+// PendingRegistrationMutation represents an operation that mutates the PendingRegistration nodes in the graph.
+type PendingRegistrationMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *uuid.UUID
+	email         *string
+	nickname      *string
+	password_hash *string
+	token_hash    *string
+	expires_at    *time.Time
+	created_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*PendingRegistration, error)
+	predicates    []predicate.PendingRegistration
+}
+
+var _ ent.Mutation = (*PendingRegistrationMutation)(nil)
+
+// pendingregistrationOption allows management of the mutation configuration using functional options.
+type pendingregistrationOption func(*PendingRegistrationMutation)
+
+// newPendingRegistrationMutation creates new mutation for the PendingRegistration entity.
+func newPendingRegistrationMutation(c config, op Op, opts ...pendingregistrationOption) *PendingRegistrationMutation {
+	m := &PendingRegistrationMutation{
+		config:        c,
+		op:            op,
+		typ:           TypePendingRegistration,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withPendingRegistrationID sets the ID field of the mutation.
+func withPendingRegistrationID(id uuid.UUID) pendingregistrationOption {
+	return func(m *PendingRegistrationMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *PendingRegistration
+		)
+		m.oldValue = func(ctx context.Context) (*PendingRegistration, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().PendingRegistration.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withPendingRegistration sets the old PendingRegistration of the mutation.
+func withPendingRegistration(node *PendingRegistration) pendingregistrationOption {
+	return func(m *PendingRegistrationMutation) {
+		m.oldValue = func(context.Context) (*PendingRegistration, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m PendingRegistrationMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m PendingRegistrationMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of PendingRegistration entities.
+func (m *PendingRegistrationMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *PendingRegistrationMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *PendingRegistrationMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().PendingRegistration.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetEmail sets the "email" field.
+func (m *PendingRegistrationMutation) SetEmail(s string) {
+	m.email = &s
+}
+
+// Email returns the value of the "email" field in the mutation.
+func (m *PendingRegistrationMutation) Email() (r string, exists bool) {
+	v := m.email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmail returns the old "email" field's value of the PendingRegistration entity.
+// If the PendingRegistration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PendingRegistrationMutation) OldEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmail: %w", err)
+	}
+	return oldValue.Email, nil
+}
+
+// ResetEmail resets all changes to the "email" field.
+func (m *PendingRegistrationMutation) ResetEmail() {
+	m.email = nil
+}
+
+// SetNickname sets the "nickname" field.
+func (m *PendingRegistrationMutation) SetNickname(s string) {
+	m.nickname = &s
+}
+
+// Nickname returns the value of the "nickname" field in the mutation.
+func (m *PendingRegistrationMutation) Nickname() (r string, exists bool) {
+	v := m.nickname
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNickname returns the old "nickname" field's value of the PendingRegistration entity.
+// If the PendingRegistration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PendingRegistrationMutation) OldNickname(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNickname is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNickname requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNickname: %w", err)
+	}
+	return oldValue.Nickname, nil
+}
+
+// ResetNickname resets all changes to the "nickname" field.
+func (m *PendingRegistrationMutation) ResetNickname() {
+	m.nickname = nil
+}
+
+// SetPasswordHash sets the "password_hash" field.
+func (m *PendingRegistrationMutation) SetPasswordHash(s string) {
+	m.password_hash = &s
+}
+
+// PasswordHash returns the value of the "password_hash" field in the mutation.
+func (m *PendingRegistrationMutation) PasswordHash() (r string, exists bool) {
+	v := m.password_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPasswordHash returns the old "password_hash" field's value of the PendingRegistration entity.
+// If the PendingRegistration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PendingRegistrationMutation) OldPasswordHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPasswordHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPasswordHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPasswordHash: %w", err)
+	}
+	return oldValue.PasswordHash, nil
+}
+
+// ResetPasswordHash resets all changes to the "password_hash" field.
+func (m *PendingRegistrationMutation) ResetPasswordHash() {
+	m.password_hash = nil
+}
+
+// SetTokenHash sets the "token_hash" field.
+func (m *PendingRegistrationMutation) SetTokenHash(s string) {
+	m.token_hash = &s
+}
+
+// TokenHash returns the value of the "token_hash" field in the mutation.
+func (m *PendingRegistrationMutation) TokenHash() (r string, exists bool) {
+	v := m.token_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenHash returns the old "token_hash" field's value of the PendingRegistration entity.
+// If the PendingRegistration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PendingRegistrationMutation) OldTokenHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenHash: %w", err)
+	}
+	return oldValue.TokenHash, nil
+}
+
+// ResetTokenHash resets all changes to the "token_hash" field.
+func (m *PendingRegistrationMutation) ResetTokenHash() {
+	m.token_hash = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *PendingRegistrationMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *PendingRegistrationMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the PendingRegistration entity.
+// If the PendingRegistration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PendingRegistrationMutation) OldExpiresAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *PendingRegistrationMutation) ResetExpiresAt() {
+	m.expires_at = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *PendingRegistrationMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *PendingRegistrationMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the PendingRegistration entity.
+// If the PendingRegistration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PendingRegistrationMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *PendingRegistrationMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the PendingRegistrationMutation builder.
+func (m *PendingRegistrationMutation) Where(ps ...predicate.PendingRegistration) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the PendingRegistrationMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *PendingRegistrationMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.PendingRegistration, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *PendingRegistrationMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *PendingRegistrationMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (PendingRegistration).
+func (m *PendingRegistrationMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *PendingRegistrationMutation) Fields() []string {
+	fields := make([]string, 0, 6)
+	if m.email != nil {
+		fields = append(fields, pendingregistration.FieldEmail)
+	}
+	if m.nickname != nil {
+		fields = append(fields, pendingregistration.FieldNickname)
+	}
+	if m.password_hash != nil {
+		fields = append(fields, pendingregistration.FieldPasswordHash)
+	}
+	if m.token_hash != nil {
+		fields = append(fields, pendingregistration.FieldTokenHash)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, pendingregistration.FieldExpiresAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, pendingregistration.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *PendingRegistrationMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case pendingregistration.FieldEmail:
+		return m.Email()
+	case pendingregistration.FieldNickname:
+		return m.Nickname()
+	case pendingregistration.FieldPasswordHash:
+		return m.PasswordHash()
+	case pendingregistration.FieldTokenHash:
+		return m.TokenHash()
+	case pendingregistration.FieldExpiresAt:
+		return m.ExpiresAt()
+	case pendingregistration.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *PendingRegistrationMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case pendingregistration.FieldEmail:
+		return m.OldEmail(ctx)
+	case pendingregistration.FieldNickname:
+		return m.OldNickname(ctx)
+	case pendingregistration.FieldPasswordHash:
+		return m.OldPasswordHash(ctx)
+	case pendingregistration.FieldTokenHash:
+		return m.OldTokenHash(ctx)
+	case pendingregistration.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	case pendingregistration.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown PendingRegistration field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PendingRegistrationMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case pendingregistration.FieldEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmail(v)
+		return nil
+	case pendingregistration.FieldNickname:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNickname(v)
+		return nil
+	case pendingregistration.FieldPasswordHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPasswordHash(v)
+		return nil
+	case pendingregistration.FieldTokenHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenHash(v)
+		return nil
+	case pendingregistration.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	case pendingregistration.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PendingRegistration field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *PendingRegistrationMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *PendingRegistrationMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PendingRegistrationMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown PendingRegistration numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *PendingRegistrationMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *PendingRegistrationMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *PendingRegistrationMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown PendingRegistration nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *PendingRegistrationMutation) ResetField(name string) error {
+	switch name {
+	case pendingregistration.FieldEmail:
+		m.ResetEmail()
+		return nil
+	case pendingregistration.FieldNickname:
+		m.ResetNickname()
+		return nil
+	case pendingregistration.FieldPasswordHash:
+		m.ResetPasswordHash()
+		return nil
+	case pendingregistration.FieldTokenHash:
+		m.ResetTokenHash()
+		return nil
+	case pendingregistration.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	case pendingregistration.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown PendingRegistration field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *PendingRegistrationMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *PendingRegistrationMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *PendingRegistrationMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *PendingRegistrationMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *PendingRegistrationMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *PendingRegistrationMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *PendingRegistrationMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown PendingRegistration unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *PendingRegistrationMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown PendingRegistration edge %s", name)
 }
 
 // RecoveryCodeMutation represents an operation that mutates the RecoveryCode nodes in the graph.
@@ -2744,34 +3348,35 @@ func (m *SettingValueMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op                   Op
-	typ                  string
-	id                   *uuid.UUID
-	email                *string
-	nickname             *string
-	bio                  *string
-	password_hash        *string
-	auth_version         *int
-	addauth_version      *int
-	totp_secret          *string
-	totp_enabled_at      *time.Time
-	totp_last_counter    *int64
-	addtotp_last_counter *int64
-	totp_setup_at        *time.Time
-	created_at           *time.Time
-	updated_at           *time.Time
-	clearedFields        map[string]struct{}
-	group                *uuid.UUID
-	clearedgroup         bool
-	permissions          map[uuid.UUID]struct{}
-	removedpermissions   map[uuid.UUID]struct{}
-	clearedpermissions   bool
-	recoveryCodes        map[uuid.UUID]struct{}
-	removedrecoveryCodes map[uuid.UUID]struct{}
-	clearedrecoveryCodes bool
-	done                 bool
-	oldValue             func(context.Context) (*User, error)
-	predicates           []predicate.User
+	op                        Op
+	typ                       string
+	id                        *uuid.UUID
+	email                     *string
+	nickname                  *string
+	bio                       *string
+	password_hash             *string
+	email_verification_status *string
+	auth_version              *int
+	addauth_version           *int
+	totp_secret               *string
+	totp_enabled_at           *time.Time
+	totp_last_counter         *int64
+	addtotp_last_counter      *int64
+	totp_setup_at             *time.Time
+	created_at                *time.Time
+	updated_at                *time.Time
+	clearedFields             map[string]struct{}
+	group                     *uuid.UUID
+	clearedgroup              bool
+	permissions               map[uuid.UUID]struct{}
+	removedpermissions        map[uuid.UUID]struct{}
+	clearedpermissions        bool
+	recoveryCodes             map[uuid.UUID]struct{}
+	removedrecoveryCodes      map[uuid.UUID]struct{}
+	clearedrecoveryCodes      bool
+	done                      bool
+	oldValue                  func(context.Context) (*User, error)
+	predicates                []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -3033,6 +3638,42 @@ func (m *UserMutation) OldPasswordHash(ctx context.Context) (v string, err error
 // ResetPasswordHash resets all changes to the "password_hash" field.
 func (m *UserMutation) ResetPasswordHash() {
 	m.password_hash = nil
+}
+
+// SetEmailVerificationStatus sets the "email_verification_status" field.
+func (m *UserMutation) SetEmailVerificationStatus(s string) {
+	m.email_verification_status = &s
+}
+
+// EmailVerificationStatus returns the value of the "email_verification_status" field in the mutation.
+func (m *UserMutation) EmailVerificationStatus() (r string, exists bool) {
+	v := m.email_verification_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmailVerificationStatus returns the old "email_verification_status" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldEmailVerificationStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmailVerificationStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmailVerificationStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmailVerificationStatus: %w", err)
+	}
+	return oldValue.EmailVerificationStatus, nil
+}
+
+// ResetEmailVerificationStatus resets all changes to the "email_verification_status" field.
+func (m *UserMutation) ResetEmailVerificationStatus() {
+	m.email_verification_status = nil
 }
 
 // SetAuthVersion sets the "auth_version" field.
@@ -3585,7 +4226,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.email != nil {
 		fields = append(fields, user.FieldEmail)
 	}
@@ -3597,6 +4238,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.password_hash != nil {
 		fields = append(fields, user.FieldPasswordHash)
+	}
+	if m.email_verification_status != nil {
+		fields = append(fields, user.FieldEmailVerificationStatus)
 	}
 	if m.auth_version != nil {
 		fields = append(fields, user.FieldAuthVersion)
@@ -3638,6 +4282,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Bio()
 	case user.FieldPasswordHash:
 		return m.PasswordHash()
+	case user.FieldEmailVerificationStatus:
+		return m.EmailVerificationStatus()
 	case user.FieldAuthVersion:
 		return m.AuthVersion()
 	case user.FieldGroupID:
@@ -3671,6 +4317,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldBio(ctx)
 	case user.FieldPasswordHash:
 		return m.OldPasswordHash(ctx)
+	case user.FieldEmailVerificationStatus:
+		return m.OldEmailVerificationStatus(ctx)
 	case user.FieldAuthVersion:
 		return m.OldAuthVersion(ctx)
 	case user.FieldGroupID:
@@ -3723,6 +4371,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPasswordHash(v)
+		return nil
+	case user.FieldEmailVerificationStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmailVerificationStatus(v)
 		return nil
 	case user.FieldAuthVersion:
 		v, ok := value.(int)
@@ -3900,6 +4555,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldPasswordHash:
 		m.ResetPasswordHash()
+		return nil
+	case user.FieldEmailVerificationStatus:
+		m.ResetEmailVerificationStatus()
 		return nil
 	case user.FieldAuthVersion:
 		m.ResetAuthVersion()

@@ -23,6 +23,8 @@ const (
 	FieldBio = "bio"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
 	FieldPasswordHash = "password_hash"
+	// FieldEmailVerificationStatus holds the string denoting the email_verification_status field in the database.
+	FieldEmailVerificationStatus = "email_verification_status"
 	// FieldAuthVersion holds the string denoting the auth_version field in the database.
 	FieldAuthVersion = "auth_version"
 	// FieldGroupID holds the string denoting the group_id field in the database.
@@ -77,6 +79,7 @@ var Columns = []string{
 	FieldNickname,
 	FieldBio,
 	FieldPasswordHash,
+	FieldEmailVerificationStatus,
 	FieldAuthVersion,
 	FieldGroupID,
 	FieldTotpSecret,
@@ -104,6 +107,8 @@ var (
 	NicknameValidator func(string) error
 	// PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
 	PasswordHashValidator func(string) error
+	// EmailVerificationStatusValidator is a validator for the "email_verification_status" field. It is called by the builders before save.
+	EmailVerificationStatusValidator func(string) error
 	// DefaultAuthVersion holds the default value on creation for the "auth_version" field.
 	DefaultAuthVersion int
 	// DefaultGroupID holds the default value on creation for the "group_id" field.
@@ -144,6 +149,11 @@ func ByBio(opts ...sql.OrderTermOption) OrderOption {
 // ByPasswordHash orders the results by the password_hash field.
 func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPasswordHash, opts...).ToFunc()
+}
+
+// ByEmailVerificationStatus orders the results by the email_verification_status field.
+func ByEmailVerificationStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailVerificationStatus, opts...).ToFunc()
 }
 
 // ByAuthVersion orders the results by the auth_version field.

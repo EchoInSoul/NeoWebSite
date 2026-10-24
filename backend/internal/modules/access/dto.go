@@ -16,11 +16,12 @@ type Group struct {
 }
 
 type UserSummary struct {
-	ID               string   `json:"id"`
-	Email            string   `json:"email"`
-	Nickname         string   `json:"nickname"`
-	Group            GroupRef `json:"group"`
-	ExtraPermissions []string `json:"extra_permissions"`
+	ID                      string   `json:"id"`
+	Email                   string   `json:"email"`
+	Nickname                string   `json:"nickname"`
+	EmailVerificationStatus string   `json:"email_verification_status"`
+	Group                   GroupRef `json:"group"`
+	ExtraPermissions        []string `json:"extra_permissions"`
 }
 
 type UserDetail struct {

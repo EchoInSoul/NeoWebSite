@@ -94,6 +94,20 @@ func (_u *UserUpdate) SetNillablePasswordHash(v *string) *UserUpdate {
 	return _u
 }
 
+// SetEmailVerificationStatus sets the "email_verification_status" field.
+func (_u *UserUpdate) SetEmailVerificationStatus(v string) *UserUpdate {
+	_u.mutation.SetEmailVerificationStatus(v)
+	return _u
+}
+
+// SetNillableEmailVerificationStatus sets the "email_verification_status" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableEmailVerificationStatus(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetEmailVerificationStatus(*v)
+	}
+	return _u
+}
+
 // SetAuthVersion sets the "auth_version" field.
 func (_u *UserUpdate) SetAuthVersion(v int) *UserUpdate {
 	_u.mutation.ResetAuthVersion()
@@ -363,6 +377,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.EmailVerificationStatus(); ok {
+		if err := user.EmailVerificationStatusValidator(v); err != nil {
+			return &ValidationError{Name: "email_verification_status", err: fmt.Errorf(`ent: validator failed for field "User.email_verification_status": %w`, err)}
+		}
+	}
 	if _u.mutation.GroupCleared() && len(_u.mutation.GroupIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "User.group"`)
 	}
@@ -395,6 +414,9 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.EmailVerificationStatus(); ok {
+		_spec.SetField(user.FieldEmailVerificationStatus, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.AuthVersion(); ok {
 		_spec.SetField(user.FieldAuthVersion, field.TypeInt, value)
@@ -629,6 +651,20 @@ func (_u *UserUpdateOne) SetPasswordHash(v string) *UserUpdateOne {
 func (_u *UserUpdateOne) SetNillablePasswordHash(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetPasswordHash(*v)
+	}
+	return _u
+}
+
+// SetEmailVerificationStatus sets the "email_verification_status" field.
+func (_u *UserUpdateOne) SetEmailVerificationStatus(v string) *UserUpdateOne {
+	_u.mutation.SetEmailVerificationStatus(v)
+	return _u
+}
+
+// SetNillableEmailVerificationStatus sets the "email_verification_status" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableEmailVerificationStatus(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetEmailVerificationStatus(*v)
 	}
 	return _u
 }
@@ -915,6 +951,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.EmailVerificationStatus(); ok {
+		if err := user.EmailVerificationStatusValidator(v); err != nil {
+			return &ValidationError{Name: "email_verification_status", err: fmt.Errorf(`ent: validator failed for field "User.email_verification_status": %w`, err)}
+		}
+	}
 	if _u.mutation.GroupCleared() && len(_u.mutation.GroupIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "User.group"`)
 	}
@@ -964,6 +1005,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.EmailVerificationStatus(); ok {
+		_spec.SetField(user.FieldEmailVerificationStatus, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.AuthVersion(); ok {
 		_spec.SetField(user.FieldAuthVersion, field.TypeInt, value)

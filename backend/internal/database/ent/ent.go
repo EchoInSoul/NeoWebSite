@@ -10,6 +10,7 @@ import (
 	"sync"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/session"
 	"website/backend/internal/database/ent/settingvalue"
@@ -79,13 +80,14 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			group.Table:           group.ValidColumn,
-			grouppermission.Table: grouppermission.ValidColumn,
-			recoverycode.Table:    recoverycode.ValidColumn,
-			session.Table:         session.ValidColumn,
-			settingvalue.Table:    settingvalue.ValidColumn,
-			user.Table:            user.ValidColumn,
-			userpermission.Table:  userpermission.ValidColumn,
+			group.Table:               group.ValidColumn,
+			grouppermission.Table:     grouppermission.ValidColumn,
+			pendingregistration.Table: pendingregistration.ValidColumn,
+			recoverycode.Table:        recoverycode.ValidColumn,
+			session.Table:             session.ValidColumn,
+			settingvalue.Table:        settingvalue.ValidColumn,
+			user.Table:                user.ValidColumn,
+			userpermission.Table:      userpermission.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

@@ -32,7 +32,7 @@ func CreateAdminUser(ctx context.Context, db *database.Database, email, nickname
 		return User{}, err
 	}
 
-	created, err := newRepository(db).createUser(ctx, email, nickname, string(hash))
+	created, err := newRepository(db).createUser(ctx, email, nickname, string(hash), emailVerificationNotRequired)
 	if err != nil {
 		if ent.IsConstraintError(err) {
 			return User{}, errors.New("auth: email or nickname already exists")

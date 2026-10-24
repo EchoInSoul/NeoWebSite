@@ -29,6 +29,7 @@ func createTestUser(t *testing.T, db *database.Database, groupID uuid.UUID) uuid
 		SetEmail("u+" + tag + "@test.local").
 		SetNickname("nick" + tag).
 		SetPasswordHash("hash-" + tag).
+		SetEmailVerificationStatus("not_required").
 		SetGroupID(groupID).
 		Save(context.Background())
 	if err != nil {
@@ -583,6 +584,9 @@ func TestListUsersAndGetUser(t *testing.T) {
 	if !reflect.DeepEqual(found.ExtraPermissions, []string{rbac.PermissionUsersView}) {
 		t.Fatalf("extra permissions = %v, want [users.view]", found.ExtraPermissions)
 	}
+	if found.EmailVerificationStatus != "not_required" {
+		t.Fatalf("email verification status = %q, want not_required", found.EmailVerificationStatus)
+	}
 	for i := 1; i < len(users); i++ {
 		if users[i-1].Email == users[i].Email {
 			t.Fatalf("duplicate user rows at %d", i)
@@ -596,6 +600,9 @@ func TestListUsersAndGetUser(t *testing.T) {
 	want := []string{rbac.PermissionGroupsEdit, rbac.PermissionUsersView, rbac.PermissionGroupsView}
 	if !reflect.DeepEqual(detail.Permissions, want) {
 		t.Fatalf("effective permissions = %v, want %v", detail.Permissions, want)
+	}
+	if detail.EmailVerificationStatus != "not_required" {
+		t.Fatalf("detail email verification status = %q, want not_required", detail.EmailVerificationStatus)
 	}
 	if _, err := service.GetUser(ctx, uuid.New().String()); !errors.Is(err, apierror.ErrNotFound) {
 		t.Fatalf("missing user error = %v, want apierror.ErrNotFound", err)

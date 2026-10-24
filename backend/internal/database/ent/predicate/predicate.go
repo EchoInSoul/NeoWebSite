@@ -12,6 +12,9 @@ type Group func(*sql.Selector)
 // GroupPermission is the predicate function for grouppermission builders.
 type GroupPermission func(*sql.Selector)
 
+// PendingRegistration is the predicate function for pendingregistration builders.
+type PendingRegistration func(*sql.Selector)
+
 // RecoveryCode is the predicate function for recoverycode builders.
 type RecoveryCode func(*sql.Selector)
 

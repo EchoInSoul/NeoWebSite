@@ -29,11 +29,12 @@ type groupRecord struct {
 }
 
 type userRecord struct {
-	ID          uuid.UUID
-	Email       string
-	Nickname    string
-	AuthVersion int
-	Group       groupRecord
+	ID                      uuid.UUID
+	Email                   string
+	Nickname                string
+	AuthVersion             int
+	EmailVerificationStatus string
+	Group                   groupRecord
 }
 
 type updateUserParams struct {
@@ -58,7 +59,13 @@ func toGroupRecord(row *ent.Group) groupRecord {
 }
 
 func toUserRecord(row *ent.User) userRecord {
-	record := userRecord{ID: row.ID, Email: row.Email, Nickname: row.Nickname, AuthVersion: row.AuthVersion}
+	record := userRecord{
+		ID:                      row.ID,
+		Email:                   row.Email,
+		Nickname:                row.Nickname,
+		AuthVersion:             row.AuthVersion,
+		EmailVerificationStatus: row.EmailVerificationStatus,
+	}
 	if row.Edges.Group != nil {
 		record.Group = toGroupRecord(row.Edges.Group)
 	}

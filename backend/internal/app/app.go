@@ -72,7 +72,7 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	mailModule := mail.New(cfg, settingsModule.Service)
 
 	limiter := ratelimit.New()
-	authModule := auth.New(db, sessions, cfg.TOTPEncryptionKey, settingsModule.Service, limiter)
+	authModule := auth.New(db, sessions, cfg.TOTPEncryptionKey, settingsModule.Service, limiter, mailModule.Mailer)
 	authModule.Register(api)
 	settingsModule.Register(api)
 

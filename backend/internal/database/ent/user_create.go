@@ -59,6 +59,12 @@ func (_c *UserCreate) SetPasswordHash(v string) *UserCreate {
 	return _c
 }
 
+// SetEmailVerificationStatus sets the "email_verification_status" field.
+func (_c *UserCreate) SetEmailVerificationStatus(v string) *UserCreate {
+	_c.mutation.SetEmailVerificationStatus(v)
+	return _c
+}
+
 // SetAuthVersion sets the "auth_version" field.
 func (_c *UserCreate) SetAuthVersion(v int) *UserCreate {
 	_c.mutation.SetAuthVersion(v)
@@ -303,6 +309,14 @@ func (_c *UserCreate) check() error {
 			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.EmailVerificationStatus(); !ok {
+		return &ValidationError{Name: "email_verification_status", err: errors.New(`ent: missing required field "User.email_verification_status"`)}
+	}
+	if v, ok := _c.mutation.EmailVerificationStatus(); ok {
+		if err := user.EmailVerificationStatusValidator(v); err != nil {
+			return &ValidationError{Name: "email_verification_status", err: fmt.Errorf(`ent: validator failed for field "User.email_verification_status": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.AuthVersion(); !ok {
 		return &ValidationError{Name: "auth_version", err: errors.New(`ent: missing required field "User.auth_version"`)}
 	}
@@ -369,6 +383,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 		_node.PasswordHash = value
+	}
+	if value, ok := _c.mutation.EmailVerificationStatus(); ok {
+		_spec.SetField(user.FieldEmailVerificationStatus, field.TypeString, value)
+		_node.EmailVerificationStatus = value
 	}
 	if value, ok := _c.mutation.AuthVersion(); ok {
 		_spec.SetField(user.FieldAuthVersion, field.TypeInt, value)
@@ -550,6 +568,18 @@ func (u *UserUpsert) SetPasswordHash(v string) *UserUpsert {
 // UpdatePasswordHash sets the "password_hash" field to the value that was provided on create.
 func (u *UserUpsert) UpdatePasswordHash() *UserUpsert {
 	u.SetExcluded(user.FieldPasswordHash)
+	return u
+}
+
+// SetEmailVerificationStatus sets the "email_verification_status" field.
+func (u *UserUpsert) SetEmailVerificationStatus(v string) *UserUpsert {
+	u.Set(user.FieldEmailVerificationStatus, v)
+	return u
+}
+
+// UpdateEmailVerificationStatus sets the "email_verification_status" field to the value that was provided on create.
+func (u *UserUpsert) UpdateEmailVerificationStatus() *UserUpsert {
+	u.SetExcluded(user.FieldEmailVerificationStatus)
 	return u
 }
 
@@ -784,6 +814,20 @@ func (u *UserUpsertOne) SetPasswordHash(v string) *UserUpsertOne {
 func (u *UserUpsertOne) UpdatePasswordHash() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdatePasswordHash()
+	})
+}
+
+// SetEmailVerificationStatus sets the "email_verification_status" field.
+func (u *UserUpsertOne) SetEmailVerificationStatus(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetEmailVerificationStatus(v)
+	})
+}
+
+// UpdateEmailVerificationStatus sets the "email_verification_status" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateEmailVerificationStatus() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateEmailVerificationStatus()
 	})
 }
 
@@ -1205,6 +1249,20 @@ func (u *UserUpsertBulk) SetPasswordHash(v string) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdatePasswordHash() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdatePasswordHash()
+	})
+}
+
+// SetEmailVerificationStatus sets the "email_verification_status" field.
+func (u *UserUpsertBulk) SetEmailVerificationStatus(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetEmailVerificationStatus(v)
+	})
+}
+
+// UpdateEmailVerificationStatus sets the "email_verification_status" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateEmailVerificationStatus() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateEmailVerificationStatus()
 	})
 }
 

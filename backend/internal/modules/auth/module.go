@@ -6,6 +6,7 @@ import (
 
 	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
+	"website/backend/internal/modules/mail"
 	"website/backend/internal/modules/settings"
 )
 
@@ -15,8 +16,8 @@ type Module struct {
 	controller *controller
 }
 
-func New(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter) *Module {
-	service := newService(db, sessions, totpKey, settingsService, limiter, defaultRateLimitPolicies(), newTurnstileVerifier(turnstileSiteverifyURL, turnstileTimeout))
+func New(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, mailer mail.Mailer) *Module {
+	service := newService(db, sessions, totpKey, settingsService, limiter, defaultRateLimitPolicies(), newTurnstileVerifier(turnstileSiteverifyURL, turnstileTimeout), mailer)
 	return &Module{
 		Service:    service,
 		controller: newController(service),

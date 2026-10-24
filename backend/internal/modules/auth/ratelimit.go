@@ -24,6 +24,8 @@ const (
 	verifyFailureCooldown = 15 * time.Minute
 	verifyIPLimit         = 30
 	verifyIPWindow        = 15 * time.Minute
+	emailVerifyIPLimit    = 30
+	emailVerifyIPWindow   = 15 * time.Minute
 )
 
 type windowPolicy struct {
@@ -38,12 +40,13 @@ type failurePolicy struct {
 }
 
 type rateLimitPolicies struct {
-	LoginIdentifier failurePolicy
-	LoginIP         windowPolicy
-	RegisterEmail   windowPolicy
-	RegisterIP      windowPolicy
-	VerifyAccount   failurePolicy
-	VerifyIP        windowPolicy
+	LoginIdentifier     failurePolicy
+	LoginIP             windowPolicy
+	RegisterEmail       windowPolicy
+	RegisterIP          windowPolicy
+	VerifyAccount       failurePolicy
+	VerifyIP            windowPolicy
+	EmailVerificationIP windowPolicy
 }
 
 func defaultRateLimitPolicies() rateLimitPolicies {
@@ -73,6 +76,10 @@ func defaultRateLimitPolicies() rateLimitPolicies {
 		VerifyIP: windowPolicy{
 			Limit:  verifyIPLimit,
 			Window: verifyIPWindow,
+		},
+		EmailVerificationIP: windowPolicy{
+			Limit:  emailVerifyIPLimit,
+			Window: emailVerifyIPWindow,
 		},
 	}
 }

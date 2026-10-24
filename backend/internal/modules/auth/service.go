@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
@@ -15,6 +18,7 @@ import (
 	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
+	"website/backend/internal/modules/mail"
 	"website/backend/internal/modules/settings"
 )
 
@@ -35,9 +39,10 @@ type Service struct {
 	limiter   *ratelimit.Limiter
 	policies  rateLimitPolicies
 	captcha   captchaVerifier
+	mailer    mail.Mailer
 }
 
-func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captchaVerifier) *Service {
+func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captchaVerifier, mailer mail.Mailer) *Service {
 	dummy, err := bcrypt.GenerateFromPassword([]byte("timing-defense-placeholder"), bcrypt.DefaultCost)
 	if err != nil {
 		panic(fmt.Sprintf("auth: generate dummy hash: %v", err))
@@ -54,70 +59,175 @@ func newService(db *database.Database, sessions *scs.SessionManager, totpKey []b
 		limiter:   limiter,
 		policies:  policies,
 		captcha:   verifier,
+		mailer:    mailer,
 	}
 }
 
-func (s *Service) Register(ctx context.Context, email, nickname, password, captchaToken string, meta SessionMeta) (User, error) {
+func (s *Service) Register(ctx context.Context, email, nickname, password, captchaToken string, meta SessionMeta) (RegisterResult, error) {
 	if err := s.allowWindow(s.policies.RegisterIP, ipKey("register", meta.IP)); err != nil {
-		return User{}, err
+		return RegisterResult{}, err
 	}
 
 	enabled, err := s.settings.GetBool(ctx, "register", "enabled")
 	if err != nil {
-		return User{}, err
+		return RegisterResult{}, err
 	}
 	if !enabled {
-		return User{}, apierror.ErrRegistrationClosed
+		return RegisterResult{}, apierror.ErrRegistrationClosed
 	}
 
 	email = normalizeEmail(email)
 	nickname = normalizeNickname(nickname)
 
 	if !validEmail(email) || !validNickname(nickname) {
-		return User{}, apierror.ErrInvalidRequest
+		return RegisterResult{}, apierror.ErrInvalidRequest
 	}
 	if err := s.verifyCaptcha(ctx, settings.CaptchaScopeRegister, captchaToken, meta); err != nil {
-		return User{}, err
+		return RegisterResult{}, err
 	}
 	if err := s.allowWindow(s.policies.RegisterEmail, registerEmailKey(email)); err != nil {
-		return User{}, err
+		return RegisterResult{}, err
 	}
 	minLength, err := s.passwordMinLength(ctx)
 	if err != nil {
-		return User{}, err
+		return RegisterResult{}, err
 	}
 	if !validPassword(password, minLength) {
-		return User{}, apierror.ErrWeakPassword
+		return RegisterResult{}, apierror.ErrWeakPassword
 	}
 
 	if err := s.ensureRegistrationDomain(ctx, email); err != nil {
-		return User{}, err
+		return RegisterResult{}, err
 	}
 
 	if _, err := s.repo.findUserByIdentifier(ctx, email); err == nil {
-		return User{}, apierror.ErrEmailTaken
+		return RegisterResult{}, apierror.ErrEmailTaken
 	} else if !errors.Is(err, errUserNotFound) {
-		return User{}, err
+		return RegisterResult{}, err
 	}
 	if _, err := s.repo.findUserByIdentifier(ctx, nickname); err == nil {
-		return User{}, apierror.ErrNicknameTaken
+		return RegisterResult{}, apierror.ErrNicknameTaken
 	} else if !errors.Is(err, errUserNotFound) {
-		return User{}, err
+		return RegisterResult{}, err
+	}
+
+	verificationEnabled, err := s.settings.GetBool(ctx, "register", "email_verification_enabled")
+	if err != nil {
+		return RegisterResult{}, err
+	}
+
+	if !verificationEnabled {
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return RegisterResult{}, err
+		}
+		created, err := s.repo.createUser(ctx, email, nickname, string(hash), emailVerificationNotRequired)
+		if err != nil {
+			if ent.IsConstraintError(err) {
+				return RegisterResult{}, apierror.ErrAlreadyTaken
+			}
+			return RegisterResult{}, err
+		}
+		user := toUser(created)
+		return RegisterResult{User: &user}, nil
+	}
+
+	configured, err := s.mailer.Configured(ctx)
+	if err != nil || !configured {
+		return RegisterResult{}, apierror.ErrMailUnavailable
+	}
+	data, err := s.registrationEmailData(ctx, nickname)
+	if err != nil {
+		return RegisterResult{}, apierror.ErrMailUnavailable
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return User{}, err
+		return RegisterResult{}, err
 	}
-
-	created, err := s.repo.createUser(ctx, email, nickname, string(hash))
+	rawToken, tokenHash, err := newPendingToken()
 	if err != nil {
-		if ent.IsConstraintError(err) {
-			return User{}, apierror.ErrAlreadyTaken
-		}
+		return RegisterResult{}, err
+	}
+	record, err := s.repo.replacePendingRegistration(ctx, pendingRegistrationInput{
+		Email:        email,
+		Nickname:     nickname,
+		PasswordHash: string(hash),
+		TokenHash:    tokenHash,
+		ExpiresAt:    time.Now().Add(pendingRegistrationTTL),
+	})
+	if err != nil {
+		return RegisterResult{}, err
+	}
+
+	data["verifyUrl"] = data["siteUrl"] + "/signup/verify?token=" + url.QueryEscape(rawToken)
+	subject, body, err := mail.Compose(ctx, s.settings, mail.TemplateSignupCode, data)
+	if err != nil {
+		s.compensatePending(ctx, record)
+		return RegisterResult{}, apierror.ErrMailUnavailable
+	}
+	if err := s.mailer.SendSync(ctx, mail.Message{To: email, Subject: subject, Body: body, RequireSMTP: true}); err != nil {
+		s.compensatePending(ctx, record)
+		return RegisterResult{}, apierror.ErrMailUnavailable
+	}
+
+	return RegisterResult{VerificationPending: true}, nil
+}
+
+func (s *Service) registrationEmailData(ctx context.Context, nickname string) (map[string]string, error) {
+	site, err := s.settings.GetGroup(ctx, "site")
+	if err != nil {
+		return nil, err
+	}
+	title, ok := site["title"].(string)
+	if !ok {
+		return nil, errors.New("auth: site.title is not a string")
+	}
+	rawURL, ok := site["url"].(string)
+	if !ok {
+		return nil, errors.New("auth: site.url is not a string")
+	}
+	base, err := mail.SiteURL(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{
+		"siteTitle":      title,
+		"siteUrl":        base,
+		"username":       nickname,
+		"expiresMinutes": "30",
+		"sentAt":         time.Now().Format("2006-01-02 15:04:05"),
+		"code":           "",
+		"verifyUrl":      "",
+	}, nil
+}
+
+func (s *Service) compensatePending(ctx context.Context, record pendingRegistrationRecord) {
+	if _, err := s.repo.deletePendingRegistration(ctx, record.ID, record.TokenHash); err != nil {
+		slog.Error("auth: delete pending registration", "err", err)
+	}
+}
+
+func (s *Service) VerifyEmailRegistration(ctx context.Context, token string, meta SessionMeta) (User, error) {
+	if err := s.allowWindow(s.policies.EmailVerificationIP, ipKey("emailverify", meta.IP)); err != nil {
 		return User{}, err
 	}
 
+	created, err := s.repo.verifyPendingRegistration(ctx, hashPendingToken(token))
+	if err != nil {
+		switch {
+		case errors.Is(err, errPendingNotFound):
+			return User{}, apierror.ErrEmailVerificationInvalid
+		case errors.Is(err, errPendingEmailTaken):
+			return User{}, apierror.ErrEmailTaken
+		case errors.Is(err, errPendingNicknameTaken):
+			return User{}, apierror.ErrNicknameTaken
+		case errors.Is(err, errPendingConflict):
+			return User{}, apierror.ErrAlreadyTaken
+		default:
+			return User{}, err
+		}
+	}
 	return toUser(created), nil
 }
 
@@ -140,6 +250,20 @@ func (s *Service) Login(ctx context.Context, identifier, password, captchaToken 
 	found, err := s.repo.findUserByIdentifier(ctx, identifier)
 	if err != nil {
 		if errors.Is(err, errUserNotFound) {
+			if strings.Contains(identifier, "@") {
+				pending, pendingErr := s.repo.findPendingRegistrationByEmail(ctx, normalizeEmail(identifier))
+				if pendingErr == nil && pending.ExpiresAt.After(time.Now()) {
+					if bcrypt.CompareHashAndPassword([]byte(pending.PasswordHash), []byte(password)) == nil {
+						s.resetFailure(accountKey)
+						return User{}, apierror.ErrEmailNotVerified
+					}
+					s.recordFailure(s.policies.LoginIdentifier, accountKey)
+					return User{}, apierror.ErrInvalidCredentials
+				}
+				if pendingErr != nil && !errors.Is(pendingErr, errPendingNotFound) {
+					return User{}, pendingErr
+				}
+			}
 			_ = bcrypt.CompareHashAndPassword(s.dummyHash, []byte(password))
 			s.recordFailure(s.policies.LoginIdentifier, accountKey)
 			return User{}, apierror.ErrInvalidCredentials

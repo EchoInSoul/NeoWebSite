@@ -8,6 +8,15 @@ type User struct {
 	TwoFactorEnabled bool
 }
 
+type RegisterResult struct {
+	User                *User
+	VerificationPending bool
+}
+
+type RegisterPendingResponse struct {
+	Status string `json:"status"`
+}
+
 type LoginRequest struct {
 	Identifier   string `json:"identifier"`
 	Password     string `json:"password"`
@@ -19,6 +28,10 @@ type RegisterRequest struct {
 	Nickname     string `json:"nickname"`
 	Password     string `json:"password"`
 	CaptchaToken string `json:"captcha_token"`
+}
+
+type EmailVerificationRequest struct {
+	Token string `json:"token"`
 }
 
 type CaptchaVerificationRequest struct {

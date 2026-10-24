@@ -23,6 +23,7 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/modules/access"
+	"website/backend/internal/modules/mail"
 	"website/backend/internal/modules/settings"
 )
 
@@ -63,10 +64,26 @@ func newTestAppWithRatePolicies(t *testing.T, db *database.Database, policies ra
 func newTestAppWithSettings(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
 
-	return newTestAppWithCaptchaVerifier(t, db, settingsService, limiter, policies, nil)
+	return newTestAppWithCaptchaVerifier(t, db, settingsService, limiter, policies, nil, &fakeMailer{configured: true})
 }
 
-func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captchaVerifier) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+func newTestAppWithSettingsAndMailer(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, mailer mail.Mailer) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+	t.Helper()
+
+	return newTestAppWithCaptchaVerifier(t, db, settingsService, limiter, policies, nil, mailer)
+}
+
+func newTestAppWithMailer(t *testing.T, db *database.Database, mailer mail.Mailer) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+	t.Helper()
+
+	settingsModule, err := settings.New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+	return newTestAppWithSettingsAndMailer(t, db, settingsModule.Service, ratelimit.New(), disabledRateLimitPolicies(), mailer)
+}
+
+func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captchaVerifier, mailer mail.Mailer) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
 
 	sm := scs.New()
@@ -79,7 +96,7 @@ func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settings
 	}
 	api := engine.Group("/api/v1")
 
-	service := newService(db, sm, testTOTPKey, settingsService, limiter, policies, verifier)
+	service := newService(db, sm, testTOTPKey, settingsService, limiter, policies, verifier, mailer)
 	module := &Module{Service: service, controller: newController(service)}
 	module.Register(api)
 	accessModule := access.New(db)

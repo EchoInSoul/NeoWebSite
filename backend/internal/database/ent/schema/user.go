@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent"
@@ -24,6 +25,12 @@ func (User) Fields() []ent.Field {
 		field.String("nickname").NotEmpty().Unique(),
 		field.String("bio").Optional().Nillable(),
 		field.String("password_hash").NotEmpty(),
+		field.String("email_verification_status").NotEmpty().Validate(func(value string) error {
+			if value != "verified" && value != "not_required" {
+				return fmt.Errorf("invalid email_verification_status %q", value)
+			}
+			return nil
+		}),
 		field.Int("auth_version").Default(0),
 		field.UUID("group_id", uuid.UUID{}).Default(func() uuid.UUID { return rbac.GroupIDUser }),
 		field.String("totp_secret").Optional().Nillable(),

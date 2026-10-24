@@ -17,6 +17,7 @@ func TestTOTPSchemaReserved(t *testing.T) {
 		SetEmail("totp+" + tag + "@test.local").
 		SetNickname("totp" + tag).
 		SetPasswordHash("hash-" + tag).
+		SetEmailVerificationStatus("not_required").
 		Save(ctx)
 	if err != nil {
 		t.Fatalf("create user without totp fields: %v", err)
@@ -84,6 +85,7 @@ func TestTOTPLastCounterColumn(t *testing.T) {
 		SetEmail("counter+" + tag + "@test.local").
 		SetNickname("counter" + tag).
 		SetPasswordHash("hash-" + tag).
+		SetEmailVerificationStatus("not_required").
 		Save(ctx)
 	if err != nil {
 		t.Fatalf("create user without counter: %v", err)
@@ -127,6 +129,7 @@ func TestTOTPSetupAtColumn(t *testing.T) {
 		SetEmail("setupat+" + tag + "@test.local").
 		SetNickname("setupat" + tag).
 		SetPasswordHash("hash-" + tag).
+		SetEmailVerificationStatus("not_required").
 		Save(ctx)
 	if err != nil {
 		t.Fatalf("create user without setup_at: %v", err)

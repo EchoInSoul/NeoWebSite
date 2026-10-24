@@ -36,7 +36,7 @@ func newCaptchaTestApp(t *testing.T, db *database.Database, verifier captchaVeri
 		t.Fatalf("settings.New: %v", err)
 	}
 
-	ts, _, svc := newTestAppWithCaptchaVerifier(t, db, settingsModule.Service, ratelimit.New(), policies, verifier)
+	ts, _, svc := newTestAppWithCaptchaVerifier(t, db, settingsModule.Service, ratelimit.New(), policies, verifier, &fakeMailer{configured: true})
 	return ts, svc
 }
 

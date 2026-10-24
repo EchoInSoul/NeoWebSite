@@ -13,6 +13,7 @@ import (
 
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/session"
 	"website/backend/internal/database/ent/settingvalue"
@@ -35,6 +36,8 @@ type Client struct {
 	Group *GroupClient
 	// GroupPermission is the client for interacting with the GroupPermission builders.
 	GroupPermission *GroupPermissionClient
+	// PendingRegistration is the client for interacting with the PendingRegistration builders.
+	PendingRegistration *PendingRegistrationClient
 	// RecoveryCode is the client for interacting with the RecoveryCode builders.
 	RecoveryCode *RecoveryCodeClient
 	// Session is the client for interacting with the Session builders.
@@ -58,6 +61,7 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.Group = NewGroupClient(c.config)
 	c.GroupPermission = NewGroupPermissionClient(c.config)
+	c.PendingRegistration = NewPendingRegistrationClient(c.config)
 	c.RecoveryCode = NewRecoveryCodeClient(c.config)
 	c.Session = NewSessionClient(c.config)
 	c.SettingValue = NewSettingValueClient(c.config)
@@ -153,15 +157,16 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:             ctx,
-		config:          cfg,
-		Group:           NewGroupClient(cfg),
-		GroupPermission: NewGroupPermissionClient(cfg),
-		RecoveryCode:    NewRecoveryCodeClient(cfg),
-		Session:         NewSessionClient(cfg),
-		SettingValue:    NewSettingValueClient(cfg),
-		User:            NewUserClient(cfg),
-		UserPermission:  NewUserPermissionClient(cfg),
+		ctx:                 ctx,
+		config:              cfg,
+		Group:               NewGroupClient(cfg),
+		GroupPermission:     NewGroupPermissionClient(cfg),
+		PendingRegistration: NewPendingRegistrationClient(cfg),
+		RecoveryCode:        NewRecoveryCodeClient(cfg),
+		Session:             NewSessionClient(cfg),
+		SettingValue:        NewSettingValueClient(cfg),
+		User:                NewUserClient(cfg),
+		UserPermission:      NewUserPermissionClient(cfg),
 	}, nil
 }
 
@@ -179,15 +184,16 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:             ctx,
-		config:          cfg,
-		Group:           NewGroupClient(cfg),
-		GroupPermission: NewGroupPermissionClient(cfg),
-		RecoveryCode:    NewRecoveryCodeClient(cfg),
-		Session:         NewSessionClient(cfg),
-		SettingValue:    NewSettingValueClient(cfg),
-		User:            NewUserClient(cfg),
-		UserPermission:  NewUserPermissionClient(cfg),
+		ctx:                 ctx,
+		config:              cfg,
+		Group:               NewGroupClient(cfg),
+		GroupPermission:     NewGroupPermissionClient(cfg),
+		PendingRegistration: NewPendingRegistrationClient(cfg),
+		RecoveryCode:        NewRecoveryCodeClient(cfg),
+		Session:             NewSessionClient(cfg),
+		SettingValue:        NewSettingValueClient(cfg),
+		User:                NewUserClient(cfg),
+		UserPermission:      NewUserPermissionClient(cfg),
 	}, nil
 }
 
@@ -217,8 +223,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.Group, c.GroupPermission, c.RecoveryCode, c.Session, c.SettingValue, c.User,
-		c.UserPermission,
+		c.Group, c.GroupPermission, c.PendingRegistration, c.RecoveryCode, c.Session,
+		c.SettingValue, c.User, c.UserPermission,
 	} {
 		n.Use(hooks...)
 	}
@@ -228,8 +234,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.Group, c.GroupPermission, c.RecoveryCode, c.Session, c.SettingValue, c.User,
-		c.UserPermission,
+		c.Group, c.GroupPermission, c.PendingRegistration, c.RecoveryCode, c.Session,
+		c.SettingValue, c.User, c.UserPermission,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -242,6 +248,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Group.mutate(ctx, m)
 	case *GroupPermissionMutation:
 		return c.GroupPermission.mutate(ctx, m)
+	case *PendingRegistrationMutation:
+		return c.PendingRegistration.mutate(ctx, m)
 	case *RecoveryCodeMutation:
 		return c.RecoveryCode.mutate(ctx, m)
 	case *SessionMutation:
@@ -568,6 +576,139 @@ func (c *GroupPermissionClient) mutate(ctx context.Context, m *GroupPermissionMu
 		return (&GroupPermissionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GroupPermission mutation op: %q", m.Op())
+	}
+}
+
+// PendingRegistrationClient is a client for the PendingRegistration schema.
+type PendingRegistrationClient struct {
+	config
+}
+
+// NewPendingRegistrationClient returns a client for the PendingRegistration from the given config.
+func NewPendingRegistrationClient(c config) *PendingRegistrationClient {
+	return &PendingRegistrationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `pendingregistration.Hooks(f(g(h())))`.
+func (c *PendingRegistrationClient) Use(hooks ...Hook) {
+	c.hooks.PendingRegistration = append(c.hooks.PendingRegistration, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `pendingregistration.Intercept(f(g(h())))`.
+func (c *PendingRegistrationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PendingRegistration = append(c.inters.PendingRegistration, interceptors...)
+}
+
+// Create returns a builder for creating a PendingRegistration entity.
+func (c *PendingRegistrationClient) Create() *PendingRegistrationCreate {
+	mutation := newPendingRegistrationMutation(c.config, OpCreate)
+	return &PendingRegistrationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PendingRegistration entities.
+func (c *PendingRegistrationClient) CreateBulk(builders ...*PendingRegistrationCreate) *PendingRegistrationCreateBulk {
+	return &PendingRegistrationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PendingRegistrationClient) MapCreateBulk(slice any, setFunc func(*PendingRegistrationCreate, int)) *PendingRegistrationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PendingRegistrationCreateBulk{err: fmt.Errorf("calling to PendingRegistrationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PendingRegistrationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PendingRegistrationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PendingRegistration.
+func (c *PendingRegistrationClient) Update() *PendingRegistrationUpdate {
+	mutation := newPendingRegistrationMutation(c.config, OpUpdate)
+	return &PendingRegistrationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PendingRegistrationClient) UpdateOne(_m *PendingRegistration) *PendingRegistrationUpdateOne {
+	mutation := newPendingRegistrationMutation(c.config, OpUpdateOne, withPendingRegistration(_m))
+	return &PendingRegistrationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PendingRegistrationClient) UpdateOneID(id uuid.UUID) *PendingRegistrationUpdateOne {
+	mutation := newPendingRegistrationMutation(c.config, OpUpdateOne, withPendingRegistrationID(id))
+	return &PendingRegistrationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PendingRegistration.
+func (c *PendingRegistrationClient) Delete() *PendingRegistrationDelete {
+	mutation := newPendingRegistrationMutation(c.config, OpDelete)
+	return &PendingRegistrationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PendingRegistrationClient) DeleteOne(_m *PendingRegistration) *PendingRegistrationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PendingRegistrationClient) DeleteOneID(id uuid.UUID) *PendingRegistrationDeleteOne {
+	builder := c.Delete().Where(pendingregistration.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PendingRegistrationDeleteOne{builder}
+}
+
+// Query returns a query builder for PendingRegistration.
+func (c *PendingRegistrationClient) Query() *PendingRegistrationQuery {
+	return &PendingRegistrationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePendingRegistration},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PendingRegistration entity by its id.
+func (c *PendingRegistrationClient) Get(ctx context.Context, id uuid.UUID) (*PendingRegistration, error) {
+	return c.Query().Where(pendingregistration.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PendingRegistrationClient) GetX(ctx context.Context, id uuid.UUID) *PendingRegistration {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PendingRegistrationClient) Hooks() []Hook {
+	return c.hooks.PendingRegistration
+}
+
+// Interceptors returns the client interceptors.
+func (c *PendingRegistrationClient) Interceptors() []Interceptor {
+	return c.inters.PendingRegistration
+}
+
+func (c *PendingRegistrationClient) mutate(ctx context.Context, m *PendingRegistrationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PendingRegistrationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PendingRegistrationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PendingRegistrationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PendingRegistrationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PendingRegistration mutation op: %q", m.Op())
 	}
 }
 
@@ -1319,11 +1460,11 @@ func (c *UserPermissionClient) mutate(ctx context.Context, m *UserPermissionMuta
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Group, GroupPermission, RecoveryCode, Session, SettingValue, User,
-		UserPermission []ent.Hook
+		Group, GroupPermission, PendingRegistration, RecoveryCode, Session,
+		SettingValue, User, UserPermission []ent.Hook
 	}
 	inters struct {
-		Group, GroupPermission, RecoveryCode, Session, SettingValue, User,
-		UserPermission []ent.Interceptor
+		Group, GroupPermission, PendingRegistration, RecoveryCode, Session,
+		SettingValue, User, UserPermission []ent.Interceptor
 	}
 )

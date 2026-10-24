@@ -689,6 +689,7 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 		SetEmail("blocker+" + blockerTag + "@test.local").
 		SetNickname("blocker" + blockerTag).
 		SetPasswordHash("not-a-usable-hash").
+		SetEmailVerificationStatus("not_required").
 		Save(context.Background())
 	if err != nil {
 		t.Fatalf("create blocker user: %v", err)
@@ -900,6 +901,7 @@ func TestUpdateProfileRejectedWriteLeavesBothFieldsUnchanged(t *testing.T) {
 		SetEmail("blocker+" + tag + "@test.local").
 		SetNickname("blocker" + tag).
 		SetPasswordHash("not-a-usable-hash").
+		SetEmailVerificationStatus("not_required").
 		Save(context.Background())
 	if err != nil {
 		t.Fatalf("create blocker user: %v", err)
@@ -1022,8 +1024,8 @@ func installNicknameCollisionTrigger(t *testing.T, db *database.Database) {
 CREATE OR REPLACE FUNCTION neoblog_test_nickname_collision() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
 	IF NEW.nickname LIKE 'collide%' THEN
-		INSERT INTO users (id, email, nickname, password_hash, group_id, created_at, updated_at)
-		VALUES (gen_random_uuid(), NEW.nickname || '@collision.test', NEW.nickname, 'not-a-usable-hash', NEW.group_id, now(), now());
+		INSERT INTO users (id, email, nickname, password_hash, email_verification_status, group_id, created_at, updated_at)
+		VALUES (gen_random_uuid(), NEW.nickname || '@collision.test', NEW.nickname, 'not-a-usable-hash', 'not_required', NEW.group_id, now(), now());
 	END IF;
 	RETURN NEW;
 END $$`); err != nil {
@@ -1369,7 +1371,7 @@ func TestMailSettingsEndToEnd(t *testing.T) {
 		"to":       owner.Email,
 		"template": "signup_code",
 	})
-	if status != http.StatusCreated || values["subject"] != "注册验证码" {
+	if status != http.StatusCreated || values["subject"] != "注册验证邮件" {
 		t.Fatalf("template send = %d %v, want 201 with default signup subject", status, values)
 	}
 

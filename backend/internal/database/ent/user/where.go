@@ -76,6 +76,11 @@ func PasswordHash(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldPasswordHash, v))
 }
 
+// EmailVerificationStatus applies equality check predicate on the "email_verification_status" field. It's identical to EmailVerificationStatusEQ.
+func EmailVerificationStatus(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldEmailVerificationStatus, v))
+}
+
 // AuthVersion applies equality check predicate on the "auth_version" field. It's identical to AuthVersionEQ.
 func AuthVersion(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldAuthVersion, v))
@@ -384,6 +389,71 @@ func PasswordHashEqualFold(v string) predicate.User {
 // PasswordHashContainsFold applies the ContainsFold predicate on the "password_hash" field.
 func PasswordHashContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldPasswordHash, v))
+}
+
+// EmailVerificationStatusEQ applies the EQ predicate on the "email_verification_status" field.
+func EmailVerificationStatusEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusNEQ applies the NEQ predicate on the "email_verification_status" field.
+func EmailVerificationStatusNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusIn applies the In predicate on the "email_verification_status" field.
+func EmailVerificationStatusIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldEmailVerificationStatus, vs...))
+}
+
+// EmailVerificationStatusNotIn applies the NotIn predicate on the "email_verification_status" field.
+func EmailVerificationStatusNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldEmailVerificationStatus, vs...))
+}
+
+// EmailVerificationStatusGT applies the GT predicate on the "email_verification_status" field.
+func EmailVerificationStatusGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusGTE applies the GTE predicate on the "email_verification_status" field.
+func EmailVerificationStatusGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusLT applies the LT predicate on the "email_verification_status" field.
+func EmailVerificationStatusLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusLTE applies the LTE predicate on the "email_verification_status" field.
+func EmailVerificationStatusLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusContains applies the Contains predicate on the "email_verification_status" field.
+func EmailVerificationStatusContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusHasPrefix applies the HasPrefix predicate on the "email_verification_status" field.
+func EmailVerificationStatusHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusHasSuffix applies the HasSuffix predicate on the "email_verification_status" field.
+func EmailVerificationStatusHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusEqualFold applies the EqualFold predicate on the "email_verification_status" field.
+func EmailVerificationStatusEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldEmailVerificationStatus, v))
+}
+
+// EmailVerificationStatusContainsFold applies the ContainsFold predicate on the "email_verification_status" field.
+func EmailVerificationStatusContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldEmailVerificationStatus, v))
 }
 
 // AuthVersionEQ applies the EQ predicate on the "auth_version" field.

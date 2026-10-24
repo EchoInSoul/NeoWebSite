@@ -193,11 +193,12 @@ func (s *Service) ListUsers(ctx context.Context) ([]UserSummary, error) {
 	users := make([]UserSummary, 0, len(records))
 	for _, record := range records {
 		users = append(users, UserSummary{
-			ID:               record.ID.String(),
-			Email:            record.Email,
-			Nickname:         record.Nickname,
-			Group:            groupRef(record.Group),
-			ExtraPermissions: rbac.Expand(permissionsByUser[record.ID]),
+			ID:                      record.ID.String(),
+			Email:                   record.Email,
+			Nickname:                record.Nickname,
+			EmailVerificationStatus: record.EmailVerificationStatus,
+			Group:                   groupRef(record.Group),
+			ExtraPermissions:        rbac.Expand(permissionsByUser[record.ID]),
 		})
 	}
 	return users, nil
@@ -222,11 +223,12 @@ func (s *Service) GetUser(ctx context.Context, userID string) (UserDetail, error
 	}
 	return UserDetail{
 		UserSummary: UserSummary{
-			ID:               record.ID.String(),
-			Email:            record.Email,
-			Nickname:         record.Nickname,
-			Group:            groupRef(record.Group),
-			ExtraPermissions: rbac.Expand(extra),
+			ID:                      record.ID.String(),
+			Email:                   record.Email,
+			Nickname:                record.Nickname,
+			EmailVerificationStatus: record.EmailVerificationStatus,
+			Group:                   groupRef(record.Group),
+			ExtraPermissions:        rbac.Expand(extra),
 		},
 		Permissions: permissions,
 	}, nil

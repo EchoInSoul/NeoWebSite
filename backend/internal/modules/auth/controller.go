@@ -25,6 +25,7 @@ func newController(service *Service) *controller {
 
 func (c *controller) register(r *gin.RouterGroup) {
 	r.POST("/users", c.signup)
+	r.POST("/users/email-verifications", c.verifyEmailRegistration)
 	r.POST("/sessions", c.login)
 	r.POST("/sessions/current/verify", c.verifySecondFactor)
 }
@@ -77,7 +78,33 @@ func (c *controller) signup(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password, req.CaptchaToken, requestSessionMeta(ctx))
+	result, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password, req.CaptchaToken, requestSessionMeta(ctx))
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	if result.VerificationPending {
+		ctx.JSON(http.StatusAccepted, RegisterPendingResponse{Status: "verification_pending"})
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, UserResponse{Email: result.User.Email, Nickname: result.User.Nickname, Bio: result.User.Bio})
+}
+
+func (c *controller) verifyEmailRegistration(ctx *gin.Context) {
+	if !requireJSONRequest(ctx) {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	var req EmailVerificationRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Token == "" {
+		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, "token"))
+		return
+	}
+
+	user, err := c.service.VerifyEmailRegistration(ctx.Request.Context(), req.Token, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return

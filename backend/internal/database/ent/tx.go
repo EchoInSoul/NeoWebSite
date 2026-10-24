@@ -16,6 +16,8 @@ type Tx struct {
 	Group *GroupClient
 	// GroupPermission is the client for interacting with the GroupPermission builders.
 	GroupPermission *GroupPermissionClient
+	// PendingRegistration is the client for interacting with the PendingRegistration builders.
+	PendingRegistration *PendingRegistrationClient
 	// RecoveryCode is the client for interacting with the RecoveryCode builders.
 	RecoveryCode *RecoveryCodeClient
 	// Session is the client for interacting with the Session builders.
@@ -159,6 +161,7 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.Group = NewGroupClient(tx.config)
 	tx.GroupPermission = NewGroupPermissionClient(tx.config)
+	tx.PendingRegistration = NewPendingRegistrationClient(tx.config)
 	tx.RecoveryCode = NewRecoveryCodeClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)
 	tx.SettingValue = NewSettingValueClient(tx.config)

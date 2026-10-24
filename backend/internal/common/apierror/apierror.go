@@ -38,42 +38,45 @@ func (e *Error) Error() string {
 }
 
 var (
-	ErrInvalidRequest          = &Error{Type: TypeInvalidRequest, Code: "invalid_request"}
-	ErrWeakPassword            = &Error{Type: TypeInvalidRequest, Code: "weak_password"}
-	ErrPasswordUnchanged       = &Error{Type: TypeInvalidRequest, Code: "password_unchanged", Param: strPtr("new_password")}
-	ErrInvalidPermission       = &Error{Type: TypeInvalidRequest, Code: "invalid_permission"}
-	ErrEmailDomainNotAllowed   = &Error{Type: TypeInvalidRequest, Code: "email_domain_not_allowed", Param: strPtr("email")}
-	ErrCaptchaFailed           = &Error{Type: TypeInvalidRequest, Code: "captcha_failed", Param: strPtr("captcha_token")}
-	ErrCaptchaVerifyFailed     = &Error{Type: TypeInvalidRequest, Code: "captcha_verification_failed"}
-	ErrMethodNotAllowed        = &Error{Type: TypeInvalidRequest, Code: "method_not_allowed"}
-	ErrInvalidCredentials      = &Error{Type: TypeAuthentication, Code: "invalid_credentials"}
-	ErrUnauthorized            = &Error{Type: TypeAuthentication, Code: "unauthorized"}
-	ErrRateLimit               = &Error{Type: TypeRateLimit, Code: "rate_limited"}
-	ErrTwoFactorRequired       = &Error{Type: TypeAuthentication, Code: "two_factor_required"}
-	ErrTwoFactorInvalidCode    = &Error{Type: TypeAuthentication, Code: "two_factor_invalid_code", Param: strPtr("code")}
-	ErrTwoFactorLocked         = &Error{Type: TypeAuthentication, Code: "two_factor_locked"}
-	ErrForbidden               = &Error{Type: TypePermission, Code: "forbidden"}
-	ErrGrantForbidden          = &Error{Type: TypePermission, Code: "grant_forbidden"}
-	ErrOwnerProtected          = &Error{Type: TypePermission, Code: "owner_protected"}
-	ErrCannotModifySelf        = &Error{Type: TypePermission, Code: "cannot_modify_self"}
-	ErrRegistrationClosed      = &Error{Type: TypePermission, Code: "registration_closed"}
-	ErrTwoFactorDisabled       = &Error{Type: TypePermission, Code: "two_factor_disabled"}
-	ErrNotFound                = &Error{Type: TypeNotFound, Code: "not_found"}
-	ErrPresetGroupLocked       = &Error{Type: TypeConflict, Code: "preset_group_locked"}
-	ErrEmailTaken              = &Error{Type: TypeConflict, Code: "email_taken", Param: strPtr("email")}
-	ErrNicknameTaken           = &Error{Type: TypeConflict, Code: "nickname_taken", Param: strPtr("nickname")}
-	ErrAlreadyTaken            = &Error{Type: TypeConflict, Code: "already_taken"}
-	ErrGroupNameTaken          = &Error{Type: TypeConflict, Code: "group_name_taken", Param: strPtr("name")}
-	ErrGroupNotEmpty           = &Error{Type: TypeConflict, Code: "group_not_empty"}
-	ErrLastOwner               = &Error{Type: TypeConflict, Code: "last_owner"}
-	ErrSettingConflict         = &Error{Type: TypeConflict, Code: "setting_conflict"}
-	ErrTwoFactorAlreadyEnabled = &Error{Type: TypeConflict, Code: "two_factor_already_enabled"}
-	ErrTwoFactorNotSetup       = &Error{Type: TypeConflict, Code: "two_factor_not_setup"}
-	ErrTwoFactorNotEnabled     = &Error{Type: TypeConflict, Code: "two_factor_not_enabled"}
-	ErrMailDeliveryFailed      = &Error{Type: TypeServer, Code: "mail_delivery_failed"}
-	ErrNotImplemented          = &Error{Type: TypeServer, Code: "not_implemented"}
-	ErrServiceUnavailable      = &Error{Type: TypeServer, Code: "service_unavailable"}
-	ErrInternal                = &Error{Type: TypeServer, Code: "internal_error"}
+	ErrInvalidRequest           = &Error{Type: TypeInvalidRequest, Code: "invalid_request"}
+	ErrWeakPassword             = &Error{Type: TypeInvalidRequest, Code: "weak_password"}
+	ErrPasswordUnchanged        = &Error{Type: TypeInvalidRequest, Code: "password_unchanged", Param: strPtr("new_password")}
+	ErrInvalidPermission        = &Error{Type: TypeInvalidRequest, Code: "invalid_permission"}
+	ErrEmailDomainNotAllowed    = &Error{Type: TypeInvalidRequest, Code: "email_domain_not_allowed", Param: strPtr("email")}
+	ErrCaptchaFailed            = &Error{Type: TypeInvalidRequest, Code: "captcha_failed", Param: strPtr("captcha_token")}
+	ErrCaptchaVerifyFailed      = &Error{Type: TypeInvalidRequest, Code: "captcha_verification_failed"}
+	ErrEmailVerificationInvalid = &Error{Type: TypeInvalidRequest, Code: "email_verification_invalid", Param: strPtr("token")}
+	ErrMethodNotAllowed         = &Error{Type: TypeInvalidRequest, Code: "method_not_allowed"}
+	ErrInvalidCredentials       = &Error{Type: TypeAuthentication, Code: "invalid_credentials"}
+	ErrUnauthorized             = &Error{Type: TypeAuthentication, Code: "unauthorized"}
+	ErrRateLimit                = &Error{Type: TypeRateLimit, Code: "rate_limited"}
+	ErrTwoFactorRequired        = &Error{Type: TypeAuthentication, Code: "two_factor_required"}
+	ErrTwoFactorInvalidCode     = &Error{Type: TypeAuthentication, Code: "two_factor_invalid_code", Param: strPtr("code")}
+	ErrTwoFactorLocked          = &Error{Type: TypeAuthentication, Code: "two_factor_locked"}
+	ErrForbidden                = &Error{Type: TypePermission, Code: "forbidden"}
+	ErrGrantForbidden           = &Error{Type: TypePermission, Code: "grant_forbidden"}
+	ErrOwnerProtected           = &Error{Type: TypePermission, Code: "owner_protected"}
+	ErrCannotModifySelf         = &Error{Type: TypePermission, Code: "cannot_modify_self"}
+	ErrRegistrationClosed       = &Error{Type: TypePermission, Code: "registration_closed"}
+	ErrEmailNotVerified         = &Error{Type: TypePermission, Code: "email_not_verified"}
+	ErrTwoFactorDisabled        = &Error{Type: TypePermission, Code: "two_factor_disabled"}
+	ErrNotFound                 = &Error{Type: TypeNotFound, Code: "not_found"}
+	ErrPresetGroupLocked        = &Error{Type: TypeConflict, Code: "preset_group_locked"}
+	ErrEmailTaken               = &Error{Type: TypeConflict, Code: "email_taken", Param: strPtr("email")}
+	ErrNicknameTaken            = &Error{Type: TypeConflict, Code: "nickname_taken", Param: strPtr("nickname")}
+	ErrAlreadyTaken             = &Error{Type: TypeConflict, Code: "already_taken"}
+	ErrGroupNameTaken           = &Error{Type: TypeConflict, Code: "group_name_taken", Param: strPtr("name")}
+	ErrGroupNotEmpty            = &Error{Type: TypeConflict, Code: "group_not_empty"}
+	ErrLastOwner                = &Error{Type: TypeConflict, Code: "last_owner"}
+	ErrSettingConflict          = &Error{Type: TypeConflict, Code: "setting_conflict"}
+	ErrTwoFactorAlreadyEnabled  = &Error{Type: TypeConflict, Code: "two_factor_already_enabled"}
+	ErrTwoFactorNotSetup        = &Error{Type: TypeConflict, Code: "two_factor_not_setup"}
+	ErrTwoFactorNotEnabled      = &Error{Type: TypeConflict, Code: "two_factor_not_enabled"}
+	ErrMailDeliveryFailed       = &Error{Type: TypeServer, Code: "mail_delivery_failed"}
+	ErrMailUnavailable          = &Error{Type: TypeServer, Code: "mail_unavailable"}
+	ErrNotImplemented           = &Error{Type: TypeServer, Code: "not_implemented"}
+	ErrServiceUnavailable       = &Error{Type: TypeServer, Code: "service_unavailable"}
+	ErrInternal                 = &Error{Type: TypeServer, Code: "internal_error"}
 )
 
 var statusByCode = map[string]int{
@@ -84,6 +87,7 @@ var statusByCode = map[string]int{
 	"email_domain_not_allowed":    http.StatusBadRequest,
 	"captcha_failed":              http.StatusBadRequest,
 	"captcha_verification_failed": http.StatusBadRequest,
+	"email_verification_invalid":  http.StatusBadRequest,
 	"method_not_allowed":          http.StatusMethodNotAllowed,
 	"invalid_credentials":         http.StatusUnauthorized,
 	"unauthorized":                http.StatusUnauthorized,
@@ -96,6 +100,7 @@ var statusByCode = map[string]int{
 	"owner_protected":             http.StatusForbidden,
 	"cannot_modify_self":          http.StatusForbidden,
 	"registration_closed":         http.StatusForbidden,
+	"email_not_verified":          http.StatusForbidden,
 	"two_factor_disabled":         http.StatusForbidden,
 	"not_found":                   http.StatusNotFound,
 	"preset_group_locked":         http.StatusConflict,
@@ -110,6 +115,7 @@ var statusByCode = map[string]int{
 	"two_factor_not_setup":        http.StatusConflict,
 	"two_factor_not_enabled":      http.StatusConflict,
 	"mail_delivery_failed":        http.StatusInternalServerError,
+	"mail_unavailable":            http.StatusServiceUnavailable,
 	"not_implemented":             http.StatusNotImplemented,
 	"service_unavailable":         http.StatusServiceUnavailable,
 	"internal_error":              http.StatusInternalServerError,

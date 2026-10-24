@@ -6,6 +6,7 @@ import (
 	"time"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/schema"
 	"website/backend/internal/database/ent/session"
@@ -54,6 +55,32 @@ func init() {
 	grouppermissionDescID := grouppermissionFields[0].Descriptor()
 	// grouppermission.DefaultID holds the default value on creation for the id field.
 	grouppermission.DefaultID = grouppermissionDescID.Default.(func() uuid.UUID)
+	pendingregistrationFields := schema.PendingRegistration{}.Fields()
+	_ = pendingregistrationFields
+	// pendingregistrationDescEmail is the schema descriptor for email field.
+	pendingregistrationDescEmail := pendingregistrationFields[1].Descriptor()
+	// pendingregistration.EmailValidator is a validator for the "email" field. It is called by the builders before save.
+	pendingregistration.EmailValidator = pendingregistrationDescEmail.Validators[0].(func(string) error)
+	// pendingregistrationDescNickname is the schema descriptor for nickname field.
+	pendingregistrationDescNickname := pendingregistrationFields[2].Descriptor()
+	// pendingregistration.NicknameValidator is a validator for the "nickname" field. It is called by the builders before save.
+	pendingregistration.NicknameValidator = pendingregistrationDescNickname.Validators[0].(func(string) error)
+	// pendingregistrationDescPasswordHash is the schema descriptor for password_hash field.
+	pendingregistrationDescPasswordHash := pendingregistrationFields[3].Descriptor()
+	// pendingregistration.PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
+	pendingregistration.PasswordHashValidator = pendingregistrationDescPasswordHash.Validators[0].(func(string) error)
+	// pendingregistrationDescTokenHash is the schema descriptor for token_hash field.
+	pendingregistrationDescTokenHash := pendingregistrationFields[4].Descriptor()
+	// pendingregistration.TokenHashValidator is a validator for the "token_hash" field. It is called by the builders before save.
+	pendingregistration.TokenHashValidator = pendingregistrationDescTokenHash.Validators[0].(func(string) error)
+	// pendingregistrationDescCreatedAt is the schema descriptor for created_at field.
+	pendingregistrationDescCreatedAt := pendingregistrationFields[6].Descriptor()
+	// pendingregistration.DefaultCreatedAt holds the default value on creation for the created_at field.
+	pendingregistration.DefaultCreatedAt = pendingregistrationDescCreatedAt.Default.(func() time.Time)
+	// pendingregistrationDescID is the schema descriptor for id field.
+	pendingregistrationDescID := pendingregistrationFields[0].Descriptor()
+	// pendingregistration.DefaultID holds the default value on creation for the id field.
+	pendingregistration.DefaultID = pendingregistrationDescID.Default.(func() uuid.UUID)
 	recoverycodeFields := schema.RecoveryCode{}.Fields()
 	_ = recoverycodeFields
 	// recoverycodeDescCodeHash is the schema descriptor for code_hash field.
@@ -112,20 +139,38 @@ func init() {
 	userDescPasswordHash := userFields[4].Descriptor()
 	// user.PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
 	user.PasswordHashValidator = userDescPasswordHash.Validators[0].(func(string) error)
+	// userDescEmailVerificationStatus is the schema descriptor for email_verification_status field.
+	userDescEmailVerificationStatus := userFields[5].Descriptor()
+	// user.EmailVerificationStatusValidator is a validator for the "email_verification_status" field. It is called by the builders before save.
+	user.EmailVerificationStatusValidator = func() func(string) error {
+		validators := userDescEmailVerificationStatus.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(email_verification_status string) error {
+			for _, fn := range fns {
+				if err := fn(email_verification_status); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
 	// userDescAuthVersion is the schema descriptor for auth_version field.
-	userDescAuthVersion := userFields[5].Descriptor()
+	userDescAuthVersion := userFields[6].Descriptor()
 	// user.DefaultAuthVersion holds the default value on creation for the auth_version field.
 	user.DefaultAuthVersion = userDescAuthVersion.Default.(int)
 	// userDescGroupID is the schema descriptor for group_id field.
-	userDescGroupID := userFields[6].Descriptor()
+	userDescGroupID := userFields[7].Descriptor()
 	// user.DefaultGroupID holds the default value on creation for the group_id field.
 	user.DefaultGroupID = userDescGroupID.Default.(func() uuid.UUID)
 	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[11].Descriptor()
+	userDescCreatedAt := userFields[12].Descriptor()
 	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
 	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
 	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[12].Descriptor()
+	userDescUpdatedAt := userFields[13].Descriptor()
 	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

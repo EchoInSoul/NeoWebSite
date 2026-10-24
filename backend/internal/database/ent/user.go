@@ -27,6 +27,8 @@ type User struct {
 	Bio *string `json:"bio,omitempty"`
 	// PasswordHash holds the value of the "password_hash" field.
 	PasswordHash string `json:"password_hash,omitempty"`
+	// EmailVerificationStatus holds the value of the "email_verification_status" field.
+	EmailVerificationStatus string `json:"email_verification_status,omitempty"`
 	// AuthVersion holds the value of the "auth_version" field.
 	AuthVersion int `json:"auth_version,omitempty"`
 	// GroupID holds the value of the "group_id" field.
@@ -98,7 +100,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldAuthVersion, user.FieldTotpLastCounter:
 			values[i] = new(sql.NullInt64)
-		case user.FieldEmail, user.FieldNickname, user.FieldBio, user.FieldPasswordHash, user.FieldTotpSecret:
+		case user.FieldEmail, user.FieldNickname, user.FieldBio, user.FieldPasswordHash, user.FieldEmailVerificationStatus, user.FieldTotpSecret:
 			values[i] = new(sql.NullString)
 		case user.FieldTotpEnabledAt, user.FieldTotpSetupAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -149,6 +151,12 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field password_hash", values[i])
 			} else if value.Valid {
 				_m.PasswordHash = value.String
+			}
+		case user.FieldEmailVerificationStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field email_verification_status", values[i])
+			} else if value.Valid {
+				_m.EmailVerificationStatus = value.String
 			}
 		case user.FieldAuthVersion:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -266,6 +274,9 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("password_hash=")
 	builder.WriteString(_m.PasswordHash)
+	builder.WriteString(", ")
+	builder.WriteString("email_verification_status=")
+	builder.WriteString(_m.EmailVerificationStatus)
 	builder.WriteString(", ")
 	builder.WriteString("auth_version=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AuthVersion))

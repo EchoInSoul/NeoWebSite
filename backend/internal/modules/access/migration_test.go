@@ -77,6 +77,7 @@ func TestMigrationSeed(t *testing.T) {
 		SetEmail("user+" + tag + "@test.local").
 		SetNickname("user" + tag).
 		SetPasswordHash("hash-" + tag).
+		SetEmailVerificationStatus("not_required").
 		Save(ctx)
 	if err != nil {
 		t.Fatalf("create user without explicit group: %v", err)
