@@ -34,7 +34,7 @@ var builtinRegistry = []Group{
 	},
 	{
 		Name:       "auth",
-		ValidateOn: []string{"password_min_length", "session_max_age_days", "session_max_age_enabled"},
+		ValidateOn: []string{"password_min_length", "session_max_age_days", "session_max_age_enabled", "captcha_scopes"},
 		Validate:   validateAuthGroup,
 		Items: []Definition{
 			{Name: "password_requirements_enabled", Type: FieldTypeBool, Default: false},
@@ -46,6 +46,7 @@ var builtinRegistry = []Group{
 			{Name: "password_reset_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "captcha_enabled", Type: FieldTypeBool, Default: false, Public: true},
 			{Name: "captcha_provider", Type: FieldTypeString, Default: "none", Public: true},
+			{Name: "captcha_scopes", Type: FieldTypeString, Default: "login,register", Public: true},
 			{Name: "turnstile_site_key", Type: FieldTypeString, Default: "", Public: true},
 			{Name: "turnstile_secret_key", Type: FieldTypeString, Default: ""},
 		},
@@ -145,6 +146,8 @@ func checkDefault(item Definition) error {
 }
 
 const (
+	CaptchaScopeLogin      = "login"
+	CaptchaScopeRegister   = "register"
 	passwordMinLengthFloor = 8
 	passwordMinLengthCap   = 64
 	sessionMaxAgeDaysFloor = 1
@@ -174,6 +177,19 @@ func validateAuthGroup(values map[string]any, touched map[string]bool) error {
 		}
 		if days < sessionMaxAgeDaysFloor || days > sessionMaxAgeDaysCap {
 			return &ItemError{Item: "session_max_age_days", Err: apierror.ErrSettingConflict}
+		}
+	}
+
+	if touched["captcha_scopes"] {
+		raw, ok := values["captcha_scopes"].(string)
+		if !ok {
+			return fmt.Errorf("settings: captcha_scopes is not a string")
+		}
+		scopes := SplitListValue(raw)
+		for _, scope := range scopes {
+			if scope != CaptchaScopeLogin && scope != CaptchaScopeRegister {
+				return &ItemError{Item: "captcha_scopes", Err: apierror.ErrSettingConflict}
+			}
 		}
 	}
 	return nil

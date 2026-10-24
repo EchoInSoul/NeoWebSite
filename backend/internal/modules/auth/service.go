@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
@@ -75,7 +76,7 @@ func (s *Service) Register(ctx context.Context, email, nickname, password, captc
 	if !validEmail(email) || !validNickname(nickname) {
 		return User{}, apierror.ErrInvalidRequest
 	}
-	if err := s.verifyCaptcha(ctx, captchaToken, meta); err != nil {
+	if err := s.verifyCaptcha(ctx, settings.CaptchaScopeRegister, captchaToken, meta); err != nil {
 		return User{}, err
 	}
 	if err := s.allowWindow(s.policies.RegisterEmail, registerEmailKey(email)); err != nil {
@@ -128,7 +129,7 @@ func (s *Service) Login(ctx context.Context, identifier, password, captchaToken 
 	if err := s.checkFailure(s.policies.LoginIdentifier, accountKey); err != nil {
 		return User{}, err
 	}
-	if err := s.verifyCaptcha(ctx, captchaToken, meta); err != nil {
+	if err := s.verifyCaptcha(ctx, settings.CaptchaScopeLogin, captchaToken, meta); err != nil {
 		return User{}, err
 	}
 
@@ -652,7 +653,7 @@ func (s *Service) ensureRegistrationDomain(ctx context.Context, email string) er
 	return apierror.ErrEmailDomainNotAllowed
 }
 
-func (s *Service) verifyCaptcha(ctx context.Context, token string, meta SessionMeta) error {
+func (s *Service) verifyCaptcha(ctx context.Context, scope, token string, meta SessionMeta) error {
 	enabled, _ := s.settings.GetBool(ctx, "auth", "captcha_enabled")
 	if !enabled {
 		return nil
@@ -665,6 +666,14 @@ func (s *Service) verifyCaptcha(ctx context.Context, token string, meta SessionM
 
 	secret, _ := s.settings.GetString(ctx, "auth", "turnstile_secret_key")
 	if secret == "" {
+		return nil
+	}
+
+	scopes, err := s.settings.GetString(ctx, "auth", "captcha_scopes")
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(settings.SplitListValue(scopes), scope) {
 		return nil
 	}
 

@@ -432,14 +432,17 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 		t.Fatalf("group = %v, want auth", items[2]["group"])
 	}
 	authValues, ok := items[2]["values"].(map[string]any)
-	if !ok || len(authValues) != 4 {
-		t.Fatalf("public auth values = %v, want totp_enabled plus the three captcha keys", items[2]["values"])
+	if !ok || len(authValues) != 5 {
+		t.Fatalf("public auth values = %v, want totp_enabled plus the four captcha keys", items[2]["values"])
 	}
 	if authValues["totp_enabled"] != true {
 		t.Fatalf("public auth.totp_enabled = %v, want true", authValues["totp_enabled"])
 	}
 	if authValues["captcha_enabled"] != false || authValues["captcha_provider"] != "none" || authValues["turnstile_site_key"] != "" {
 		t.Fatalf("public auth captcha values = %v, want the disabled defaults", authValues)
+	}
+	if authValues["captcha_scopes"] != "login,register" {
+		t.Fatalf("public auth.captcha_scopes = %v, want the default scopes", authValues["captcha_scopes"])
 	}
 }
 
@@ -518,8 +521,8 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	if group != "auth" {
 		t.Fatalf("group = %q, want auth", group)
 	}
-	if len(values) != 11 {
-		t.Fatalf("auth values = %v, want the eleven defaults", values)
+	if len(values) != 12 {
+		t.Fatalf("auth values = %v, want the twelve defaults", values)
 	}
 	if values["session_max_age_days"] != float64(7) {
 		t.Fatalf("auth.session_max_age_days = %v, want 7", values["session_max_age_days"])
@@ -529,6 +532,9 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	}
 	if values["captcha_provider"] != "none" {
 		t.Fatalf("auth.captcha_provider = %v, want none", values["captcha_provider"])
+	}
+	if values["captcha_scopes"] != "login,register" {
+		t.Fatalf("auth.captcha_scopes = %v, want login,register", values["captcha_scopes"])
 	}
 	if values["turnstile_site_key"] != "" || values["turnstile_secret_key"] != "" {
 		t.Fatalf("turnstile keys = %v / %v, want empty", values["turnstile_site_key"], values["turnstile_secret_key"])
@@ -779,6 +785,29 @@ func TestSettingsPatchAuthSessionMaxAgeRange(t *testing.T) {
 	_, values := decodeGroup(t, ok)
 	if values["session_max_age_days"] != float64(30) || values["session_max_age_enabled"] != true {
 		t.Fatalf("session max age = %v, want enabled with 30 days", values)
+	}
+}
+
+func TestSettingsPatchAuthCaptchaScopes(t *testing.T) {
+	db := testDB(t)
+	resetBuiltin(t, db, "auth")
+	ts := newSettingsTestApp(t, db)
+	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
+
+	invalid := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"captcha_scopes": "login,password_reset"})
+	expectStatus(t, invalid, http.StatusConflict)
+	body := decodeError(t, invalid)
+	if body["code"] != "setting_conflict" || body["param"] != "captcha_scopes" {
+		t.Fatalf("conflict body = %v", body)
+	}
+
+	for _, scopes := range []string{"", "register"} {
+		ok := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"captcha_scopes": scopes})
+		expectStatus(t, ok, http.StatusOK)
+		_, values := decodeGroup(t, ok)
+		if values["captcha_scopes"] != scopes {
+			t.Fatalf("captcha_scopes = %v, want %q", values["captcha_scopes"], scopes)
+		}
 	}
 }
 
