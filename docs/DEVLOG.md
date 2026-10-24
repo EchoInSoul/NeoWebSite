@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-10-25 · 注册邮箱所有权认证（先验证后建号）
+
+**范围**：后端 `internal/modules/auth/*`、`mail/*`、`access/*`、`settings/registry.go`、ent schema + 新迁移 `20261025120001_email_verification.sql`、`app.go`、`apierror.go`；前端注册页 / 新验证页 / 用户注册设置页 / 用户列表 / 邮件设置页 / i18n；另加本条目。**未提交，待用户检查。**
+
+**动机**：`register.email_verification_enabled` 此前零消费方。用户要求接入「邮箱所有权认证」：开关打开后，注册必须先证明邮箱归属；最终选「先验证、后建号」（不建未验证账号）。
+
+**决策**：
+- 设置复用 `register.email_verification_enabled`（默认 false、非公开）；「用户注册」页新增「邮箱所有权认证」开关；前置条件 = SMTP 真正可用 + `site.url` 合法（缺失时开关不能打开，运行期 fail-closed）。
+- 提交注册只写 `pending_registrations`（邮箱、用户名、bcrypt 密码哈希、SHA-256 令牌哈希、30 分钟过期），发一封链接邮件；链接只在点「验证邮箱」按钮后消费（GET 不消费）。
+- 账号在 `POST /users/email-verifications` 验证成功后才创建，状态 `verified`；老账号 / 管理员建号 / 开关关时注册为 `not_required`。没有 `pending` 用户状态。
+- 没有重发；过期/没收到时回注册页重新提交，覆盖旧记录并重发。同一邮箱并发提交用 upsert 覆盖；发信失败按本次写入行的 id + token_hash 补偿删除，不能按邮箱删。
+- 注册发信走 `SendSync` 且 `RequireSMTP=true`：传输层解析为日志降级时直接报错，令牌不进日志。
+- 登录不给真实账号加验证闸门；只有「用户不存在 + 登录名是邮箱 + 待验证记录密码正确」返回 403 `email_not_verified`（前端「账户尚未验证」）。
+- **前端提示时序（2026-10-25 追加裁定）**：所有涉及路由切换的提示一律「先跳转、目标页面挂载后再弹 sonner」，不在跳转前弹。实现 = sessionStorage 标记 + 目标页 notice hook：
+  - 注册 202（待验证）：`markSignupPending()` → `/signin` → `useSignupNotice` 弹「验证邮件已发送，请查收」；不显示成功卡片，也不弹「注册成功」。
+  - 注册 201 / 验证成功：`markSignupSuccess()` → `/signin` → `useSignupNotice` 弹「注册成功，请登录」。
+  - 登录成功 / 2FA 成功：`markSigninSuccess()` → `/console` → `ConsoleSigninNotice` 弹「登录成功」。
+  - 验证失败 / 链接过期：不跳转，直接 toast「验证链接无效或已过期」。
+  - pending 与 success 用不同的 sessionStorage 键（`neoblog.signup.pending` / `neoblog.signup.success`），避免未建号的注册被误弹成「注册成功」。
+- 管理端用户列表新增「邮箱验证」列（已验证 / 不需要验证）；邮件设置页「注册验证码」改名「注册验证邮件」，占位符增加 `{{verifyUrl}}`。
+
+**验证**：
+- `bash scripts/check.sh` → `check ok`；`bash scripts/test.sh ./...` 全绿。
+- 前端 `npx tsc --noEmit`、ESLint（仅既有 `sonner.tsx` warning）、改文件 Prettier 通过。
+- 变异自检：expires、删除计数、Configured、补偿删除、验证状态、202→201、登录密码、site.url、令牌哈希、公开白名单、RequireSMTP 共 11 条全部 RED；删除计数最初是假绿，补了 `TestVerifyDeleteCountGuard`（行锁 + 并发）后才稳定变红。「补偿改回按邮箱删」没有对应变异项——实现里不存在按邮箱删的路径，`TestRegisterCompensationDoesNotDeleteReplacedPending` 直接验证 id + token 删除不会误删替换后的记录。
+
+**已知缺口**：后台看不到待验证注册列表；没有重发；密码重置 / 2FA 恢复码邮件仍未接；改邮箱不要求重新验证；用用户名登录的待验证用户拿不到「账户尚未验证」提示；过期记录只在下一次注册时懒清理；`register.default_group` 仍未消费。
+
+---
+
 ## 2026-10-25 · 人机验证新增「启用范围」（登录 / 注册多选）
 
 **范围**：后端 `internal/modules/settings/{registry.go,registry_test.go,controller_test.go}`、`internal/modules/auth/{service.go,captcha_flow_test.go}`、新迁移 `migrations/20261025120000_seed_captcha_scopes.sql` 与 `migrations/atlas.sum`、`README.md`；前端 `lib/{captcha-settings.ts,public-settings.ts}`、`hooks/use-captcha-settings-save.ts`、`app/console/settings/captcha/captcha-settings-form.tsx`、`app/{signin,signup}/page.tsx`、`messages/{zh-CN,en}.json`；另加本条目。零 DDL、零新接口、零依赖。
