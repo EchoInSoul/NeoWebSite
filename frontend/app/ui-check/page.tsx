@@ -1070,9 +1070,7 @@ export default function UiCheckPage() {
           <div className="h-72 w-full overflow-hidden rounded-lg border">
             <SidebarProvider>
               <Sidebar collapsible="none" className="h-full">
-                <SidebarHeader>
-                  <span className="px-2 py-1 text-sm font-medium">NeoBlog</span>
-                </SidebarHeader>
+                <SidebarHeader />
                 <SidebarContent>
                   <SidebarGroup>
                     <SidebarGroupLabel>内容</SidebarGroupLabel>

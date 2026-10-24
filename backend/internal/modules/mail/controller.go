@@ -16,15 +16,15 @@ import (
 )
 
 const (
-	selfCheckSubject      = "NeoBlog 邮件配置自检"
+	selfCheckSubject      = "邮件配置自检"
 	exampleTemplate       = "example"
 	signupCodeTemplate    = "signup_code"
 	passwordResetTemplate = "password_reset"
 )
 
 var previewSubjects = map[string]string{
-	signupCodeTemplate:    "NeoBlog 注册验证码",
-	passwordResetTemplate: "NeoBlog 密码重置验证码",
+	signupCodeTemplate:    "注册验证码",
+	passwordResetTemplate: "密码重置验证码",
 }
 
 type controller struct {
@@ -115,7 +115,7 @@ func (c *controller) renderMessage(ctx context.Context, templateName, to string)
 }
 
 func (c *controller) previewData(ctx context.Context, to string) map[string]string {
-	siteTitle := "NeoBlog"
+	var siteTitle string
 	siteURL := "https://example.com"
 
 	if c.settings != nil {

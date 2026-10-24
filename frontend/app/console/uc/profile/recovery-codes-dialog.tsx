@@ -25,7 +25,7 @@ function downloadCodes(codes: string[]) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "neoblog-recovery-codes.txt";
+  link.download = "recovery-codes.txt";
   document.body.append(link);
   link.click();
   link.remove();

@@ -6,7 +6,7 @@ INSERT INTO "public"."setting_values" ("id", "setting_group", "name", "value", "
 (gen_random_uuid(), 'mail', 'smtp_username', '""'::jsonb, now()),
 (gen_random_uuid(), 'mail', 'smtp_password', '""'::jsonb, now()),
 (gen_random_uuid(), 'mail', 'sender_address', '""'::jsonb, now()),
-(gen_random_uuid(), 'mail', 'sender_name', '"NeoBlog"'::jsonb, now()),
+(gen_random_uuid(), 'mail', 'sender_name', '""'::jsonb, now()),
 (gen_random_uuid(), 'mail', 'signup_code_subject', '""'::jsonb, now()),
 (gen_random_uuid(), 'mail', 'signup_code_body', '""'::jsonb, now()),
 (gen_random_uuid(), 'mail', 'password_reset_subject', '""'::jsonb, now()),

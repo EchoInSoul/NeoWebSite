@@ -136,7 +136,7 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "smtp_username", typ: FieldTypeString, def: ""},
 		{name: "smtp_password", typ: FieldTypeString, def: ""},
 		{name: "sender_address", typ: FieldTypeString, def: ""},
-		{name: "sender_name", typ: FieldTypeString, def: "NeoBlog"},
+		{name: "sender_name", typ: FieldTypeString, def: ""},
 		{name: "signup_code_subject", typ: FieldTypeString, def: ""},
 		{name: "signup_code_body", typ: FieldTypeString, def: ""},
 		{name: "password_reset_subject", typ: FieldTypeString, def: ""},

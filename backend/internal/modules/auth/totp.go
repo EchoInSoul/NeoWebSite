@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	totpIssuer             = "NeoBlog"
+	totpIssuer             = "两步验证"
 	totpPeriodSeconds      = 30
 	totpSecretBytes        = 10
 	totpSkewWindows        = 1

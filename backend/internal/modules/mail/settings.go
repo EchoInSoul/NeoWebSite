@@ -90,9 +90,6 @@ func resolveTransportConfig(ctx context.Context, env config.Config, settings Set
 	cfg.SMTPPassword = password
 	cfg.SMTPFrom = strings.TrimSpace(sender)
 	cfg.SMTPFromName = senderName
-	if cfg.SMTPFromName == "" {
-		cfg.SMTPFromName = "NeoBlog"
-	}
 
 	switch encryption {
 	case "ssl":

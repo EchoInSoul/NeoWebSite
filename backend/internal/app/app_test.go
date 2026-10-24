@@ -1361,15 +1361,15 @@ func TestMailSettingsEndToEnd(t *testing.T) {
 		t.Fatalf("default get = %d %v, want 200 mail group", status, values)
 	}
 	defaults := envelopeValues(values)
-	if defaults["enabled"] != true || defaults["smtp_port"] != float64(587) || defaults["smtp_encryption"] != "starttls" || defaults["sender_name"] != "NeoBlog" {
-		t.Fatalf("default values = %v, want enabled true, port 587, starttls, NeoBlog", defaults)
+	if defaults["enabled"] != true || defaults["smtp_port"] != float64(587) || defaults["smtp_encryption"] != "starttls" || defaults["sender_name"] != "" {
+		t.Fatalf("default values = %v, want enabled true, port 587, starttls, empty sender_name", defaults)
 	}
 
 	status, values = exchangeJSON(t, ownerClient, http.MethodPost, ts.URL+"/api/v1/admin/mail/messages", map[string]any{
 		"to":       owner.Email,
 		"template": "signup_code",
 	})
-	if status != http.StatusCreated || values["subject"] != "NeoBlog 注册验证码" {
+	if status != http.StatusCreated || values["subject"] != "注册验证码" {
 		t.Fatalf("template send = %d %v, want 201 with default signup subject", status, values)
 	}
 

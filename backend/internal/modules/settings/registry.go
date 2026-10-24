@@ -70,7 +70,7 @@ var builtinRegistry = []Group{
 			{Name: "smtp_username", Type: FieldTypeString, Default: ""},
 			{Name: "smtp_password", Type: FieldTypeString, Default: ""},
 			{Name: "sender_address", Type: FieldTypeString, Default: ""},
-			{Name: "sender_name", Type: FieldTypeString, Default: "NeoBlog"},
+			{Name: "sender_name", Type: FieldTypeString, Default: ""},
 			{Name: "signup_code_subject", Type: FieldTypeString, Default: ""},
 			{Name: "signup_code_body", Type: FieldTypeString, Default: ""},
 			{Name: "password_reset_subject", Type: FieldTypeString, Default: ""},

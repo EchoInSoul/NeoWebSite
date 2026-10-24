@@ -175,7 +175,7 @@ func TestCreateMessageUsesBuiltinTemplateDefaults(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
-	if mailer.got.Subject != "NeoBlog 密码重置验证码" {
+	if mailer.got.Subject != "密码重置验证码" {
 		t.Fatalf("subject = %q, want default password reset subject", mailer.got.Subject)
 	}
 	if !strings.Contains(mailer.got.Body.HTML, "密码重置验证码") || !strings.Contains(mailer.got.Body.Text, "123456") {

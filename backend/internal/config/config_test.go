@@ -123,8 +123,8 @@ func TestLoadSMTPLeavesPortAndTLSUnsetWhenHostUnset(t *testing.T) {
 	if cfg.SMTPHost != "" || cfg.SMTPPort != 0 || cfg.SMTPTLS != "" || cfg.SMTPUsername != "" || cfg.SMTPPassword != "" || cfg.SMTPFrom != "" {
 		t.Fatalf("unexpected SMTP config: %+v", cfg)
 	}
-	if cfg.SMTPFromName != "NeoBlog" {
-		t.Fatalf("SMTPFromName = %q, want NeoBlog", cfg.SMTPFromName)
+	if cfg.SMTPFromName != "" {
+		t.Fatalf("SMTPFromName = %q, want empty", cfg.SMTPFromName)
 	}
 }
 

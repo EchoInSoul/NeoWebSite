@@ -31,7 +31,7 @@ const (
 	defaultDBMaxIdleConns    = 5
 	defaultDBConnMaxLifetime = 30 * time.Minute
 	defaultSessionLifetime   = 168 * time.Hour
-	defaultSMTPFromName      = "NeoBlog"
+	defaultSMTPFromName      = ""
 	maxSMTPPort              = 65535
 	totpKeyBytes             = 32
 )

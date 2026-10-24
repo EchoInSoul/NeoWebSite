@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -298,8 +299,10 @@ func TestTwoFactorSetupEnableLifecycle(t *testing.T) {
 	if setup.Secret == "" {
 		t.Fatal("setup returned empty secret")
 	}
-	if !strings.HasPrefix(setup.OTPAuthURL, "otpauth://totp/NeoBlog:") {
-		t.Fatalf("otpauth_url = %q, want prefix otpauth://totp/NeoBlog:", setup.OTPAuthURL)
+	const issuer = "两步验证"
+	prefix := "otpauth://totp/" + url.PathEscape(issuer) + ":"
+	if !strings.HasPrefix(setup.OTPAuthURL, prefix) {
+		t.Fatalf("otpauth_url = %q, want prefix %s", setup.OTPAuthURL, prefix)
 	}
 
 	issued := enable2FA(t, client, ts.URL, setup.Secret, password)
