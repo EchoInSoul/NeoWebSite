@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-10-25 · 人机验证设置组归位与自检路由迁移
+
+**范围**：后端 `common/rbac`（新增 `system.captcha.view/edit`）、`modules/settings/{registry,controller}` 及测试、`modules/captcha`（升级为有路由模块：`module.go` / `controller.go` / `dto.go` / `verify_route_test.go`）、`modules/auth`（删自检路由薄壳与 captcha 依赖）、`app.go` 装配、新迁移 `20261025130000_relocate_captcha_settings.sql` + `20261025130100_seed_captcha_group.sql`、三条历史 seed 迁移改写；前端 `use-captcha-settings-save` / `admin-settings.ts` / `public-settings.ts` / `groups.ts` / 双语 i18n；README、本条目。spec 见 [2026-10-25-neoblog-captcha-settings-relocation-design.md](superpowers/specs/2026-10-25-neoblog-captcha-settings-relocation-design.md)。**未提交。**
+
+**动机**：captcha 已拆独立模块但设置键还在 `auth` 组、自检路由还在 auth 包、权限借 `system.register.edit`；本轮归位，为 go-captcha 轮铺路（新模式、难度等设置直接落 `captcha` 组）。
+
+**决策**：
+- 设置拆出独立 `captcha` 组（5 项，声明在 `auth` 后），`captcha_scopes` 校验从 `validateAuthGroup` 拆成 `validateCaptchaGroup`；`auth` 组剩 7 项。
+- 迁移两条：`relocate`（①现值 `auth`→`captcha` 的 `INSERT…SELECT ON CONFLICT DO NOTHING` + ③删 `auth` 组旧行）与 `seed_captcha_group`（②5 行字面默认值）——②必须独立成 `*_seed_*` 文件，否则 seed 对账测试（glob 只认 `*_seed_*.sql`）读不到。三条历史 seed 同批改写（组名 `auth`→`captcha` / 删行），依据：对账测试要求去重总数恰好等于清单全集，组名搬家没有"新增一条 seed 覆盖"的出路。
+- 自检路由 `POST /admin/captcha/verifications` 搬进 captcha 模块（路径不变），守卫换 `system.captcha.edit`；`requireJSONRequest` 复制到 captcha 包（约 25 行 HTTP 细节，不从 auth 导出）；auth 与 captcha 彻底解耦（删 `captchaVerifier` 接口、`VerifyCaptchaConfig`、`Service.captcha` 字段与 `auth.New` 参数）；`captcha.New` 删除，生产单一入口 `captchaModule.Service`。
+- rbac 目录新增 `system.captcha` 对（owner/admin 运行时全量授权自动覆盖）；settings 组接口三路分流（`captcha` → `system.captcha.*`）。
+- **已接受代价**：库里已有自建组不会自动拿到新权限点，不手工补授就打不开人机验证设置页（403）与自检接口；owner/admin 不受影响；当前 dev/test 库只有预设组，无实际影响。
+- 前端只换组名：设置页读写 `/admin/settings/captcha`、`getCaptchaSettings` 改读 captcha 组、`getCaptchaConfig` 改读 `settings.captcha`；权限矩阵加「人机验证」节（labelKey 取 `sidebar.captchaGroup`，唯一新 i18n 键 `groups.resourceCaptcha`；独立审查发现最初按 spec 复用 `settings.captchaGroup` 的判断错了——渲染路径走 `sidebar` 命名空间，双语补键后修正，spec 相应前提作废）。
+
+**验证**：`go build ./...`、`go vet ./...`、`gofmt` 干净；`scripts/check.sh` → `check ok`；`scripts/test.sh` 全仓绿（唯一红是既有偶发 `TestVerifyEmailRegistrationConcurrent`，stash 到干净 HEAD 复测 8 次 6 红，与本轮无关）。迁移实测：dev 库现值完整搬家（`turnstile` / 37 字符 secret / `enabled=true`）且 `auth` 组零残留；测试库走默认值路径（`none`/空串）。变异自检：rbac catalog 删新对→红；settings 分流删 `case "captcha"`→红；自检守卫降级成 `register.edit`→「captcha-edit 自建组用户 200」用例红（原用例表只有 owner 与 plain user，两类用户在两个权限点下行为相同，测不出降级——教训：变异必须让"仅持有新权限的用户"做裁决）。前端 `tsc` / ESLint / Prettier 干净。独立审查（子代理全量 diff）无 Critical，2 Important 已修（矩阵节标题 i18n 键命名空间、README API 表守卫行），3 Minor 中死代码（`truncateHeader` / `maxUserAgentLength` / `maxIPLength` 复制残留）已删，另两条（测试装配绕过 `New()`、clientIP 不截断）记档不修。
+
+**已知缺口**：go-captcha 未实现，`builtin` 仍是"选了不拦"；`findUserByIdentifier` 双用途留邮箱登录轮；历史自建组需手工补授 `system.captcha.*`。
+
+---
+
 ## 2026-10-25 · 登录 / 注册拆成独立模块，限流与校验下沉共享层
 
 **范围**：后端新增 `internal/modules/{login,registration,session}` 三个能力模块与 `internal/common/userinput`、`internal/common/ratelimit/policy.go`；删除 `auth` 的 `session.go`、`email_verification.go`、`validate.go`（实现与对应单测随迁）；`auth` 保留 2FA / 会话管理 / 账号资料 / 管理端 captcha 自检薄壳，`Login` / `Register` / `VerifyEmailRegistration` 三条路由改由 controller 分发到注入的 login / registration 服务；`app.go` 装配四个新依赖；README 模块表重写。零接口改动、零迁移、零前端改动。**未提交。**
