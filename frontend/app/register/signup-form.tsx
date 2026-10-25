@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { CaptchaDialog } from "@/components/auth/captcha-dialog";
+import { useCaptchaGate } from "@/hooks/use-captcha-gate";
 import { useSignupForm } from "@/hooks/use-signup";
 import { PASSWORD_MIN_LENGTH } from "@/lib/password";
 import type { CaptchaConfig } from "@/lib/public-settings";
@@ -21,7 +22,7 @@ import type { CaptchaConfig } from "@/lib/public-settings";
 export function SignupForm({ captcha }: { captcha: CaptchaConfig | null }) {
   const t = useTranslations("auth.signup");
   const tCommon = useTranslations("common");
-  const [isCaptchaOpen, setIsCaptchaOpen] = useState(false);
+  const captchaGate = useCaptchaGate(captcha);
   const {
     values,
     isPending,
@@ -30,7 +31,7 @@ export function SignupForm({ captcha }: { captcha: CaptchaConfig | null }) {
     retryLabel,
     changeField,
     submit,
-  } = useSignupForm(captcha !== null, () => setIsCaptchaOpen(true));
+  } = useSignupForm(captcha !== null, captchaGate.begin);
 
   const formRef = useRef<HTMLFormElement>(null);
   const nameFieldId = useId();
@@ -60,7 +61,7 @@ export function SignupForm({ captcha }: { captcha: CaptchaConfig | null }) {
   }
 
   async function handleCaptchaSolved(token: string) {
-    setIsCaptchaOpen(false);
+    captchaGate.cancel();
     focusField(await submit(token));
   }
 
@@ -178,9 +179,10 @@ export function SignupForm({ captcha }: { captcha: CaptchaConfig | null }) {
 
       {captcha === null ? null : (
         <CaptchaDialog
-          open={isCaptchaOpen}
-          siteKey={captcha.siteKey}
-          onOpenChange={setIsCaptchaOpen}
+          open={captchaGate.isOpen}
+          config={captcha}
+          challenge={captchaGate.challenge}
+          onOpenChange={captchaGate.handleOpenChange}
           onSolved={handleCaptchaSolved}
         />
       )}

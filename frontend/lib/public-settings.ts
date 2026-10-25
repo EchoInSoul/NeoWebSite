@@ -61,10 +61,9 @@ export function isSignupOpen(settings: PublicSettings): boolean {
   return settings.register?.enabled !== false;
 }
 
-export type CaptchaConfig = {
-  provider: "turnstile";
-  siteKey: string;
-};
+export type CaptchaConfig =
+  | { provider: "turnstile"; siteKey: string }
+  | { provider: "builtin"; scope: CaptchaScope };
 
 export function getCaptchaConfig(
   settings: PublicSettings,
@@ -72,10 +71,7 @@ export function getCaptchaConfig(
 ): CaptchaConfig | null {
   const captcha = settings.captcha;
 
-  if (
-    captcha?.captcha_enabled !== true ||
-    captcha.captcha_provider !== "turnstile"
-  ) {
+  if (captcha?.captcha_enabled !== true) {
     return null;
   }
 
@@ -88,11 +84,19 @@ export function getCaptchaConfig(
     return null;
   }
 
-  const siteKey = captcha.turnstile_site_key;
+  if (captcha.captcha_provider === "turnstile") {
+    const siteKey = captcha.turnstile_site_key;
 
-  if (typeof siteKey !== "string" || siteKey.trim() === "") {
-    return null;
+    if (typeof siteKey !== "string" || siteKey.trim() === "") {
+      return null;
+    }
+
+    return { provider: "turnstile", siteKey };
   }
 
-  return { provider: "turnstile", siteKey };
+  if (captcha.captcha_provider === "builtin") {
+    return { provider: "builtin", scope };
+  }
+
+  return null;
 }

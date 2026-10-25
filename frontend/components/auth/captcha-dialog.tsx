@@ -10,18 +10,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { CaptchaChallenge } from "@/lib/captcha-challenge";
+import type { CaptchaConfig } from "@/lib/public-settings";
+import { BuiltinCaptcha } from "./builtin-captcha";
 import { TurnstileCaptcha } from "./turnstile-captcha";
 
 const CLOSE_DELAY_MS = 1618;
 
 export function CaptchaDialog({
   open,
-  siteKey,
+  config,
+  challenge = null,
   onOpenChange,
   onSolved,
 }: {
   open: boolean;
-  siteKey: string;
+  config: CaptchaConfig;
+  challenge?: CaptchaChallenge | null;
   onOpenChange: (open: boolean) => void;
   onSolved: (token: string) => void;
 }) {
@@ -48,6 +53,10 @@ export function CaptchaDialog({
 
   function handleOpenChange(next: boolean) {
     if (!next) {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
       setIsUnavailable(false);
     }
     onOpenChange(next);
@@ -66,31 +75,41 @@ export function CaptchaDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal>
-      <DialogContent blockOpenAutoFocus>
+      <DialogContent blockOpenAutoFocus className="gap-3 p-5 sm:max-w-[340px]">
         <DialogHeader>
           <DialogTitle>{t("captchaDialogTitle")}</DialogTitle>
         </DialogHeader>
         {open ? (
-          isUnavailable ? (
-            <div className="flex flex-col gap-3">
-              <p className="text-muted-foreground">{t("captchaUnavailable")}</p>
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsUnavailable(false)}
-                >
-                  {tCommon("retry")}
-                </Button>
+          <div className="grid max-w-full min-w-0 gap-4 py-1 [&>*]:max-w-full [&>*]:min-w-0">
+            {isUnavailable ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-muted-foreground">
+                  {t("captchaUnavailable")}
+                </p>
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsUnavailable(false)}
+                  >
+                    {tCommon("retry")}
+                  </Button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <TurnstileCaptcha
-              siteKey={siteKey}
-              onToken={handleToken}
-              onUnavailable={() => setIsUnavailable(true)}
-            />
-          )
+            ) : config.provider === "turnstile" ? (
+              <TurnstileCaptcha
+                siteKey={config.siteKey}
+                onToken={handleToken}
+                onUnavailable={() => setIsUnavailable(true)}
+              />
+            ) : (
+              <BuiltinCaptcha
+                scope={config.scope}
+                initialChallenge={challenge}
+                onToken={handleToken}
+              />
+            )}
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>

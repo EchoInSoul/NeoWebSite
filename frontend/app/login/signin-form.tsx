@@ -14,13 +14,14 @@ import {
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { CaptchaDialog } from "@/components/auth/captcha-dialog";
+import { useCaptchaGate } from "@/hooks/use-captcha-gate";
 import { useSigninForm } from "@/hooks/use-signin";
 import type { CaptchaConfig } from "@/lib/public-settings";
 
 export function SigninForm({ captcha }: { captcha: CaptchaConfig | null }) {
   const t = useTranslations("auth.signin");
   const tCommon = useTranslations("common");
-  const [isCaptchaOpen, setIsCaptchaOpen] = useState(false);
+  const captchaGate = useCaptchaGate(captcha);
   const {
     values,
     step,
@@ -34,7 +35,7 @@ export function SigninForm({ captcha }: { captcha: CaptchaConfig | null }) {
     backToCredentials,
     submit,
     submitCode,
-  } = useSigninForm(captcha !== null, () => setIsCaptchaOpen(true));
+  } = useSigninForm(captcha !== null, captchaGate.begin);
 
   const formRef = useRef<HTMLFormElement>(null);
   const identifierFieldId = useId();
@@ -60,7 +61,7 @@ export function SigninForm({ captcha }: { captcha: CaptchaConfig | null }) {
   }
 
   async function handleCaptchaSolved(token: string) {
-    setIsCaptchaOpen(false);
+    captchaGate.cancel();
     focusField(await submit(token));
   }
 
@@ -164,9 +165,10 @@ export function SigninForm({ captcha }: { captcha: CaptchaConfig | null }) {
 
       {captcha === null ? null : (
         <CaptchaDialog
-          open={isCaptchaOpen}
-          siteKey={captcha.siteKey}
-          onOpenChange={setIsCaptchaOpen}
+          open={captchaGate.isOpen}
+          config={captcha}
+          challenge={captchaGate.challenge}
+          onOpenChange={captchaGate.handleOpenChange}
           onSolved={handleCaptchaSolved}
         />
       )}

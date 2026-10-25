@@ -163,50 +163,53 @@ export function CaptchaSettingsForm({
                 icon={<ShieldCheck />}
                 label={t("captchaProvider")}
               />
+              {values.captchaProvider === CAPTCHA_PROVIDER_TURNSTILE ||
+              values.captchaProvider === CAPTCHA_PROVIDER_BUILTIN ? (
+                <ConsoleSettingsRow
+                  control={
+                    <Select
+                      items={captchaScopeItems}
+                      multiple
+                      value={captchaScopes}
+                      onValueChange={(value) => {
+                        setCaptchaScopes(serializeCaptchaScopes(value));
+                      }}
+                      disabled={isSaving}
+                    >
+                      <SelectTrigger
+                        aria-label={t("captchaScopes")}
+                        className="w-64"
+                        size="sm"
+                      >
+                        <SelectValue>
+                          {(value: string[]) =>
+                            value.length === 0
+                              ? t("captchaScopesPlaceholder")
+                              : value
+                                  .map(
+                                    (scope) =>
+                                      captchaScopeItems[scope] ?? scope,
+                                  )
+                                  .join("、")
+                          }
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={CAPTCHA_SCOPE_LOGIN}>
+                          {t("captchaScopeLogin")}
+                        </SelectItem>
+                        <SelectItem value={CAPTCHA_SCOPE_REGISTER}>
+                          {t("captchaScopeRegister")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  }
+                  icon={<ListChecks />}
+                  label={t("captchaScopes")}
+                />
+              ) : null}
               {values.captchaProvider === CAPTCHA_PROVIDER_TURNSTILE ? (
                 <>
-                  <ConsoleSettingsRow
-                    control={
-                      <Select
-                        items={captchaScopeItems}
-                        multiple
-                        value={captchaScopes}
-                        onValueChange={(value) => {
-                          setCaptchaScopes(serializeCaptchaScopes(value));
-                        }}
-                        disabled={isSaving}
-                      >
-                        <SelectTrigger
-                          aria-label={t("captchaScopes")}
-                          className="w-64"
-                          size="sm"
-                        >
-                          <SelectValue>
-                            {(value: string[]) =>
-                              value.length === 0
-                                ? t("captchaScopesPlaceholder")
-                                : value
-                                    .map(
-                                      (scope) =>
-                                        captchaScopeItems[scope] ?? scope,
-                                    )
-                                    .join("、")
-                            }
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={CAPTCHA_SCOPE_LOGIN}>
-                            {t("captchaScopeLogin")}
-                          </SelectItem>
-                          <SelectItem value={CAPTCHA_SCOPE_REGISTER}>
-                            {t("captchaScopeRegister")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    }
-                    icon={<ListChecks />}
-                    label={t("captchaScopes")}
-                  />
                   <ConsoleSettingsRow
                     control={
                       <Input
@@ -274,7 +277,7 @@ export function CaptchaSettingsForm({
       />
       <CaptchaDialog
         open={isVerifyOpen}
-        siteKey={values.turnstileSiteKey}
+        config={{ provider: "turnstile", siteKey: values.turnstileSiteKey }}
         onOpenChange={setIsVerifyOpen}
         onSolved={handleCaptchaSolved}
       />
