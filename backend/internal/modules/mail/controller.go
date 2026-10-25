@@ -176,7 +176,7 @@ func (c *controller) previewData(ctx context.Context, to string) (map[string]str
 		"siteUrl":        siteURL,
 		"username":       username,
 		"sentAt":         now,
-		"verifyUrl":      "https://example.com/signup/verify?token=preview-token",
+		"verifyUrl":      "https://example.com/register/verify?token=preview-token",
 	}, nil
 }
 

@@ -305,7 +305,7 @@ func TestRegisterBuildsVerifyLinkWithSitePath(t *testing.T) {
 	if len(mails) != 1 {
 		t.Fatalf("mails = %d, want 1", len(mails))
 	}
-	if !strings.Contains(mails[0].Body.Text, "https://example.com/blog/signup/verify?token=") {
+	if !strings.Contains(mails[0].Body.Text, "https://example.com/blog/register/verify?token=") {
 		t.Fatalf("body = %q", mails[0].Body.Text)
 	}
 }

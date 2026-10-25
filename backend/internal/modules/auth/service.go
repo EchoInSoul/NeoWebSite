@@ -160,7 +160,7 @@ func (s *Service) Register(ctx context.Context, email, nickname, password, captc
 		return RegisterResult{}, err
 	}
 
-	data["verifyUrl"] = data["siteUrl"] + "/signup/verify?token=" + url.QueryEscape(rawToken)
+	data["verifyUrl"] = data["siteUrl"] + "/register/verify?token=" + url.QueryEscape(rawToken)
 	subject, body, err := mail.Compose(ctx, s.settings, mail.TemplateSignupCode, data)
 	if err != nil {
 		s.compensatePending(ctx, record)

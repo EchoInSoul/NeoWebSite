@@ -169,7 +169,7 @@ func TestCreateMessageRendersSelectedTemplate(t *testing.T) {
 			t.Fatalf("html body %q missing %q", mailer.got.Body.HTML, want)
 		}
 	}
-	if !strings.Contains(mailer.got.Body.Text, "https://example.com/signup/verify?token=preview-token") {
+	if !strings.Contains(mailer.got.Body.Text, "https://example.com/register/verify?token=preview-token") {
 		t.Fatalf("text body = %q, want built-in signup preview", mailer.got.Body.Text)
 	}
 }
@@ -185,7 +185,7 @@ func TestCreateMessageUsesDefaultSignupSubject(t *testing.T) {
 	if mailer.got.Subject != "注册验证邮件" {
 		t.Fatalf("subject = %q, want default signup subject", mailer.got.Subject)
 	}
-	if !strings.Contains(mailer.got.Body.Text, "https://example.com/signup/verify?token=preview-token") {
+	if !strings.Contains(mailer.got.Body.Text, "https://example.com/register/verify?token=preview-token") {
 		t.Fatalf("text body = %q, want verify link", mailer.got.Body.Text)
 	}
 }
