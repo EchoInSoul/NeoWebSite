@@ -23,6 +23,28 @@
 
 ---
 
+## 2026-10-26 · 自研人机验证（go-captcha 滑块）后端接入
+
+**范围**：后端 `captcha` 模块拆成三层目录——根目录只留引用与装配：`module.go`、`service.go`（读 enabled/provider 并委托）、`verifier.go`（`Verifier` 别名）；两种实现各自完整成包：`captcha/turnstile/`（`turnstile.go` Cloudflare 客户端 + 三态、`service.go` 私钥/scope/凭证判定与 `VerifyConfig`、`controller.go` 管理端自检路由、`dto.go`）、`captcha/builtin/`（`generator.go` 官方素材与出题、`repository.go` 挑战表、`service.go` 出题 / 交卷 / 凭证消费 / `Policies`、`controller.go` 两条公开路由、`dto.go`）；新增 ent schema `captcha_challenge` 与迁移 `captcha_challenges`；`apierror` 加 `captcha_disabled`（403）与 `captcha_failed`（param null）；`app.go` 装配 `builtin.New` 与 `turnstile.NewService`；README、本条目。版本 0.23.1 → 0.24.0。**未提交。**
+
+**动机**：项目已有 Cloudflare Turnstile，本轮加第二种 provider `builtin`，底层用开源库 `wenlng/go-captcha/v2`（滑块）自托管出题与判分，不依赖外部服务；纯后端，前端零改动。
+
+**决策**：
+- 协议由本项目自定（不照搬官方 `go-captcha-service` 的 `id/captchaKey/value`）：`POST /api/v1/captcha/challenges` 出题、`POST /api/v1/captcha/challenges/:id/solutions` 交卷；交卷返回的 `captcha_token` 直接喂给现有登录 / 注册请求体，登录 / 注册接口零改动。
+- 两段式一次性凭证：题目 3 分钟、凭证 5 分钟、只绑 scope 不绑 IP（生产上后端看到的 IP 全是前端容器）、token 只存 sha256、消费即作废；答错一次即判负。
+- 挑战表 `captcha_challenges`（status 0 待解 / 1 已解 / 2 已消费 / 3 判负，`token_hash` 唯一、`expires_at` 索引）；过期行在每次出题时顺带清理。
+- 出题限流 60 次/分钟/IP（复用 `ratelimit.Limiter`）；交卷不单独限流。
+- 素材全部用官方 `go-captcha-assets`（背景 16 张 + 拼图 4 套），不改图。实测：二进制 +约 2.63MB（探针，Windows `-s -w`）、常驻内存 +约 8.3MB、启动解码约 54ms、单次出题约 5.3ms、负载约 41KB JPEG + 5KB PNG。真实构建 `bin/neoblog-0.24.0-windows-amd64.exe` 为 36.98MB（`-s -w`），相对 32.97MB 历史地板 +约 4.0MB（其中含本轮之外的模块改动）。
+- 模块边界：`generator` 只依赖库；`repository` 只依赖 ent；`builtin` 依赖 settings 窄接口 + repository + generator + limiter；`service` 只做分派；`controller` 只做 HTTP。`login` / `registration` / `auth` / `settings` 生产代码零改动。
+
+**验证**：`scripts/check.sh` → `check ok`；captcha 包全量测试绿（出题 / 交卷 / 一次性 / 过期 / scope 串用 / 限流 / 路由 400·403·429·503）；`internal/app` 端到端绿（出题 → 交卷 → 登录成功，同 token 二次登录 400 `captcha_failed`；降级库出题 503）；apierror 注册表测试同步。变异自检三条（去掉 scope 判断 / 去掉消费状态更新 / 去掉过期谓词）各自变红后还原。
+
+**环境处理**：dev / test 库各有一张 10-25 遗留的 `captcha_challenges`（字段为 attempts / verified_at / consumed_at，18 行一次性测试数据，迁移文件从未进 git）。未删除数据：两库把旧表改名为 `captcha_challenges_legacy_20261025`（连带 pkey 约束与 `expires_at` 索引改名）后应用新迁移；atlas 修订里仍留着已不存在文件的版本 `20261025120002`，`migrate status` 不阻塞。
+
+**已知缺口**：只做滑块（旋转 / 点选 / 拖拽未做）；`captcha_provider` 取值白名单未做（拼错仍会静默不拦）；管理端自检接口的 builtin 形态未做；前端滑块组件与两个页面未接——**切 provider 前必须先上前端**；过期行清理依赖出题行为。
+
+---
+
 ## 2026-10-25 · 人机验证设置组归位与自检路由迁移
 
 **范围**：后端 `common/rbac`（新增 `system.captcha.view/edit`）、`modules/settings/{registry,controller}` 及测试、`modules/captcha`（升级为有路由模块：`module.go` / `controller.go` / `dto.go` / `verify_route_test.go`）、`modules/auth`（删自检路由薄壳与 captcha 依赖）、`app.go` 装配、新迁移 `20261025130000_relocate_captcha_settings.sql` + `20261025130100_seed_captcha_group.sql`、三条历史 seed 迁移改写；前端 `use-captcha-settings-save` / `admin-settings.ts` / `public-settings.ts` / `groups.ts` / 双语 i18n；README、本条目。spec 见 [2026-10-25-neoblog-captcha-settings-relocation-design.md](superpowers/specs/2026-10-25-neoblog-captcha-settings-relocation-design.md)。**未提交。**
