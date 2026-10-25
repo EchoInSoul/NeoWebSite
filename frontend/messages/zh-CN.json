@@ -356,6 +356,7 @@
       "confirmPassword": "确认密码",
       "passwordHint": "密码长度至少 {minLength} 位，须包含：字母/数字",
       "submit": "注册",
+      "submitting": "注册中…",
       "requiredEmail": "请输入邮箱",
       "requiredName": "请输入用户名",
       "requiredPassword": "请输入密码",

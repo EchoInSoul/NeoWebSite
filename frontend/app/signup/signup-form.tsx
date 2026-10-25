@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,10 @@ export function SignupForm({ captcha }: { captcha: CaptchaConfig | null }) {
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmVisible, setIsConfirmVisible] = useState(false);
+
+  const submitLabel =
+    retryLabel ??
+    (serviceDown ? tCommon("serviceUnavailableButton") : t("submit"));
 
   function focusField(field: string | undefined) {
     if (!field) {
@@ -160,9 +164,16 @@ export function SignupForm({ captcha }: { captcha: CaptchaConfig | null }) {
         type="submit"
         className="w-full"
         disabled={isPending || retryRemaining > 0}
+        aria-busy={isPending}
       >
-        {retryLabel ??
-          (serviceDown ? tCommon("serviceUnavailableButton") : t("submit"))}
+        {isPending ? (
+          <>
+            <LoaderCircle className="animate-spin" aria-hidden="true" />
+            {t("submitting")}
+          </>
+        ) : (
+          submitLabel
+        )}
       </Button>
 
       {captcha === null ? null : (

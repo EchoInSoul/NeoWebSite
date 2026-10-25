@@ -356,6 +356,7 @@
       "confirmPassword": "Confirm password",
       "passwordHint": "At least {minLength} characters, with letters and digits",
       "submit": "Sign up",
+      "submitting": "Signing up…",
       "requiredEmail": "Enter your email address",
       "requiredName": "Enter your username",
       "requiredPassword": "Enter your password",
