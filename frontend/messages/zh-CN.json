@@ -325,6 +325,13 @@
   "auth": {
     "captchaDialogTitle": "人机验证",
     "captchaUnavailable": "人机验证加载失败",
+    "captchaImageAlt": "拼图验证图片",
+    "captchaSliderHint": "拖动滑块完成拼图",
+    "captchaLoadFailed": "验证码加载失败",
+    "captchaReload": "重新加载",
+    "captchaSuccess": "验证成功，用时 {seconds}s",
+    "captchaError": "人机验证未通过",
+    "captchaRateLimited": "人机验证请求过于频繁，请稍后再试",
     "signin": {
       "title": "欢迎回来",
       "identifier": "用户名或邮箱",

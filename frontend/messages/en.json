@@ -325,6 +325,13 @@
   "auth": {
     "captchaDialogTitle": "Human verification",
     "captchaUnavailable": "Verification failed to load",
+    "captchaImageAlt": "Puzzle verification image",
+    "captchaSliderHint": "Drag the slider to complete the puzzle",
+    "captchaLoadFailed": "The puzzle failed to load",
+    "captchaReload": "Reload",
+    "captchaSuccess": "Verified in {seconds}s",
+    "captchaError": "Human verification failed",
+    "captchaRateLimited": "Too many human verification requests. Try again later.",
     "signin": {
       "title": "Welcome back",
       "identifier": "Username or email",
