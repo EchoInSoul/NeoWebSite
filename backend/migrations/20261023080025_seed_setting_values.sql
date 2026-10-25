@@ -16,9 +16,5 @@ INSERT INTO "public"."setting_values" ("id", "setting_group", "name", "value", "
 (gen_random_uuid(), 'auth', 'session_max_age_enabled', 'false'::jsonb, now()),
 (gen_random_uuid(), 'auth', 'session_max_age_days', '7'::jsonb, now()),
 (gen_random_uuid(), 'auth', 'totp_enabled', 'true'::jsonb, now()),
-(gen_random_uuid(), 'auth', 'password_reset_enabled', 'false'::jsonb, now()),
-(gen_random_uuid(), 'auth', 'captcha_enabled', 'false'::jsonb, now()),
-(gen_random_uuid(), 'auth', 'captcha_provider', '""'::jsonb, now()),
-(gen_random_uuid(), 'auth', 'turnstile_site_key', '""'::jsonb, now()),
-(gen_random_uuid(), 'auth', 'turnstile_secret_key', '""'::jsonb, now())
+(gen_random_uuid(), 'auth', 'password_reset_enabled', 'false'::jsonb, now())
 ON CONFLICT ("setting_group", "name") DO NOTHING;
