@@ -6,6 +6,7 @@ type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type RequestOptions = {
   method?: HttpMethod;
   body?: unknown;
+  signal?: AbortSignal;
 };
 
 type ErrorEnvelope = {
@@ -59,7 +60,7 @@ export async function apiRequest<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = "GET", body } = options;
+  const { method = "GET", body, signal } = options;
 
   let response: Response;
   try {
@@ -69,6 +70,7 @@ export async function apiRequest<T = unknown>(
       headers:
         body === undefined ? undefined : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
   } catch {
     throw new ApiError(0, "network_error");
