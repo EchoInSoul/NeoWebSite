@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -100,11 +99,7 @@ func (s *Service) Challenge(ctx context.Context, scope, ip string) (ChallengeRes
 	if err != nil {
 		return ChallengeResponse{}, err
 	}
-	scopes, err := s.settings.GetString(ctx, "captcha", "captcha_scopes")
-	if err != nil {
-		return ChallengeResponse{}, err
-	}
-	if !enabled || provider != providerBuiltin || !slices.Contains(settings.SplitListValue(scopes), scope) {
+	if !enabled || provider != providerBuiltin {
 		return ChallengeResponse{}, apierror.ErrCaptchaDisabled
 	}
 
@@ -176,14 +171,6 @@ func (s *Service) Solve(ctx context.Context, id uuid.UUID, x, y int) (SolveChall
 }
 
 func (s *Service) VerifyToken(ctx context.Context, scope, token, ip string) error {
-	scopes, err := s.settings.GetString(ctx, "captcha", "captcha_scopes")
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(settings.SplitListValue(scopes), scope) {
-		return nil
-	}
-
 	blocked, retryAfter := captchapolicy.Allow(s.limiter, s.policies.Failure, ip)
 	if blocked {
 		return apierror.RateLimited(retryAfter)

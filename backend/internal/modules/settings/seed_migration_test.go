@@ -11,6 +11,10 @@ import (
 
 var seedRowPattern = regexp.MustCompile(`^\(gen_random_uuid\(\), '([a-z0-9_]+)', '([a-z0-9_]+)', '(.*)'::jsonb, now\(\)\)[,;]?$`)
 
+var obsoleteSeedItems = map[string]struct{}{
+	"captcha.captcha_scopes": {},
+}
+
 func TestSeedMigrationMatchesBuiltinRegistry(t *testing.T) {
 	paths, err := filepath.Glob("../../../migrations/*_seed_*.sql")
 	if err != nil {
@@ -35,6 +39,9 @@ func TestSeedMigrationMatchesBuiltinRegistry(t *testing.T) {
 			}
 			group, name, value := match[1], match[2], match[3]
 			key := group + "." + name
+			if _, obsolete := obsoleteSeedItems[key]; obsolete {
+				continue
+			}
 			if seen[key] {
 				t.Fatalf("duplicate seed row for %s in %s", key, path)
 			}

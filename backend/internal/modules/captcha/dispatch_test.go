@@ -25,7 +25,7 @@ func dispatchSettings(t *testing.T, db *database.Database) *settings.Service {
 func TestDispatchChallengeUnavailableWhenBuiltinNotWired(t *testing.T) {
 	db := testDB(t)
 	settingsSvc := dispatchSettings(t, db)
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 	service := NewService(settingsSvc, nil)
 
 	_, err := service.Challenge(context.Background(), "login", "1.2.3.4")
@@ -35,7 +35,7 @@ func TestDispatchChallengeUnavailableWhenBuiltinNotWired(t *testing.T) {
 func TestDispatchVerifyUnavailableWhenBuiltinNotWired(t *testing.T) {
 	db := testDB(t)
 	settingsSvc := dispatchSettings(t, db)
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 	service := NewService(settingsSvc, nil)
 
 	err := service.Verify(context.Background(), "login", "x", "")
@@ -45,7 +45,7 @@ func TestDispatchVerifyUnavailableWhenBuiltinNotWired(t *testing.T) {
 func TestDispatchVerifyPassesWhenCaptchaDisabled(t *testing.T) {
 	db := testDB(t)
 	settingsSvc := dispatchSettings(t, db)
-	setCaptchaSettings(t, settingsSvc, false, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, false, "builtin")
 	service := NewService(settingsSvc, nil)
 
 	if err := service.Verify(context.Background(), "login", "", ""); err != nil {
@@ -60,7 +60,7 @@ func TestDispatchVerifyPassesWhenProviderUnknown(t *testing.T) {
 	ctx := context.Background()
 
 	for _, provider := range []string{"none", "geetest"} {
-		setCaptchaSettings(t, settingsSvc, true, provider, "login,register")
+		setCaptchaSettings(t, settingsSvc, true, provider)
 		if err := service.Verify(ctx, "login", "", ""); err != nil {
 			t.Fatalf("provider %q Verify = %v, want nil", provider, err)
 		}
@@ -70,7 +70,7 @@ func TestDispatchVerifyPassesWhenProviderUnknown(t *testing.T) {
 func TestDispatchVerifyRoutesTurnstileToVerifier(t *testing.T) {
 	db := testDB(t)
 	settingsSvc := dispatchSettings(t, db)
-	setCaptchaSettings(t, settingsSvc, true, "turnstile", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "turnstile")
 
 	ctx := context.Background()
 	if err := settingsSvc.SetString(ctx, "captcha", "turnstile_secret_key", "secret"); err != nil {
@@ -97,7 +97,7 @@ func TestDispatchVerifyRoutesTurnstileToVerifier(t *testing.T) {
 func TestDispatchVerifyRoutesBuiltin(t *testing.T) {
 	db := testDB(t)
 	settingsSvc := dispatchSettings(t, db)
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	builtinService, err := builtin.NewWithPolicies(db, settingsSvc, ratelimit.New(), builtin.DefaultPolicies())
 	if err != nil {
@@ -152,10 +152,10 @@ func TestCaptchaFailureLimitSharedAcrossProviders(t *testing.T) {
 	service := newService(settingsSvc, turnstileService, builtinService)
 
 	ctx := context.Background()
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 	assertErrorCode(t, service.Verify(ctx, "login", "", "203.0.113.9"), "captcha_failed")
 
-	setCaptchaSettings(t, settingsSvc, true, "turnstile", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "turnstile")
 	if err := settingsSvc.SetString(ctx, "captcha", "turnstile_secret_key", "secret"); err != nil {
 		t.Fatalf("set secret: %v", err)
 	}

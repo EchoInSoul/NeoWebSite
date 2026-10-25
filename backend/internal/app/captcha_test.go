@@ -28,13 +28,9 @@ func TestBuiltinCaptchaLoginFlow(t *testing.T) {
 	if err := settingsSvc.SetString(ctx, "captcha", "captcha_provider", "builtin"); err != nil {
 		t.Fatalf("set provider: %v", err)
 	}
-	if err := settingsSvc.SetString(ctx, "captcha", "captcha_scopes", "login"); err != nil {
-		t.Fatalf("set scopes: %v", err)
-	}
 	t.Cleanup(func() {
 		_ = settingsSvc.SetBool(context.Background(), "captcha", "captcha_enabled", false)
 		_ = settingsSvc.SetString(context.Background(), "captcha", "captcha_provider", "none")
-		_ = settingsSvc.SetString(context.Background(), "captcha", "captcha_scopes", "login,register")
 	})
 
 	user, password := createTestUser(t, db)

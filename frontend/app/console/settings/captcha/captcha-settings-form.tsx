@@ -5,7 +5,6 @@ import {
   BadgeCheck,
   Fingerprint,
   Globe,
-  ListChecks,
   LockKeyhole,
   ShieldCheck,
 } from "lucide-react";
@@ -33,10 +32,6 @@ import {
   CAPTCHA_PROVIDER_BUILTIN,
   CAPTCHA_PROVIDER_NONE,
   CAPTCHA_PROVIDER_TURNSTILE,
-  CAPTCHA_SCOPE_LOGIN,
-  CAPTCHA_SCOPE_REGISTER,
-  parseCaptchaScopes,
-  serializeCaptchaScopes,
   type CaptchaSettingsValues,
 } from "@/lib/captcha-settings";
 
@@ -58,7 +53,6 @@ export function CaptchaSettingsForm({
     isSaving,
     setCaptchaEnabled,
     setCaptchaProvider,
-    setCaptchaScopes,
     setTurnstileSiteKey,
     setTurnstileSecretKey,
     save,
@@ -66,12 +60,6 @@ export function CaptchaSettingsForm({
   const captchaExpansion = useSwitchRowExpansion(values.captchaEnabled);
   const { isVerifying, verify } = useCaptchaVerify();
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
-
-  const captchaScopes = parseCaptchaScopes(values.captchaScopes);
-  const captchaScopeItems: Record<string, string> = {
-    [CAPTCHA_SCOPE_LOGIN]: t("captchaScopeLogin"),
-    [CAPTCHA_SCOPE_REGISTER]: t("captchaScopeRegister"),
-  };
 
   const unknownCaptchaProvider = KNOWN_CAPTCHA_PROVIDERS.includes(
     values.captchaProvider,
@@ -163,51 +151,6 @@ export function CaptchaSettingsForm({
                 icon={<ShieldCheck />}
                 label={t("captchaProvider")}
               />
-              {values.captchaProvider === CAPTCHA_PROVIDER_TURNSTILE ||
-              values.captchaProvider === CAPTCHA_PROVIDER_BUILTIN ? (
-                <ConsoleSettingsRow
-                  control={
-                    <Select
-                      items={captchaScopeItems}
-                      multiple
-                      value={captchaScopes}
-                      onValueChange={(value) => {
-                        setCaptchaScopes(serializeCaptchaScopes(value));
-                      }}
-                      disabled={isSaving}
-                    >
-                      <SelectTrigger
-                        aria-label={t("captchaScopes")}
-                        className="w-64"
-                        size="sm"
-                      >
-                        <SelectValue>
-                          {(value: string[]) =>
-                            value.length === 0
-                              ? t("captchaScopesPlaceholder")
-                              : value
-                                  .map(
-                                    (scope) =>
-                                      captchaScopeItems[scope] ?? scope,
-                                  )
-                                  .join("、")
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={CAPTCHA_SCOPE_LOGIN}>
-                          {t("captchaScopeLogin")}
-                        </SelectItem>
-                        <SelectItem value={CAPTCHA_SCOPE_REGISTER}>
-                          {t("captchaScopeRegister")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  }
-                  icon={<ListChecks />}
-                  label={t("captchaScopes")}
-                />
-              ) : null}
               {values.captchaProvider === CAPTCHA_PROVIDER_TURNSTILE ? (
                 <>
                   <ConsoleSettingsRow

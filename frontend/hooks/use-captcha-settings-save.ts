@@ -29,10 +29,6 @@ export function useCaptchaSettingsSave(initial: CaptchaSettingsValues) {
     setValues((previous) => ({ ...previous, captchaProvider: value }));
   }
 
-  function setCaptchaScopes(value: string) {
-    setValues((previous) => ({ ...previous, captchaScopes: value }));
-  }
-
   function setTurnstileSiteKey(value: string) {
     setValues((previous) => ({ ...previous, turnstileSiteKey: value }));
   }
@@ -87,7 +83,6 @@ export function useCaptchaSettingsSave(initial: CaptchaSettingsValues) {
     isSaving,
     setCaptchaEnabled,
     setCaptchaProvider,
-    setCaptchaScopes,
     setTurnstileSiteKey,
     setTurnstileSecretKey,
     save,

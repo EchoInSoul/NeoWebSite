@@ -47,7 +47,7 @@ func resetCaptchaSettings(t *testing.T, svc *settings.Service) {
 	t.Helper()
 
 	ctx := context.Background()
-	names := []string{"captcha_enabled", "captcha_provider", "captcha_scopes", "turnstile_site_key", "turnstile_secret_key"}
+	names := []string{"captcha_enabled", "captcha_provider", "turnstile_site_key", "turnstile_secret_key"}
 	for _, name := range names {
 		if err := svc.ResetItem(ctx, "captcha", name); err != nil {
 			t.Fatalf("reset auth.%s: %v", name, err)
@@ -72,14 +72,6 @@ func setCaptchaProvider(t *testing.T, svc *settings.Service, provider, secret st
 	}
 	if err := svc.SetString(ctx, "captcha", "turnstile_secret_key", secret); err != nil {
 		t.Fatalf("set turnstile secret: %v", err)
-	}
-}
-
-func setCaptchaScopes(t *testing.T, svc *settings.Service, scopes string) {
-	t.Helper()
-
-	if err := svc.SetString(context.Background(), "captcha", "captcha_scopes", scopes); err != nil {
-		t.Fatalf("set captcha scopes: %v", err)
 	}
 }
 
@@ -227,90 +219,6 @@ func TestLoginSkipsCaptchaWithoutSecret(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d when no secret is configured", resp.StatusCode, http.StatusOK)
-	}
-	if verifier.calls != 0 {
-		t.Fatalf("verifier calls = %d, want 0", verifier.calls)
-	}
-}
-
-func TestLoginSkipsCaptchaOutsideScopes(t *testing.T) {
-	db := testDB(t)
-	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
-	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
-	resetCaptchaSettings(t, svc)
-	user, password := createTestUser(t, db, tag)
-	setCaptchaProvider(t, svc, "turnstile", "the-secret")
-	setCaptchaScopes(t, svc, "register")
-
-	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d when login is outside the captcha scopes", resp.StatusCode, http.StatusOK)
-	}
-	if verifier.calls != 0 {
-		t.Fatalf("verifier calls = %d, want 0", verifier.calls)
-	}
-}
-
-func TestRegisterSkipsCaptchaOutsideScopes(t *testing.T) {
-	db := testDB(t)
-	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
-	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
-	resetCaptchaSettings(t, svc)
-	setCaptchaProvider(t, svc, "turnstile", "the-secret")
-	setCaptchaScopes(t, svc, "login")
-
-	before := userCount(t, db)
-	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/users", auth.RegisterRequest{
-		Email:    "open+" + tag + "@example.com",
-		Nickname: "open" + tag,
-		Password: "pass-" + tag,
-	})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d when register is outside the captcha scopes", resp.StatusCode, http.StatusCreated)
-	}
-	if after := userCount(t, db); after != before+1 {
-		t.Fatalf("user count = %d, want %d", after, before+1)
-	}
-	if verifier.calls != 0 {
-		t.Fatalf("verifier calls = %d, want 0", verifier.calls)
-	}
-}
-
-func TestCaptchaScopesEmptySkipsEverywhere(t *testing.T) {
-	db := testDB(t)
-	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
-	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
-	resetCaptchaSettings(t, svc)
-	user, password := createTestUser(t, db, tag)
-	setCaptchaProvider(t, svc, "turnstile", "the-secret")
-	setCaptchaScopes(t, svc, "")
-
-	client := testClient(t)
-	login := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password})
-	defer login.Body.Close()
-	if login.StatusCode != http.StatusOK {
-		t.Fatalf("login status = %d, want %d with an empty scope list", login.StatusCode, http.StatusOK)
-	}
-
-	before := userCount(t, db)
-	register := postJSON(t, client, ts.URL+"/api/v1/users", auth.RegisterRequest{
-		Email:    "open+" + tag + "@example.com",
-		Nickname: "open" + tag,
-		Password: "pass-" + tag,
-	})
-	defer register.Body.Close()
-	if register.StatusCode != http.StatusCreated {
-		t.Fatalf("register status = %d, want %d with an empty scope list", register.StatusCode, http.StatusCreated)
-	}
-	if after := userCount(t, db); after != before+1 {
-		t.Fatalf("user count = %d, want %d", after, before+1)
 	}
 	if verifier.calls != 0 {
 		t.Fatalf("verifier calls = %d, want 0", verifier.calls)

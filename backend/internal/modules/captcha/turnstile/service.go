@@ -2,12 +2,10 @@ package turnstile
 
 import (
 	"context"
-	"slices"
 
 	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/ratelimit"
 	captchapolicy "website/backend/internal/modules/captcha/policy"
-	"website/backend/internal/modules/settings"
 )
 
 type Settings interface {
@@ -45,17 +43,9 @@ func NewServiceWithPolicies(settingsService Settings, verifier Verifier, limiter
 	}
 }
 
-func (s *Service) Verify(ctx context.Context, scope, token, ip string) error {
+func (s *Service) Verify(ctx context.Context, _ string, token, ip string) error {
 	secret, _ := s.settings.GetString(ctx, "captcha", "turnstile_secret_key")
 	if secret == "" {
-		return nil
-	}
-
-	scopes, err := s.settings.GetString(ctx, "captcha", "captcha_scopes")
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(settings.SplitListValue(scopes), scope) {
 		return nil
 	}
 

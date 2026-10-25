@@ -11,7 +11,7 @@ import (
 	"website/backend/internal/modules/settings"
 )
 
-func setCaptchaSettings(t *testing.T, svc *settings.Service, enabled bool, provider, scopes string) {
+func setCaptchaSettings(t *testing.T, svc *settings.Service, enabled bool, provider string) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -21,14 +21,10 @@ func setCaptchaSettings(t *testing.T, svc *settings.Service, enabled bool, provi
 	if err := svc.SetString(ctx, "captcha", "captcha_provider", provider); err != nil {
 		t.Fatalf("set provider: %v", err)
 	}
-	if err := svc.SetString(ctx, "captcha", "captcha_scopes", scopes); err != nil {
-		t.Fatalf("set scopes: %v", err)
-	}
 
 	t.Cleanup(func() {
 		_ = svc.SetBool(context.Background(), "captcha", "captcha_enabled", false)
 		_ = svc.SetString(context.Background(), "captcha", "captcha_provider", "none")
-		_ = svc.SetString(context.Background(), "captcha", "captcha_scopes", "login,register")
 	})
 }
 

@@ -29,7 +29,6 @@ func (v *stubVerifier) Verify(context.Context, string, string, string) Outcome {
 func newLimitTestService(outcome Outcome, limit int) (*Service, *stubVerifier) {
 	settings := stubSettings{
 		"captcha.turnstile_secret_key": "secret",
-		"captcha.captcha_scopes":       "login,register",
 	}
 	verifier := &stubVerifier{outcome: outcome}
 	service := NewServiceWithPolicies(settings, verifier, ratelimit.New(), Policies{

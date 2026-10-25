@@ -14,7 +14,7 @@ import (
 func TestChallengeAndSolveFlow(t *testing.T) {
 	db := testDB(t)
 	service, settingsSvc := newServiceHarness(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	ctx := context.Background()
 	challenge, err := service.Challenge(ctx, "login", "1.2.3.4")
@@ -60,15 +60,13 @@ func TestChallengeRejectedWhenNotActive(t *testing.T) {
 		name     string
 		enabled  bool
 		provider string
-		scopes   string
 	}{
-		{"disabled", false, "builtin", "login,register"},
-		{"turnstile", true, "turnstile", "login,register"},
-		{"scope not listed", true, "builtin", "register"},
+		{"disabled", false, "builtin"},
+		{"turnstile", true, "turnstile"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			setCaptchaSettings(t, settingsSvc, tc.enabled, tc.provider, tc.scopes)
+			setCaptchaSettings(t, settingsSvc, tc.enabled, tc.provider)
 			_, err := service.Challenge(ctx, "login", "1.2.3.4")
 			assertErrorCode(t, err, "captcha_disabled")
 		})
@@ -78,7 +76,7 @@ func TestChallengeRejectedWhenNotActive(t *testing.T) {
 func TestChallengeRejectsUnknownScope(t *testing.T) {
 	db := testDB(t)
 	service, settingsSvc := newServiceHarness(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	_, err := service.Challenge(context.Background(), "signup", "1.2.3.4")
 	assertErrorCode(t, err, "invalid_request")
@@ -92,7 +90,7 @@ func TestChallengeRateLimited(t *testing.T) {
 	policies := DefaultPolicies()
 	policies.ChallengeLimit = 1
 	service, settingsSvc := newServiceHarness(t, db, policies)
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	ctx := context.Background()
 	first, err := service.Challenge(ctx, "login", "1.2.3.4")
@@ -108,7 +106,7 @@ func TestChallengeRateLimited(t *testing.T) {
 func TestSolveRejectsWrongAnswerAndBurnsChallenge(t *testing.T) {
 	db := testDB(t)
 	service, settingsSvc := newServiceHarness(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	ctx := context.Background()
 	challenge, err := service.Challenge(ctx, "login", "1.2.3.4")
@@ -128,7 +126,7 @@ func TestSolveRejectsWrongAnswerAndBurnsChallenge(t *testing.T) {
 func TestSolveIsSingleUse(t *testing.T) {
 	db := testDB(t)
 	service, settingsSvc := newServiceHarness(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	ctx := context.Background()
 	challenge, err := service.Challenge(ctx, "login", "1.2.3.4")
@@ -148,7 +146,7 @@ func TestSolveIsSingleUse(t *testing.T) {
 func TestVerifyTokenConsumesOnce(t *testing.T) {
 	db := testDB(t)
 	service, settingsSvc := newServiceHarness(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	ctx := context.Background()
 	challenge, err := service.Challenge(ctx, "login", "1.2.3.4")
@@ -172,7 +170,7 @@ func TestVerifyTokenConsumesOnce(t *testing.T) {
 func TestVerifyTokenRejectsOtherScope(t *testing.T) {
 	db := testDB(t)
 	service, settingsSvc := newServiceHarness(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	ctx := context.Background()
 	challenge, err := service.Challenge(ctx, "login", "1.2.3.4")
@@ -193,7 +191,7 @@ func TestVerifyTokenRejectsOtherScope(t *testing.T) {
 func TestVerifyTokenRejectsExpiredToken(t *testing.T) {
 	db := testDB(t)
 	service, settingsSvc := newServiceHarness(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	ctx := context.Background()
 	challenge, err := service.Challenge(ctx, "login", "1.2.3.4")
@@ -216,16 +214,6 @@ func TestVerifyTokenRejectsExpiredToken(t *testing.T) {
 	assertErrorCode(t, service.VerifyToken(ctx, "login", solved.CaptchaToken, "203.0.113.9"), "captcha_failed")
 }
 
-func TestVerifyTokenPassesWhenScopeNotProtected(t *testing.T) {
-	db := testDB(t)
-	service, settingsSvc := newServiceHarness(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "register")
-
-	if err := service.VerifyToken(context.Background(), "login", "", "203.0.113.9"); err != nil {
-		t.Fatalf("VerifyToken for unprotected scope = %v, want nil", err)
-	}
-}
-
 func TestVerifyTokenRateLimitsFailuresPerIP(t *testing.T) {
 	db := testDB(t)
 	policies := DefaultPolicies()
@@ -236,7 +224,7 @@ func TestVerifyTokenRateLimitsFailuresPerIP(t *testing.T) {
 		Cooldown: time.Minute,
 	}
 	service, settingsSvc := newServiceHarness(t, db, policies)
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	ctx := context.Background()
 	assertErrorCode(t, service.VerifyToken(ctx, "login", "", "203.0.113.9"), "captcha_failed")

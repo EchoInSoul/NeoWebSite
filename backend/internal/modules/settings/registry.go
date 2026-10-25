@@ -49,13 +49,10 @@ var builtinRegistry = []Group{
 		},
 	},
 	{
-		Name:       "captcha",
-		ValidateOn: []string{"captcha_scopes"},
-		Validate:   validateCaptchaGroup,
+		Name: "captcha",
 		Items: []Definition{
 			{Name: "captcha_enabled", Type: FieldTypeBool, Default: false, Public: true},
 			{Name: "captcha_provider", Type: FieldTypeString, Default: "none", Public: true},
-			{Name: "captcha_scopes", Type: FieldTypeString, Default: "login,register", Public: true},
 			{Name: "turnstile_site_key", Type: FieldTypeString, Default: "", Public: true},
 			{Name: "turnstile_secret_key", Type: FieldTypeString, Default: ""},
 		},
@@ -189,22 +186,6 @@ func validateAuthGroup(values map[string]any, touched map[string]bool) error {
 		}
 	}
 
-	return nil
-}
-
-func validateCaptchaGroup(values map[string]any, touched map[string]bool) error {
-	if touched["captcha_scopes"] {
-		raw, ok := values["captcha_scopes"].(string)
-		if !ok {
-			return fmt.Errorf("settings: captcha_scopes is not a string")
-		}
-		scopes := SplitListValue(raw)
-		for _, scope := range scopes {
-			if scope != CaptchaScopeLogin && scope != CaptchaScopeRegister {
-				return &ItemError{Item: "captcha_scopes", Err: apierror.ErrSettingConflict}
-			}
-		}
-	}
 	return nil
 }
 

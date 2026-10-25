@@ -121,13 +121,12 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "password_reset_enabled", typ: FieldTypeBool, def: false},
 	})
 
-	if len(reg.groups["captcha"]) != 5 {
-		t.Fatalf("captcha items = %d, want 5", len(reg.groups["captcha"]))
+	if len(reg.groups["captcha"]) != 4 {
+		t.Fatalf("captcha items = %d, want 4", len(reg.groups["captcha"]))
 	}
 	assertDefinitions(t, reg.groups["captcha"], []wantItem{
 		{name: "captcha_enabled", typ: FieldTypeBool, def: false, public: true},
 		{name: "captcha_provider", typ: FieldTypeString, def: "none", public: true},
-		{name: "captcha_scopes", typ: FieldTypeString, def: "login,register", public: true},
 		{name: "turnstile_site_key", typ: FieldTypeString, def: "", public: true},
 		{name: "turnstile_secret_key", typ: FieldTypeString, def: ""},
 	})
@@ -170,7 +169,6 @@ func TestBuiltinPublicAllowlist(t *testing.T) {
 		"auth.totp_enabled",
 		"captcha.captcha_enabled",
 		"captcha.captcha_provider",
-		"captcha.captcha_scopes",
 		"captcha.turnstile_site_key",
 		"register.enabled",
 		"site.block_search_engines",
@@ -306,31 +304,6 @@ func TestValidateAuthGroup(t *testing.T) {
 			"password_min_length":     tc.length,
 			"session_max_age_enabled": tc.enabled,
 			"session_max_age_days":    tc.days,
-		}, touched)
-		if (err != nil) != tc.wantErr {
-			t.Fatalf("%s: err = %v, wantErr = %v", tc.name, err, tc.wantErr)
-		}
-	}
-}
-
-func TestValidateCaptchaScopes(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		value   string
-		touched bool
-		wantErr bool
-	}{
-		{"both scopes", "login,register", true, false},
-		{"single scope", "login", true, false},
-		{"chinese comma and spaces", " register ， login ", true, false},
-		{"empty", "", true, false},
-		{"separators only", " , ，", true, false},
-		{"unknown scope", "login,password_reset", true, true},
-		{"untouched invalid value", "", false, false},
-	} {
-		touched := map[string]bool{"captcha_scopes": tc.touched}
-		err := validateCaptchaGroup(map[string]any{
-			"captcha_scopes": tc.value,
 		}, touched)
 		if (err != nil) != tc.wantErr {
 			t.Fatalf("%s: err = %v, wantErr = %v", tc.name, err, tc.wantErr)

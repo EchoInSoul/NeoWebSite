@@ -1,7 +1,7 @@
 import { cache } from "react";
 
 import { backendUrl } from "@/lib/backend-url";
-import { parseCaptchaScopes, type CaptchaScope } from "@/lib/captcha-settings";
+import type { CaptchaScope } from "@/lib/captcha-settings";
 
 export type PublicSettingValue = boolean | number | string;
 
@@ -72,15 +72,6 @@ export function getCaptchaConfig(
   const captcha = settings.captcha;
 
   if (captcha?.captcha_enabled !== true) {
-    return null;
-  }
-
-  const scopes = captcha.captcha_scopes;
-
-  if (
-    typeof scopes !== "string" ||
-    !parseCaptchaScopes(scopes).includes(scope)
-  ) {
     return null;
   }
 

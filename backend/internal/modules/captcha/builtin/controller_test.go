@@ -80,7 +80,7 @@ func decodeError(t *testing.T, data []byte) routeErrorBody {
 func TestChallengeRouteRequiresJSON(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "text/plain", `{"scope":"login"}`)
 	if response.StatusCode != http.StatusBadRequest {
@@ -94,7 +94,7 @@ func TestChallengeRouteRequiresJSON(t *testing.T) {
 func TestChallengeRouteCreatesChallenge(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "application/json", `{"scope":"login"}`)
 	if response.StatusCode != http.StatusCreated {
@@ -124,7 +124,7 @@ func TestChallengeRouteCreatesChallenge(t *testing.T) {
 func TestChallengeRouteRejectsUnknownScope(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "application/json", `{"scope":"signup"}`)
 	if response.StatusCode != http.StatusBadRequest {
@@ -150,7 +150,7 @@ func TestChallengeRouteRejectsWhenInactive(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			setCaptchaSettings(t, settingsSvc, tc.enabled, tc.provider, "login,register")
+			setCaptchaSettings(t, settingsSvc, tc.enabled, tc.provider)
 			response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "application/json", `{"scope":"login"}`)
 			if response.StatusCode != http.StatusForbidden {
 				t.Fatalf("status = %d, want 403 (%s)", response.StatusCode, data)
@@ -167,7 +167,7 @@ func TestChallengeRouteRateLimited(t *testing.T) {
 	policies := DefaultPolicies()
 	policies.ChallengeLimit = 1
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, policies)
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "application/json", `{"scope":"login"}`)
 	if response.StatusCode != http.StatusCreated {
@@ -194,7 +194,7 @@ func TestChallengeRouteRateLimited(t *testing.T) {
 func TestSolveRouteRejectsMalformedID(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges/not-a-uuid/solutions", "application/json", `{"x":1,"y":2}`)
 	if response.StatusCode != http.StatusBadRequest {
@@ -209,7 +209,7 @@ func TestSolveRouteRejectsMalformedID(t *testing.T) {
 func TestSolveRouteRejectsMissingAndNegativeCoordinates(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	challenge := createChallengeViaRoute(t, ts, db)
 	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
@@ -240,7 +240,7 @@ func TestSolveRouteRejectsMissingAndNegativeCoordinates(t *testing.T) {
 func TestSolveRouteInvalidInputKeepsChallengePending(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	challenge := createChallengeViaRoute(t, ts, db)
 	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
@@ -260,7 +260,7 @@ func TestSolveRouteInvalidInputKeepsChallengePending(t *testing.T) {
 func TestSolveRouteWrongAnswer(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
 
 	challenge := createChallengeViaRoute(t, ts, db)
 	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"

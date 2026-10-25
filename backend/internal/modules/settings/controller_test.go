@@ -315,14 +315,14 @@ func TestSettingsPatchCaptchaGroupPermission(t *testing.T) {
 	captchaUser := seedClient(t, ts, createUserInGroup(t, db, captchaGroupID))
 	registerUser := seedClient(t, ts, createUserInGroup(t, db, registerGroupID))
 
-	ok := doJSON(t, captchaUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"captcha_scopes": "register"})
+	ok := doJSON(t, captchaUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"turnstile_site_key": "site-key"})
 	expectStatus(t, ok, http.StatusOK)
 	_, values := decodeGroup(t, ok)
-	if values["captcha_scopes"] != "register" {
-		t.Fatalf("captcha_scopes = %v, want register", values["captcha_scopes"])
+	if values["turnstile_site_key"] != "site-key" {
+		t.Fatalf("turnstile_site_key = %v, want site-key", values["turnstile_site_key"])
 	}
 
-	denied := doJSON(t, registerUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"captcha_scopes": "login"})
+	denied := doJSON(t, registerUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"turnstile_site_key": "other"})
 	expectStatus(t, denied, http.StatusForbidden)
 	if code := decodeErrorCode(t, denied); code != "forbidden" {
 		t.Fatalf("captcha as register user: code = %q, want forbidden", code)
@@ -473,14 +473,11 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 		t.Fatalf("group = %v, want captcha", items[3]["group"])
 	}
 	captchaValues, ok := items[3]["values"].(map[string]any)
-	if !ok || len(captchaValues) != 4 {
-		t.Fatalf("public captcha values = %v, want the four public keys without the secret", items[3]["values"])
+	if !ok || len(captchaValues) != 3 {
+		t.Fatalf("public captcha values = %v, want the three public keys without the secret", items[3]["values"])
 	}
 	if captchaValues["captcha_enabled"] != false || captchaValues["captcha_provider"] != "none" || captchaValues["turnstile_site_key"] != "" {
 		t.Fatalf("public captcha values = %v, want the disabled defaults", captchaValues)
-	}
-	if captchaValues["captcha_scopes"] != "login,register" {
-		t.Fatalf("public captcha.captcha_scopes = %v, want the default scopes", captchaValues["captcha_scopes"])
 	}
 	if _, leaked := captchaValues["turnstile_secret_key"]; leaked {
 		t.Fatalf("public captcha values leaked turnstile_secret_key: %v", captchaValues)
@@ -622,14 +619,11 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	if group != "captcha" {
 		t.Fatalf("group = %q, want captcha", group)
 	}
-	if len(values) != 5 {
-		t.Fatalf("captcha values = %v, want the five defaults", values)
+	if len(values) != 4 {
+		t.Fatalf("captcha values = %v, want the four defaults", values)
 	}
 	if values["captcha_provider"] != "none" {
 		t.Fatalf("captcha.captcha_provider = %v, want none", values["captcha_provider"])
-	}
-	if values["captcha_scopes"] != "login,register" {
-		t.Fatalf("captcha.captcha_scopes = %v, want login,register", values["captcha_scopes"])
 	}
 	if values["turnstile_site_key"] != "" || values["turnstile_secret_key"] != "" {
 		t.Fatalf("turnstile keys = %v / %v, want empty", values["turnstile_site_key"], values["turnstile_secret_key"])
@@ -894,29 +888,6 @@ func TestSettingsPatchAuthSessionMaxAgeRange(t *testing.T) {
 	_, values := decodeGroup(t, ok)
 	if values["session_max_age_days"] != float64(30) || values["session_max_age_enabled"] != true {
 		t.Fatalf("session max age = %v, want enabled with 30 days", values)
-	}
-}
-
-func TestSettingsPatchCaptchaScopes(t *testing.T) {
-	db := testDB(t)
-	resetBuiltin(t, db, "captcha")
-	ts := newSettingsTestApp(t, db)
-	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
-
-	invalid := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"captcha_scopes": "login,password_reset"})
-	expectStatus(t, invalid, http.StatusConflict)
-	body := decodeError(t, invalid)
-	if body["code"] != "setting_conflict" || body["param"] != "captcha_scopes" {
-		t.Fatalf("conflict body = %v", body)
-	}
-
-	for _, scopes := range []string{"", "register"} {
-		ok := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"captcha_scopes": scopes})
-		expectStatus(t, ok, http.StatusOK)
-		_, values := decodeGroup(t, ok)
-		if values["captcha_scopes"] != scopes {
-			t.Fatalf("captcha_scopes = %v, want %q", values["captcha_scopes"], scopes)
-		}
 	}
 }
 
