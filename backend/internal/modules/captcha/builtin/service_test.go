@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"website/backend/internal/common/apierror"
+	"website/backend/internal/common/ratelimit"
 )
 
 func TestChallengeAndSolveFlow(t *testing.T) {
@@ -162,10 +163,10 @@ func TestVerifyTokenConsumesOnce(t *testing.T) {
 		t.Fatalf("Solve: %v", err)
 	}
 
-	if err := service.VerifyToken(ctx, "login", solved.CaptchaToken); err != nil {
+	if err := service.VerifyToken(ctx, "login", solved.CaptchaToken, "203.0.113.9"); err != nil {
 		t.Fatalf("first VerifyToken: %v", err)
 	}
-	assertErrorCode(t, service.VerifyToken(ctx, "login", solved.CaptchaToken), "captcha_failed")
+	assertErrorCode(t, service.VerifyToken(ctx, "login", solved.CaptchaToken, "203.0.113.9"), "captcha_failed")
 }
 
 func TestVerifyTokenRejectsOtherScope(t *testing.T) {
@@ -186,7 +187,7 @@ func TestVerifyTokenRejectsOtherScope(t *testing.T) {
 		t.Fatalf("Solve: %v", err)
 	}
 
-	assertErrorCode(t, service.VerifyToken(ctx, "register", solved.CaptchaToken), "captcha_failed")
+	assertErrorCode(t, service.VerifyToken(ctx, "register", solved.CaptchaToken, "203.0.113.9"), "captcha_failed")
 }
 
 func TestVerifyTokenRejectsExpiredToken(t *testing.T) {
@@ -212,7 +213,7 @@ func TestVerifyTokenRejectsExpiredToken(t *testing.T) {
 		t.Fatalf("expire token: %v", err)
 	}
 
-	assertErrorCode(t, service.VerifyToken(ctx, "login", solved.CaptchaToken), "captcha_failed")
+	assertErrorCode(t, service.VerifyToken(ctx, "login", solved.CaptchaToken, "203.0.113.9"), "captcha_failed")
 }
 
 func TestVerifyTokenPassesWhenScopeNotProtected(t *testing.T) {
@@ -220,7 +221,25 @@ func TestVerifyTokenPassesWhenScopeNotProtected(t *testing.T) {
 	service, settingsSvc := newServiceHarness(t, db, DefaultPolicies())
 	setCaptchaSettings(t, settingsSvc, true, "builtin", "register")
 
-	if err := service.VerifyToken(context.Background(), "login", ""); err != nil {
+	if err := service.VerifyToken(context.Background(), "login", "", "203.0.113.9"); err != nil {
 		t.Fatalf("VerifyToken for unprotected scope = %v, want nil", err)
 	}
+}
+
+func TestVerifyTokenRateLimitsFailuresPerIP(t *testing.T) {
+	db := testDB(t)
+	policies := DefaultPolicies()
+	policies.ChallengeLimit = 100
+	policies.Failure = ratelimit.FailurePolicy{
+		Limit:    1,
+		Window:   time.Minute,
+		Cooldown: time.Minute,
+	}
+	service, settingsSvc := newServiceHarness(t, db, policies)
+	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+
+	ctx := context.Background()
+	assertErrorCode(t, service.VerifyToken(ctx, "login", "", "203.0.113.9"), "captcha_failed")
+	assertErrorCode(t, service.VerifyToken(ctx, "login", "not-a-token", "203.0.113.9"), "rate_limited")
+	assertErrorCode(t, service.VerifyToken(ctx, "login", "", "198.51.100.7"), "captcha_failed")
 }

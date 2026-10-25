@@ -17,6 +17,7 @@ import (
 	"website/backend/internal/common/apierror"
 	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
+	captchapolicy "website/backend/internal/modules/captcha/policy"
 	"website/backend/internal/modules/settings"
 )
 
@@ -33,15 +34,17 @@ type Policies struct {
 	ChallengeTTL    time.Duration
 	TokenTTL        time.Duration
 	AnswerPadding   int
+	Failure         ratelimit.FailurePolicy
 }
 
 func DefaultPolicies() Policies {
 	return Policies{
-		ChallengeLimit:  60,
-		ChallengeWindow: time.Minute,
+		ChallengeLimit:  5,
+		ChallengeWindow: 10 * time.Minute,
 		ChallengeTTL:    3 * time.Minute,
 		TokenTTL:        5 * time.Minute,
 		AnswerPadding:   4,
+		Failure:         captchapolicy.Failure(),
 	}
 }
 
@@ -172,7 +175,7 @@ func (s *Service) Solve(ctx context.Context, id uuid.UUID, x, y int) (SolveChall
 	}, nil
 }
 
-func (s *Service) VerifyToken(ctx context.Context, scope, token string) error {
+func (s *Service) VerifyToken(ctx context.Context, scope, token, ip string) error {
 	scopes, err := s.settings.GetString(ctx, "captcha", "captcha_scopes")
 	if err != nil {
 		return err
@@ -181,7 +184,13 @@ func (s *Service) VerifyToken(ctx context.Context, scope, token string) error {
 		return nil
 	}
 
+	blocked, retryAfter := captchapolicy.Allow(s.limiter, s.policies.Failure, ip)
+	if blocked {
+		return apierror.RateLimited(retryAfter)
+	}
+
 	if token == "" {
+		captchapolicy.Record(s.limiter, s.policies.Failure, ip)
 		return apierror.ErrCaptchaFailed
 	}
 
@@ -190,6 +199,7 @@ func (s *Service) VerifyToken(ctx context.Context, scope, token string) error {
 		return err
 	}
 	if !consumed {
+		captchapolicy.Record(s.limiter, s.policies.Failure, ip)
 		return apierror.ErrCaptchaFailed
 	}
 

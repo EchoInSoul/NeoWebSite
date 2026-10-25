@@ -51,7 +51,7 @@ func (s *Service) Verify(ctx context.Context, scope, token, ip string) error {
 		if s.builtin == nil {
 			return apierror.ErrServiceUnavailable
 		}
-		return s.builtin.VerifyToken(ctx, scope, token)
+		return s.builtin.VerifyToken(ctx, scope, token, ip)
 	default:
 		return nil
 	}

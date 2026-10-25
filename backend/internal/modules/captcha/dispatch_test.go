@@ -3,6 +3,7 @@ package captcha
 import (
 	"context"
 	"testing"
+	"time"
 
 	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
@@ -121,4 +122,56 @@ func TestDispatchVerifyRoutesBuiltin(t *testing.T) {
 		t.Fatalf("Verify = %v, want nil", err)
 	}
 	assertErrorCode(t, service.Verify(ctx, "login", solved.CaptchaToken, ""), "captcha_failed")
+}
+
+func TestCaptchaFailureLimitSharedAcrossProviders(t *testing.T) {
+	db := testDB(t)
+	settingsSvc := dispatchSettings(t, db)
+	limiter := ratelimit.New()
+	failure := ratelimit.FailurePolicy{
+		Limit:    1,
+		Window:   time.Minute,
+		Cooldown: time.Minute,
+	}
+
+	builtinPolicies := builtin.DefaultPolicies()
+	builtinPolicies.ChallengeLimit = 100
+	builtinPolicies.Failure = failure
+	builtinService, err := builtin.NewWithPolicies(db, settingsSvc, limiter, builtinPolicies)
+	if err != nil {
+		t.Fatalf("builtin.NewWithPolicies: %v", err)
+	}
+
+	verifier := &fakeVerifier{outcome: turnstile.Passed}
+	turnstileService := turnstile.NewServiceWithPolicies(
+		settingsSvc,
+		verifier,
+		limiter,
+		turnstile.Policies{Failure: failure},
+	)
+	service := newService(settingsSvc, turnstileService, builtinService)
+
+	ctx := context.Background()
+	setCaptchaSettings(t, settingsSvc, true, "builtin", "login,register")
+	assertErrorCode(t, service.Verify(ctx, "login", "", "203.0.113.9"), "captcha_failed")
+
+	setCaptchaSettings(t, settingsSvc, true, "turnstile", "login,register")
+	if err := settingsSvc.SetString(ctx, "captcha", "turnstile_secret_key", "secret"); err != nil {
+		t.Fatalf("set secret: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = settingsSvc.SetString(context.Background(), "captcha", "turnstile_secret_key", "")
+	})
+
+	assertErrorCode(t, service.Verify(ctx, "login", "token", "203.0.113.9"), "rate_limited")
+	if verifier.calls != 0 {
+		t.Fatalf("verifier calls while shared bucket limited = %d, want 0", verifier.calls)
+	}
+
+	if err := service.Verify(ctx, "login", "token", "198.51.100.7"); err != nil {
+		t.Fatalf("other IP Verify = %v, want nil", err)
+	}
+	if verifier.calls != 1 {
+		t.Fatalf("verifier calls after other IP = %d, want 1", verifier.calls)
+	}
 }

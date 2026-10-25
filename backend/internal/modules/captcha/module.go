@@ -23,7 +23,12 @@ func New(db *database.Database, settingsService *settings.Service, limiter *rate
 		return nil, err
 	}
 
-	turnstileService := turnstile.NewService(settingsService, turnstile.New(turnstile.SiteverifyURL, turnstile.Timeout))
+	turnstileService := turnstile.NewServiceWithPolicies(
+		settingsService,
+		turnstile.New(turnstile.SiteverifyURL, turnstile.Timeout),
+		limiter,
+		turnstile.DefaultPolicies(),
+	)
 	service := newService(settingsService, turnstileService, builtinService)
 
 	return &Module{

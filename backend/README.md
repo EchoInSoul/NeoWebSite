@@ -1,6 +1,6 @@
 # website 后端（Go + Gin）
 
-当前版本：0.24.0
+当前版本：0.24.1
 
 设计规范对齐 NestJS：模块化组织、单向依赖、显式依赖注入；应用生命周期（监听、超时、优雅关闭）由 app 层掌管，对应 Nest 的 `app.listen` / `enableShutdownHooks`。Go 没有装饰器和反射式 DI 容器，对应物是构造函数传依赖、模块 `New` 暴露能力、`Register` 装配。
 
@@ -176,7 +176,7 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 | --- | --- | --- |
 | `POST /api/v1/users` | 公开 | body `{"email","nickname","password","captcha_token"?}` → 201 `{"email","nickname","bio"}`，新用户 `bio` 为 `null`；**不下发会话 cookie（注册只建号，要登录得另走 `POST /sessions`）**；400 `invalid_request` / `weak_password`；人机验证在该入口的启用范围内且未通过 400 `captcha_failed`（`param:"captcha_token"`）；409 `email_taken` / `nickname_taken` / `already_taken`（并发竞态兜底）；**邮箱所有权认证开启时改为 202 `{"status":"verification_pending"}`，不建号、不返回用户数据**（改由 `POST /users/email-verifications` 建号；SMTP/site.url 不可用 503 `mail_unavailable`） |
 | `POST /api/v1/users/email-verifications` | 公开 | body `{"token":"..."}` → 201 `{"email","nickname","bio"}`（消费一次性链接令牌并创建状态 `verified` 的用户，**不下发会话**）；空/缺 token 400 `invalid_request`（`param:"token"`）；令牌不存在/过期/已用 400 `email_verification_invalid`（`param:"token"`）；验证时邮箱/用户名已被真实用户占用 409 `email_taken` / `nickname_taken`，并发唯一约束竞态 409 `already_taken`；按 IP 限流 30 次 / 15 分钟，超限 429 `rate_limited` |
-| `POST /api/v1/captcha/challenges` | 公开 | body `{"scope":"login"}`（只认 `login` / `register`）→ 201 `{"id","master_image","tile_image","master_width","master_height","tile_width","tile_height","tile_x","tile_y","expires_at"}`（两张图是 data URL；题目 3 分钟有效）；未启用 / provider 不是 `builtin` / 该入口未勾选 → 403 `captcha_disabled`；scope 非法 400 `invalid_request`（`param:"scope"`）；按 IP 限流 60 次/分钟，超限 429 `rate_limited`（带 `Retry-After`）；数据库不可用 503 `service_unavailable` |
+| `POST /api/v1/captcha/challenges` | 公开 | body `{"scope":"login"}`（只认 `login` / `register`）→ 201 `{"id","master_image","tile_image","master_width","master_height","tile_width","tile_height","tile_x","tile_y","expires_at"}`（两张图是 data URL；题目 3 分钟有效）；未启用 / provider 不是 `builtin` / 该入口未勾选 → 403 `captcha_disabled`；scope 非法 400 `invalid_request`（`param:"scope"`）；按 IP 限流 5 次 / 10 分钟，超限 429 `rate_limited`（带 `Retry-After`）；数据库不可用 503 `service_unavailable` |
 | `POST /api/v1/captcha/challenges/:id/solutions` | 公开 | body `{"x":123,"y":45}` → 200 `{"captcha_token","expires_at"}`；凭证一次性、5 分钟、只绑 scope（`login` 的凭证不能用于注册）；`id` 非 UUID / 坐标缺失或为负 400 `invalid_request`；题目不存在 / 过期 / 已交卷 / 答案超出 ±4px 容差 400 `captcha_failed`（答错一次即判负）；数据库不可用 503 `service_unavailable` |
 | `POST /api/v1/sessions` | 公开 | body `{"identifier":"邮箱或昵称","password":"...","captcha_token"?}` → 200 + 会话 cookie；401 `invalid_credentials`；400 `invalid_request`；人机验证在该入口的启用范围内且未通过 400 `captcha_failed`（`param:"captcha_token"`，**在比对密码之前判定，也不计入失败锁定**）；**已启用 2FA 的账号密码正确也不算登录完成**：换发会话后返回 401 `two_factor_required`，会话转入「待二段」状态；**邮箱正确但该邮箱存在未过期的待验证注册且密码正确时返回 403 `email_not_verified`**（不建会话、不记失败；用用户名登录不会命中这条） |
 | `DELETE /api/v1/sessions/current` | 需登录 | 销毁当前会话，返回 200 `{}` |
@@ -224,6 +224,8 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 
 `POST /sessions`（登录）、`POST /users`（注册）、`POST /sessions/current/verify`（2FA verify）三个公开入口有进程内限流。计数在单实例内存里，重启清零；多实例部署时每个实例各算各的，需要共享存储时再换实现。
 
+人机验证另有两道独立限流：自研出题 `POST /api/v1/captcha/challenges` 每 IP **5 次 / 10 分钟**；两种 provider 的**校验失败**共用同一个 IP 桶 **15 次 / 10 分钟**（窗口与冷却均 10 分钟），超限返回 429 `rate_limited`。Turnstile 只在空 token 与 Cloudflare 明确判负时计数，Cloudflare 连不上 / 超时 / 非 2xx / 坏响应不计数；builtin 在空 token 或凭证消费失败时计数。阻断检查发生在调用 Cloudflare siteverify / 消费凭证之前，命中后不再产生外部请求或数据库消费。
+
 | 入口 | 维度 | 规则 |
 | --- | --- | --- |
 | 登录 | 标识（trim + 小写后哈希） | 连续 5 次失败 → 冷却 15 分钟；成功后清零 |
@@ -237,7 +239,7 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 - 未知标识与已知标识走同一套计数和响应形状，不通过 429 泄漏账号是否存在。
 - 会话内「2FA 连错 5 次 → `two_factor_locked`」保留；账号级 10 次冷却负责跨会话、跨并发的总闸门。
 - 客户端 IP 取直连对端（`ctx.RemoteIP()`），限流与会话列表共用；不采信 `X-Forwarded-For` / `X-Real-IP`，经反向代理或容器转发时看到的是代理 IP。
-- 限流数值是代码常量（`auth/ratelimit.go`），暂不在后台设置页暴露。
+- 限流数值是代码常量（auth 与 captcha 各自策略），暂不在后台设置页暴露。
 
 ### 用户组与权限
 

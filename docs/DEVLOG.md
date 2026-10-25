@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-10-26 · 人机验证限流收紧（CF + 自研共用失败桶）（0.24.1）
+
+**范围**：新增 `internal/modules/captcha/policy`（共享失败策略：15 次 / 10 分钟、窗口 / 冷却 10 分钟、共用 key `captcha-fail:ip:*`）；`builtin` 出题从 60 次/分钟降到 **5 次 / 10 分钟**，`VerifyToken` 增加 IP 参数并检查 / 记录失败桶；`turnstile` 增加 `Policies` / `NewServiceWithPolicies` 与 limiter，和 builtin 共用失败桶，只对空 token 与 Cloudflare 明确判负计数（`Unavailable` 不计）；`module.New` 把 limiter 注入 Turnstile；补 builtin / Turnstile / 跨 provider 共用桶 / policy 默认值测试；README、spec 同步；版本 0.24.0 → **0.24.1**（patch）。零迁移、零新接口、零新设置键、前端零改动。
+
+**动机**：用户要求「不论是 CF 还是自研，都加这个限流，目前的太大了」；首版按 hao 博客 10/30，用户要求「至少砍半」后定为出题 **5/10**、失败 **15/10**。
+
+**口径**：
+- 出题限流只对 builtin；CF 没有后端出题端点。
+- 失败桶两种 provider 共用，切 provider 不清零；命中后返回 429 `rate_limited`（带 `Retry-After`），检查发生在 Cloudflare siteverify / builtin 凭证消费之前，命中后不再产生外部请求或数据库消费。
+- Turnstile 的 `Unavailable`（网络 / 5xx / 坏响应）不计数；builtin 的空 token / 过期 / 已用 / 错 scope 计数。
+- 前端无需改动：登录 / 注册已有 `rate_limited` 倒计时，出题弹窗已有 429 toast。
+- 仍是进程内、按直连对端 IP；生产后端看到前端容器 IP，实际是整站配额（既有口径，未修）。
+
+**验证**：`go build ./...` 通过；`go test -p 1 ./internal/modules/captcha/...` 四包绿（root / builtin / policy / turnstile）。新增测试覆盖：builtin 失败桶与换 IP、Turnstile 失败桶与 `Unavailable` 不计数、跨 provider 共用桶（builtin 记一次失败后 turnstile 直接 429 且 verifier 零调用）、policy 默认值守卫。`scripts/check.sh` → `check ok`；全量 `scripts/test.sh` 全绿（exit 0）。
+
+**已知缺口**：多实例各算各的；真实客户端 IP 未解决；限流值不在设置页暴露。**未提交。**
+
+---
+
 ## 2026-10-26 · 自研人机验证前端接入（登录 / 注册滑块弹窗）
 
 **范围**：前端新增 `lib/captcha-challenge.ts`（出题 / 交卷传输与形状校验）、`hooks/use-captcha-gate.ts`（provider 分派 / 预取 / 429 / 关闭清理）、`components/auth/builtin-captcha.tsx`（滑块六阶段 / 拖拽 / 交卷 / 重试 / 摆动）、`lib/dialog-nudge.ts`；修改 `lib/api.ts`（signal）、`lib/public-settings.ts`（`CaptchaConfig` 联合 + builtin）、`components/auth/captcha-dialog.tsx`（按 provider 分派 / 340px / 成功定时器取消）、登录 / 注册表单、设置页作用域条件、中英文案；`backend/README.md` 删除「前端未接 builtin」的过时说明；spec / plan 入档。零后端生产代码、零迁移、零新依赖、零新路由；版本保持 0.24.0（纯前端，不单独进位）。**未提交。**
