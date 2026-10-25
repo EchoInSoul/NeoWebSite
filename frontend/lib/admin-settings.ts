@@ -141,7 +141,7 @@ export type CaptchaSettingsRead = AdminSettingsRead<CaptchaSettingsValues>;
 
 export async function getCaptchaSettings(): Promise<CaptchaSettingsRead> {
   return toAdminSettingsRead(
-    await fetchAdminPayload("/api/v1/admin/settings/auth"),
+    await fetchAdminPayload("/api/v1/admin/settings/captcha"),
     parseCaptchaSettingsValues,
   );
 }

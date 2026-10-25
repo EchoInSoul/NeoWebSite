@@ -48,7 +48,7 @@ export function useCaptchaSettingsSave(initial: CaptchaSettingsValues) {
 
     setIsSaving(true);
     try {
-      const payload = await apiRequest("/api/v1/admin/settings/auth", {
+      const payload = await apiRequest("/api/v1/admin/settings/captcha", {
         method: "PATCH",
         body: buildCaptchaSettingsPatch(values, baseline),
       });

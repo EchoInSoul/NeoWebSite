@@ -28,6 +28,7 @@
     "backToConsole": "返回控制台",
     "settings": "设置",
     "signInAndRegister": "注册与登录",
+    "captchaGroup": "人机验证",
     "users": "用户",
     "mail": "邮件"
   },
@@ -274,7 +275,8 @@
     "resourceUsers": "用户",
     "resourceGeneral": "常规",
     "resourceRegister": "用户注册",
-    "resourceGroups": "用户组"
+    "resourceGroups": "用户组",
+    "resourceCaptcha": "人机验证"
   },
   "users": {
     "title": "用户管理",

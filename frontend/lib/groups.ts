@@ -108,6 +108,7 @@ const RESOURCE_LABEL_KEYS: Record<string, string> = {
   "system.groups": "resourceGroups",
   "system.settings": "resourceGeneral",
   "system.register": "resourceRegister",
+  "system.captcha": "resourceCaptcha",
 };
 const ACTION_LABEL_KEYS: Record<string, string> = {
   view: "actionView",
@@ -157,6 +158,7 @@ export function actionLabelKey(action: string): string | null {
 const MATRIX_GROUPS: Array<{ labelKey: string; resources: string[] }> = [
   { labelKey: "settings", resources: ["system.settings"] },
   { labelKey: "signInAndRegister", resources: ["system.register"] },
+  { labelKey: "captchaGroup", resources: ["system.captcha"] },
   { labelKey: "users", resources: ["system.groups"] },
 ];
 

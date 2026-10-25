@@ -28,6 +28,7 @@
     "backToConsole": "Back to console",
     "settings": "Settings",
     "signInAndRegister": "Registration and sign-in",
+    "captchaGroup": "Human verification",
     "users": "Users",
     "mail": "Mail"
   },
@@ -274,7 +275,8 @@
     "resourceUsers": "Users",
     "resourceGeneral": "General",
     "resourceRegister": "User registration",
-    "resourceGroups": "Groups"
+    "resourceGroups": "Groups",
+    "resourceCaptcha": "Human verification"
   },
   "users": {
     "title": "User management",

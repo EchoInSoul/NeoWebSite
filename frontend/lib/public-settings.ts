@@ -70,13 +70,16 @@ export function getCaptchaConfig(
   settings: PublicSettings,
   scope: CaptchaScope,
 ): CaptchaConfig | null {
-  const auth = settings.auth;
+  const captcha = settings.captcha;
 
-  if (auth?.captcha_enabled !== true || auth.captcha_provider !== "turnstile") {
+  if (
+    captcha?.captcha_enabled !== true ||
+    captcha.captcha_provider !== "turnstile"
+  ) {
     return null;
   }
 
-  const scopes = auth.captcha_scopes;
+  const scopes = captcha.captcha_scopes;
 
   if (
     typeof scopes !== "string" ||
@@ -85,7 +88,7 @@ export function getCaptchaConfig(
     return null;
   }
 
-  const siteKey = auth.turnstile_site_key;
+  const siteKey = captcha.turnstile_site_key;
 
   if (typeof siteKey !== "string" || siteKey.trim() === "") {
     return null;
