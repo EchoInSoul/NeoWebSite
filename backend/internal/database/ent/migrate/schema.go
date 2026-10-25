@@ -8,6 +8,30 @@ import (
 )
 
 var (
+	// CaptchaChallengesColumns holds the columns for the "captcha_challenges" table.
+	CaptchaChallengesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "scope", Type: field.TypeString, Size: 16},
+		{Name: "answer_x", Type: field.TypeInt},
+		{Name: "answer_y", Type: field.TypeInt},
+		{Name: "status", Type: field.TypeInt, Default: 0},
+		{Name: "token_hash", Type: field.TypeString, Unique: true, Nullable: true, Size: 64},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "expires_at", Type: field.TypeTime},
+	}
+	// CaptchaChallengesTable holds the schema information for the "captcha_challenges" table.
+	CaptchaChallengesTable = &schema.Table{
+		Name:       "captcha_challenges",
+		Columns:    CaptchaChallengesColumns,
+		PrimaryKey: []*schema.Column{CaptchaChallengesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "captchachallenge_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{CaptchaChallengesColumns[7]},
+			},
+		},
+	}
 	// GroupsColumns holds the columns for the "groups" table.
 	GroupsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -216,6 +240,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		CaptchaChallengesTable,
 		GroupsTable,
 		GroupPermissionsTable,
 		PendingRegistrationsTable,

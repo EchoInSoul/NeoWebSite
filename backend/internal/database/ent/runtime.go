@@ -4,6 +4,7 @@ package ent
 
 import (
 	"time"
+	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
 	"website/backend/internal/database/ent/pendingregistration"
@@ -21,6 +22,42 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	captchachallengeFields := schema.CaptchaChallenge{}.Fields()
+	_ = captchachallengeFields
+	// captchachallengeDescScope is the schema descriptor for scope field.
+	captchachallengeDescScope := captchachallengeFields[1].Descriptor()
+	// captchachallenge.ScopeValidator is a validator for the "scope" field. It is called by the builders before save.
+	captchachallenge.ScopeValidator = func() func(string) error {
+		validators := captchachallengeDescScope.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(scope string) error {
+			for _, fn := range fns {
+				if err := fn(scope); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// captchachallengeDescStatus is the schema descriptor for status field.
+	captchachallengeDescStatus := captchachallengeFields[4].Descriptor()
+	// captchachallenge.DefaultStatus holds the default value on creation for the status field.
+	captchachallenge.DefaultStatus = captchachallengeDescStatus.Default.(int)
+	// captchachallengeDescTokenHash is the schema descriptor for token_hash field.
+	captchachallengeDescTokenHash := captchachallengeFields[5].Descriptor()
+	// captchachallenge.TokenHashValidator is a validator for the "token_hash" field. It is called by the builders before save.
+	captchachallenge.TokenHashValidator = captchachallengeDescTokenHash.Validators[0].(func(string) error)
+	// captchachallengeDescCreatedAt is the schema descriptor for created_at field.
+	captchachallengeDescCreatedAt := captchachallengeFields[6].Descriptor()
+	// captchachallenge.DefaultCreatedAt holds the default value on creation for the created_at field.
+	captchachallenge.DefaultCreatedAt = captchachallengeDescCreatedAt.Default.(func() time.Time)
+	// captchachallengeDescID is the schema descriptor for id field.
+	captchachallengeDescID := captchachallengeFields[0].Descriptor()
+	// captchachallenge.DefaultID holds the default value on creation for the id field.
+	captchachallenge.DefaultID = captchachallengeDescID.Default.(func() uuid.UUID)
 	groupFields := schema.Group{}.Fields()
 	_ = groupFields
 	// groupDescName is the schema descriptor for name field.

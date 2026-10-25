@@ -11,6 +11,7 @@ import (
 
 	"website/backend/internal/database/ent/migrate"
 
+	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
 	"website/backend/internal/database/ent/pendingregistration"
@@ -32,6 +33,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// CaptchaChallenge is the client for interacting with the CaptchaChallenge builders.
+	CaptchaChallenge *CaptchaChallengeClient
 	// Group is the client for interacting with the Group builders.
 	Group *GroupClient
 	// GroupPermission is the client for interacting with the GroupPermission builders.
@@ -59,6 +62,7 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.CaptchaChallenge = NewCaptchaChallengeClient(c.config)
 	c.Group = NewGroupClient(c.config)
 	c.GroupPermission = NewGroupPermissionClient(c.config)
 	c.PendingRegistration = NewPendingRegistrationClient(c.config)
@@ -159,6 +163,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:                 ctx,
 		config:              cfg,
+		CaptchaChallenge:    NewCaptchaChallengeClient(cfg),
 		Group:               NewGroupClient(cfg),
 		GroupPermission:     NewGroupPermissionClient(cfg),
 		PendingRegistration: NewPendingRegistrationClient(cfg),
@@ -186,6 +191,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:                 ctx,
 		config:              cfg,
+		CaptchaChallenge:    NewCaptchaChallengeClient(cfg),
 		Group:               NewGroupClient(cfg),
 		GroupPermission:     NewGroupPermissionClient(cfg),
 		PendingRegistration: NewPendingRegistrationClient(cfg),
@@ -200,7 +206,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		Group.
+//		CaptchaChallenge.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -223,8 +229,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.Group, c.GroupPermission, c.PendingRegistration, c.RecoveryCode, c.Session,
-		c.SettingValue, c.User, c.UserPermission,
+		c.CaptchaChallenge, c.Group, c.GroupPermission, c.PendingRegistration,
+		c.RecoveryCode, c.Session, c.SettingValue, c.User, c.UserPermission,
 	} {
 		n.Use(hooks...)
 	}
@@ -234,8 +240,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.Group, c.GroupPermission, c.PendingRegistration, c.RecoveryCode, c.Session,
-		c.SettingValue, c.User, c.UserPermission,
+		c.CaptchaChallenge, c.Group, c.GroupPermission, c.PendingRegistration,
+		c.RecoveryCode, c.Session, c.SettingValue, c.User, c.UserPermission,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -244,6 +250,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *CaptchaChallengeMutation:
+		return c.CaptchaChallenge.mutate(ctx, m)
 	case *GroupMutation:
 		return c.Group.mutate(ctx, m)
 	case *GroupPermissionMutation:
@@ -262,6 +270,139 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.UserPermission.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// CaptchaChallengeClient is a client for the CaptchaChallenge schema.
+type CaptchaChallengeClient struct {
+	config
+}
+
+// NewCaptchaChallengeClient returns a client for the CaptchaChallenge from the given config.
+func NewCaptchaChallengeClient(c config) *CaptchaChallengeClient {
+	return &CaptchaChallengeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `captchachallenge.Hooks(f(g(h())))`.
+func (c *CaptchaChallengeClient) Use(hooks ...Hook) {
+	c.hooks.CaptchaChallenge = append(c.hooks.CaptchaChallenge, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `captchachallenge.Intercept(f(g(h())))`.
+func (c *CaptchaChallengeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.CaptchaChallenge = append(c.inters.CaptchaChallenge, interceptors...)
+}
+
+// Create returns a builder for creating a CaptchaChallenge entity.
+func (c *CaptchaChallengeClient) Create() *CaptchaChallengeCreate {
+	mutation := newCaptchaChallengeMutation(c.config, OpCreate)
+	return &CaptchaChallengeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of CaptchaChallenge entities.
+func (c *CaptchaChallengeClient) CreateBulk(builders ...*CaptchaChallengeCreate) *CaptchaChallengeCreateBulk {
+	return &CaptchaChallengeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CaptchaChallengeClient) MapCreateBulk(slice any, setFunc func(*CaptchaChallengeCreate, int)) *CaptchaChallengeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CaptchaChallengeCreateBulk{err: fmt.Errorf("calling to CaptchaChallengeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CaptchaChallengeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CaptchaChallengeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for CaptchaChallenge.
+func (c *CaptchaChallengeClient) Update() *CaptchaChallengeUpdate {
+	mutation := newCaptchaChallengeMutation(c.config, OpUpdate)
+	return &CaptchaChallengeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CaptchaChallengeClient) UpdateOne(_m *CaptchaChallenge) *CaptchaChallengeUpdateOne {
+	mutation := newCaptchaChallengeMutation(c.config, OpUpdateOne, withCaptchaChallenge(_m))
+	return &CaptchaChallengeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CaptchaChallengeClient) UpdateOneID(id uuid.UUID) *CaptchaChallengeUpdateOne {
+	mutation := newCaptchaChallengeMutation(c.config, OpUpdateOne, withCaptchaChallengeID(id))
+	return &CaptchaChallengeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for CaptchaChallenge.
+func (c *CaptchaChallengeClient) Delete() *CaptchaChallengeDelete {
+	mutation := newCaptchaChallengeMutation(c.config, OpDelete)
+	return &CaptchaChallengeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CaptchaChallengeClient) DeleteOne(_m *CaptchaChallenge) *CaptchaChallengeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CaptchaChallengeClient) DeleteOneID(id uuid.UUID) *CaptchaChallengeDeleteOne {
+	builder := c.Delete().Where(captchachallenge.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CaptchaChallengeDeleteOne{builder}
+}
+
+// Query returns a query builder for CaptchaChallenge.
+func (c *CaptchaChallengeClient) Query() *CaptchaChallengeQuery {
+	return &CaptchaChallengeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCaptchaChallenge},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a CaptchaChallenge entity by its id.
+func (c *CaptchaChallengeClient) Get(ctx context.Context, id uuid.UUID) (*CaptchaChallenge, error) {
+	return c.Query().Where(captchachallenge.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CaptchaChallengeClient) GetX(ctx context.Context, id uuid.UUID) *CaptchaChallenge {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *CaptchaChallengeClient) Hooks() []Hook {
+	return c.hooks.CaptchaChallenge
+}
+
+// Interceptors returns the client interceptors.
+func (c *CaptchaChallengeClient) Interceptors() []Interceptor {
+	return c.inters.CaptchaChallenge
+}
+
+func (c *CaptchaChallengeClient) mutate(ctx context.Context, m *CaptchaChallengeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CaptchaChallengeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CaptchaChallengeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CaptchaChallengeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CaptchaChallengeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown CaptchaChallenge mutation op: %q", m.Op())
 	}
 }
 
@@ -1460,11 +1601,11 @@ func (c *UserPermissionClient) mutate(ctx context.Context, m *UserPermissionMuta
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Group, GroupPermission, PendingRegistration, RecoveryCode, Session,
-		SettingValue, User, UserPermission []ent.Hook
+		CaptchaChallenge, Group, GroupPermission, PendingRegistration, RecoveryCode,
+		Session, SettingValue, User, UserPermission []ent.Hook
 	}
 	inters struct {
-		Group, GroupPermission, PendingRegistration, RecoveryCode, Session,
-		SettingValue, User, UserPermission []ent.Interceptor
+		CaptchaChallenge, Group, GroupPermission, PendingRegistration, RecoveryCode,
+		Session, SettingValue, User, UserPermission []ent.Interceptor
 	}
 )

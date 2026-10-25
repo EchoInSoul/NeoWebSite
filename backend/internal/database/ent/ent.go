@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
 	"website/backend/internal/database/ent/pendingregistration"
@@ -80,6 +81,7 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			captchachallenge.Table:    captchachallenge.ValidColumn,
 			group.Table:               group.ValidColumn,
 			grouppermission.Table:     grouppermission.ValidColumn,
 			pendingregistration.Table: pendingregistration.ValidColumn,

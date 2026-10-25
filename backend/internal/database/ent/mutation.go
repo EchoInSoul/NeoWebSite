@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
 	"website/backend/internal/database/ent/pendingregistration"
@@ -33,6 +34,7 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
+	TypeCaptchaChallenge    = "CaptchaChallenge"
 	TypeGroup               = "Group"
 	TypeGroupPermission     = "GroupPermission"
 	TypePendingRegistration = "PendingRegistration"
@@ -42,6 +44,786 @@ const (
 	TypeUser                = "User"
 	TypeUserPermission      = "UserPermission"
 )
+
+// CaptchaChallengeMutation represents an operation that mutates the CaptchaChallenge nodes in the graph.
+type CaptchaChallengeMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *uuid.UUID
+	scope         *string
+	answer_x      *int
+	addanswer_x   *int
+	answer_y      *int
+	addanswer_y   *int
+	status        *int
+	addstatus     *int
+	token_hash    *string
+	created_at    *time.Time
+	expires_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*CaptchaChallenge, error)
+	predicates    []predicate.CaptchaChallenge
+}
+
+var _ ent.Mutation = (*CaptchaChallengeMutation)(nil)
+
+// captchachallengeOption allows management of the mutation configuration using functional options.
+type captchachallengeOption func(*CaptchaChallengeMutation)
+
+// newCaptchaChallengeMutation creates new mutation for the CaptchaChallenge entity.
+func newCaptchaChallengeMutation(c config, op Op, opts ...captchachallengeOption) *CaptchaChallengeMutation {
+	m := &CaptchaChallengeMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeCaptchaChallenge,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withCaptchaChallengeID sets the ID field of the mutation.
+func withCaptchaChallengeID(id uuid.UUID) captchachallengeOption {
+	return func(m *CaptchaChallengeMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *CaptchaChallenge
+		)
+		m.oldValue = func(ctx context.Context) (*CaptchaChallenge, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().CaptchaChallenge.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withCaptchaChallenge sets the old CaptchaChallenge of the mutation.
+func withCaptchaChallenge(node *CaptchaChallenge) captchachallengeOption {
+	return func(m *CaptchaChallengeMutation) {
+		m.oldValue = func(context.Context) (*CaptchaChallenge, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m CaptchaChallengeMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m CaptchaChallengeMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of CaptchaChallenge entities.
+func (m *CaptchaChallengeMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *CaptchaChallengeMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *CaptchaChallengeMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().CaptchaChallenge.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetScope sets the "scope" field.
+func (m *CaptchaChallengeMutation) SetScope(s string) {
+	m.scope = &s
+}
+
+// Scope returns the value of the "scope" field in the mutation.
+func (m *CaptchaChallengeMutation) Scope() (r string, exists bool) {
+	v := m.scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScope returns the old "scope" field's value of the CaptchaChallenge entity.
+// If the CaptchaChallenge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CaptchaChallengeMutation) OldScope(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScope: %w", err)
+	}
+	return oldValue.Scope, nil
+}
+
+// ResetScope resets all changes to the "scope" field.
+func (m *CaptchaChallengeMutation) ResetScope() {
+	m.scope = nil
+}
+
+// SetAnswerX sets the "answer_x" field.
+func (m *CaptchaChallengeMutation) SetAnswerX(i int) {
+	m.answer_x = &i
+	m.addanswer_x = nil
+}
+
+// AnswerX returns the value of the "answer_x" field in the mutation.
+func (m *CaptchaChallengeMutation) AnswerX() (r int, exists bool) {
+	v := m.answer_x
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAnswerX returns the old "answer_x" field's value of the CaptchaChallenge entity.
+// If the CaptchaChallenge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CaptchaChallengeMutation) OldAnswerX(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAnswerX is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAnswerX requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAnswerX: %w", err)
+	}
+	return oldValue.AnswerX, nil
+}
+
+// AddAnswerX adds i to the "answer_x" field.
+func (m *CaptchaChallengeMutation) AddAnswerX(i int) {
+	if m.addanswer_x != nil {
+		*m.addanswer_x += i
+	} else {
+		m.addanswer_x = &i
+	}
+}
+
+// AddedAnswerX returns the value that was added to the "answer_x" field in this mutation.
+func (m *CaptchaChallengeMutation) AddedAnswerX() (r int, exists bool) {
+	v := m.addanswer_x
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAnswerX resets all changes to the "answer_x" field.
+func (m *CaptchaChallengeMutation) ResetAnswerX() {
+	m.answer_x = nil
+	m.addanswer_x = nil
+}
+
+// SetAnswerY sets the "answer_y" field.
+func (m *CaptchaChallengeMutation) SetAnswerY(i int) {
+	m.answer_y = &i
+	m.addanswer_y = nil
+}
+
+// AnswerY returns the value of the "answer_y" field in the mutation.
+func (m *CaptchaChallengeMutation) AnswerY() (r int, exists bool) {
+	v := m.answer_y
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAnswerY returns the old "answer_y" field's value of the CaptchaChallenge entity.
+// If the CaptchaChallenge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CaptchaChallengeMutation) OldAnswerY(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAnswerY is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAnswerY requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAnswerY: %w", err)
+	}
+	return oldValue.AnswerY, nil
+}
+
+// AddAnswerY adds i to the "answer_y" field.
+func (m *CaptchaChallengeMutation) AddAnswerY(i int) {
+	if m.addanswer_y != nil {
+		*m.addanswer_y += i
+	} else {
+		m.addanswer_y = &i
+	}
+}
+
+// AddedAnswerY returns the value that was added to the "answer_y" field in this mutation.
+func (m *CaptchaChallengeMutation) AddedAnswerY() (r int, exists bool) {
+	v := m.addanswer_y
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAnswerY resets all changes to the "answer_y" field.
+func (m *CaptchaChallengeMutation) ResetAnswerY() {
+	m.answer_y = nil
+	m.addanswer_y = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *CaptchaChallengeMutation) SetStatus(i int) {
+	m.status = &i
+	m.addstatus = nil
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *CaptchaChallengeMutation) Status() (r int, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the CaptchaChallenge entity.
+// If the CaptchaChallenge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CaptchaChallengeMutation) OldStatus(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// AddStatus adds i to the "status" field.
+func (m *CaptchaChallengeMutation) AddStatus(i int) {
+	if m.addstatus != nil {
+		*m.addstatus += i
+	} else {
+		m.addstatus = &i
+	}
+}
+
+// AddedStatus returns the value that was added to the "status" field in this mutation.
+func (m *CaptchaChallengeMutation) AddedStatus() (r int, exists bool) {
+	v := m.addstatus
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *CaptchaChallengeMutation) ResetStatus() {
+	m.status = nil
+	m.addstatus = nil
+}
+
+// SetTokenHash sets the "token_hash" field.
+func (m *CaptchaChallengeMutation) SetTokenHash(s string) {
+	m.token_hash = &s
+}
+
+// TokenHash returns the value of the "token_hash" field in the mutation.
+func (m *CaptchaChallengeMutation) TokenHash() (r string, exists bool) {
+	v := m.token_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenHash returns the old "token_hash" field's value of the CaptchaChallenge entity.
+// If the CaptchaChallenge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CaptchaChallengeMutation) OldTokenHash(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenHash: %w", err)
+	}
+	return oldValue.TokenHash, nil
+}
+
+// ClearTokenHash clears the value of the "token_hash" field.
+func (m *CaptchaChallengeMutation) ClearTokenHash() {
+	m.token_hash = nil
+	m.clearedFields[captchachallenge.FieldTokenHash] = struct{}{}
+}
+
+// TokenHashCleared returns if the "token_hash" field was cleared in this mutation.
+func (m *CaptchaChallengeMutation) TokenHashCleared() bool {
+	_, ok := m.clearedFields[captchachallenge.FieldTokenHash]
+	return ok
+}
+
+// ResetTokenHash resets all changes to the "token_hash" field.
+func (m *CaptchaChallengeMutation) ResetTokenHash() {
+	m.token_hash = nil
+	delete(m.clearedFields, captchachallenge.FieldTokenHash)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *CaptchaChallengeMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *CaptchaChallengeMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the CaptchaChallenge entity.
+// If the CaptchaChallenge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CaptchaChallengeMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *CaptchaChallengeMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *CaptchaChallengeMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *CaptchaChallengeMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the CaptchaChallenge entity.
+// If the CaptchaChallenge object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CaptchaChallengeMutation) OldExpiresAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *CaptchaChallengeMutation) ResetExpiresAt() {
+	m.expires_at = nil
+}
+
+// Where appends a list predicates to the CaptchaChallengeMutation builder.
+func (m *CaptchaChallengeMutation) Where(ps ...predicate.CaptchaChallenge) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the CaptchaChallengeMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *CaptchaChallengeMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.CaptchaChallenge, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *CaptchaChallengeMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *CaptchaChallengeMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (CaptchaChallenge).
+func (m *CaptchaChallengeMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *CaptchaChallengeMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.scope != nil {
+		fields = append(fields, captchachallenge.FieldScope)
+	}
+	if m.answer_x != nil {
+		fields = append(fields, captchachallenge.FieldAnswerX)
+	}
+	if m.answer_y != nil {
+		fields = append(fields, captchachallenge.FieldAnswerY)
+	}
+	if m.status != nil {
+		fields = append(fields, captchachallenge.FieldStatus)
+	}
+	if m.token_hash != nil {
+		fields = append(fields, captchachallenge.FieldTokenHash)
+	}
+	if m.created_at != nil {
+		fields = append(fields, captchachallenge.FieldCreatedAt)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, captchachallenge.FieldExpiresAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *CaptchaChallengeMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case captchachallenge.FieldScope:
+		return m.Scope()
+	case captchachallenge.FieldAnswerX:
+		return m.AnswerX()
+	case captchachallenge.FieldAnswerY:
+		return m.AnswerY()
+	case captchachallenge.FieldStatus:
+		return m.Status()
+	case captchachallenge.FieldTokenHash:
+		return m.TokenHash()
+	case captchachallenge.FieldCreatedAt:
+		return m.CreatedAt()
+	case captchachallenge.FieldExpiresAt:
+		return m.ExpiresAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *CaptchaChallengeMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case captchachallenge.FieldScope:
+		return m.OldScope(ctx)
+	case captchachallenge.FieldAnswerX:
+		return m.OldAnswerX(ctx)
+	case captchachallenge.FieldAnswerY:
+		return m.OldAnswerY(ctx)
+	case captchachallenge.FieldStatus:
+		return m.OldStatus(ctx)
+	case captchachallenge.FieldTokenHash:
+		return m.OldTokenHash(ctx)
+	case captchachallenge.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case captchachallenge.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown CaptchaChallenge field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *CaptchaChallengeMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case captchachallenge.FieldScope:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScope(v)
+		return nil
+	case captchachallenge.FieldAnswerX:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAnswerX(v)
+		return nil
+	case captchachallenge.FieldAnswerY:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAnswerY(v)
+		return nil
+	case captchachallenge.FieldStatus:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case captchachallenge.FieldTokenHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenHash(v)
+		return nil
+	case captchachallenge.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case captchachallenge.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown CaptchaChallenge field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *CaptchaChallengeMutation) AddedFields() []string {
+	var fields []string
+	if m.addanswer_x != nil {
+		fields = append(fields, captchachallenge.FieldAnswerX)
+	}
+	if m.addanswer_y != nil {
+		fields = append(fields, captchachallenge.FieldAnswerY)
+	}
+	if m.addstatus != nil {
+		fields = append(fields, captchachallenge.FieldStatus)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *CaptchaChallengeMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case captchachallenge.FieldAnswerX:
+		return m.AddedAnswerX()
+	case captchachallenge.FieldAnswerY:
+		return m.AddedAnswerY()
+	case captchachallenge.FieldStatus:
+		return m.AddedStatus()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *CaptchaChallengeMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case captchachallenge.FieldAnswerX:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAnswerX(v)
+		return nil
+	case captchachallenge.FieldAnswerY:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAnswerY(v)
+		return nil
+	case captchachallenge.FieldStatus:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddStatus(v)
+		return nil
+	}
+	return fmt.Errorf("unknown CaptchaChallenge numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *CaptchaChallengeMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(captchachallenge.FieldTokenHash) {
+		fields = append(fields, captchachallenge.FieldTokenHash)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *CaptchaChallengeMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *CaptchaChallengeMutation) ClearField(name string) error {
+	switch name {
+	case captchachallenge.FieldTokenHash:
+		m.ClearTokenHash()
+		return nil
+	}
+	return fmt.Errorf("unknown CaptchaChallenge nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *CaptchaChallengeMutation) ResetField(name string) error {
+	switch name {
+	case captchachallenge.FieldScope:
+		m.ResetScope()
+		return nil
+	case captchachallenge.FieldAnswerX:
+		m.ResetAnswerX()
+		return nil
+	case captchachallenge.FieldAnswerY:
+		m.ResetAnswerY()
+		return nil
+	case captchachallenge.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case captchachallenge.FieldTokenHash:
+		m.ResetTokenHash()
+		return nil
+	case captchachallenge.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case captchachallenge.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	}
+	return fmt.Errorf("unknown CaptchaChallenge field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *CaptchaChallengeMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *CaptchaChallengeMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *CaptchaChallengeMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *CaptchaChallengeMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *CaptchaChallengeMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *CaptchaChallengeMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *CaptchaChallengeMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown CaptchaChallenge unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *CaptchaChallengeMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown CaptchaChallenge edge %s", name)
+}
 
 // GroupMutation represents an operation that mutates the Group nodes in the graph.
 type GroupMutation struct {
