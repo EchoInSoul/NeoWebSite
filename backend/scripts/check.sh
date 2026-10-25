@@ -4,14 +4,20 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-unformatted="$(
-  { git ls-files -z '*.go'; git ls-files --others --exclude-standard -z '*.go'; } |
-    xargs -0 -r gofmt -l
-)"
-if [ -n "$unformatted" ]; then
-  echo "gofmt needed:" >&2
-  printf '%s\n' "$unformatted" >&2
-  exit 1
+existing_go_files=()
+while IFS= read -r -d '' file; do
+  if [ -f "$file" ]; then
+    existing_go_files+=("$file")
+  fi
+done < <({ git ls-files -z '*.go'; git ls-files --others --exclude-standard -z '*.go'; })
+
+if [ "${#existing_go_files[@]}" -gt 0 ]; then
+  unformatted="$(gofmt -l "${existing_go_files[@]}")"
+  if [ -n "$unformatted" ]; then
+    echo "gofmt needed:" >&2
+    printf '%s\n' "$unformatted" >&2
+    exit 1
+  fi
 fi
 
 import_violations="$(grep -R -l 'website/backend/internal/common/apierror' --include='repository.go' internal/modules || true)"
