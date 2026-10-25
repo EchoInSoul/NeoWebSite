@@ -22,10 +22,6 @@ const (
 
 const recoveryCodesPerBatch = 5
 
-type captchaVerifier interface {
-	VerifyConfig(ctx context.Context, secret, token, ip string) error
-}
-
 type Service struct {
 	repo     *repository
 	sessions *session.Service
@@ -33,13 +29,9 @@ type Service struct {
 	settings *settings.Service
 	limiter  *ratelimit.Limiter
 	policies verifyPolicies
-	captcha  captchaVerifier
 }
 
-func newService(db *database.Database, sessions *session.Service, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies verifyPolicies, verifier captchaVerifier) *Service {
-	if verifier == nil {
-		panic("auth: captcha service is required")
-	}
+func newService(db *database.Database, sessions *session.Service, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies verifyPolicies) *Service {
 	return &Service{
 		repo:     newRepository(db),
 		sessions: sessions,
@@ -47,7 +39,6 @@ func newService(db *database.Database, sessions *session.Service, totpKey []byte
 		settings: settingsService,
 		limiter:  limiter,
 		policies: policies,
-		captcha:  verifier,
 	}
 }
 
@@ -508,8 +499,4 @@ func (s *Service) passwordMinLength(ctx context.Context) (int, error) {
 		}
 	}
 	return userinput.EffectivePasswordMinLength(requirementsEnabled, configured), nil
-}
-
-func (s *Service) VerifyCaptchaConfig(ctx context.Context, secret, token string, meta session.Meta) error {
-	return s.captcha.VerifyConfig(ctx, secret, token, meta.IP)
 }

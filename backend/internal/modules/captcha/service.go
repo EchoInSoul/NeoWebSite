@@ -20,10 +20,6 @@ type Service struct {
 	verifier Verifier
 }
 
-func New(settings Settings) *Service {
-	return NewService(settings, newTurnstileVerifier(turnstileSiteverifyURL, turnstileTimeout))
-}
-
 func NewService(settings Settings, verifier Verifier) *Service {
 	if verifier == nil {
 		verifier = unavailableVerifier{}
@@ -32,22 +28,22 @@ func NewService(settings Settings, verifier Verifier) *Service {
 }
 
 func (s *Service) Verify(ctx context.Context, scope, token, ip string) error {
-	enabled, _ := s.settings.GetBool(ctx, "auth", "captcha_enabled")
+	enabled, _ := s.settings.GetBool(ctx, "captcha", "captcha_enabled")
 	if !enabled {
 		return nil
 	}
 
-	provider, _ := s.settings.GetString(ctx, "auth", "captcha_provider")
+	provider, _ := s.settings.GetString(ctx, "captcha", "captcha_provider")
 	if provider != providerTurnstile {
 		return nil
 	}
 
-	secret, _ := s.settings.GetString(ctx, "auth", "turnstile_secret_key")
+	secret, _ := s.settings.GetString(ctx, "captcha", "turnstile_secret_key")
 	if secret == "" {
 		return nil
 	}
 
-	scopes, err := s.settings.GetString(ctx, "auth", "captcha_scopes")
+	scopes, err := s.settings.GetString(ctx, "captcha", "captcha_scopes")
 	if err != nil {
 		return err
 	}

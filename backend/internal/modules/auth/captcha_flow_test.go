@@ -47,13 +47,13 @@ func resetCaptchaSettings(t *testing.T, svc *settings.Service) {
 	ctx := context.Background()
 	names := []string{"captcha_enabled", "captcha_provider", "captcha_scopes", "turnstile_site_key", "turnstile_secret_key"}
 	for _, name := range names {
-		if err := svc.ResetItem(ctx, "auth", name); err != nil {
+		if err := svc.ResetItem(ctx, "captcha", name); err != nil {
 			t.Fatalf("reset auth.%s: %v", name, err)
 		}
 	}
 	t.Cleanup(func() {
 		for _, name := range names {
-			_ = svc.ResetItem(ctx, "auth", name)
+			_ = svc.ResetItem(ctx, "captcha", name)
 		}
 	})
 }
@@ -62,13 +62,13 @@ func setCaptchaProvider(t *testing.T, svc *settings.Service, provider, secret st
 	t.Helper()
 
 	ctx := context.Background()
-	if err := svc.SetBool(ctx, "auth", "captcha_enabled", true); err != nil {
+	if err := svc.SetBool(ctx, "captcha", "captcha_enabled", true); err != nil {
 		t.Fatalf("enable captcha: %v", err)
 	}
-	if err := svc.SetString(ctx, "auth", "captcha_provider", provider); err != nil {
+	if err := svc.SetString(ctx, "captcha", "captcha_provider", provider); err != nil {
 		t.Fatalf("set captcha provider: %v", err)
 	}
-	if err := svc.SetString(ctx, "auth", "turnstile_secret_key", secret); err != nil {
+	if err := svc.SetString(ctx, "captcha", "turnstile_secret_key", secret); err != nil {
 		t.Fatalf("set turnstile secret: %v", err)
 	}
 }
@@ -76,7 +76,7 @@ func setCaptchaProvider(t *testing.T, svc *settings.Service, provider, secret st
 func setCaptchaScopes(t *testing.T, svc *settings.Service, scopes string) {
 	t.Helper()
 
-	if err := svc.SetString(context.Background(), "auth", "captcha_scopes", scopes); err != nil {
+	if err := svc.SetString(context.Background(), "captcha", "captcha_scopes", scopes); err != nil {
 		t.Fatalf("set captcha scopes: %v", err)
 	}
 }

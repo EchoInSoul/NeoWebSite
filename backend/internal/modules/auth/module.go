@@ -17,8 +17,8 @@ type Module struct {
 	controller *controller
 }
 
-func New(db *database.Database, sessions *session.Service, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, verifier captchaVerifier, loginService *login.Service, registrationService *registration.Service) *Module {
-	service := newService(db, sessions, totpKey, settingsService, limiter, defaultVerifyPolicies(), verifier)
+func New(db *database.Database, sessions *session.Service, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, loginService *login.Service, registrationService *registration.Service) *Module {
+	service := newService(db, sessions, totpKey, settingsService, limiter, defaultVerifyPolicies())
 	return &Module{
 		Service:    service,
 		controller: newController(service, loginService, registrationService),
