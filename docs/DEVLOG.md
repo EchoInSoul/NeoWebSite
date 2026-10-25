@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-26 · 回退人机验证「启用范围」（0.24.2）
+
+**范围**：后端 `settings` 注册表删除 `captcha_scopes` 与组校验 / 公开项；builtin / turnstile 删除 scope 判定；前端删除 admin settings 的 scopes 字段 / 解析 / patch、`public-settings` 的 scopes 过滤、设置页选择器与 4 条文案；新增迁移 `remove_captcha_scopes` 删除存量行；测试同步（删 scope 用例，seed 静态测试忽略历史 seed 行）；README / spec 更新。版本 0.24.1 → **0.24.2**（patch）。零新依赖、零新路由。
+
+**动机**：用户点名回退到 `0049dc8`（后端按入口启用）+ `7ab584b`（控制台选择器）之前；上一版只隐藏 UI、保留后端设置被否。
+
+**口径**：
+- 登录 / 注册两个入口固定都启用；`captcha_enabled` + provider 决定是否拦截。
+- `captcha_challenges.scope` 与一次性凭证的 scope 绑定保留（login 凭证不能用于 register）；只是不再有启用范围设置。
+- 存量 `captcha_scopes` 行由迁移删除；历史 seed 迁移保留但被新迁移清掉。test 库已删；dev 库为兼容仍在跑的旧 0.24.1 后端（5732）临时补回 `login,register` 行，0.24.2 不读它，重启后端后可删。
+- 前端 `getCaptchaConfig` 仍接收 scope（用于 builtin 挑战 / 凭证），不再用它过滤入口。
+
+**验证**：`go build ./...`、受影响包 `go test -p 1 ./internal/modules/captcha/... ./internal/modules/settings/... ./internal/app/...` 通过；前端 `tsc` / lint / 改动文件 prettier 通过；`scripts/check.sh` → `check ok`；全量 `scripts/test.sh` exit 0。
+
+**未提交。**
+
+---
+
 ## 2026-10-26 · 人机验证限流收紧（CF + 自研共用失败桶）（0.24.1）
 
 **范围**：新增 `internal/modules/captcha/policy`（共享失败策略：15 次 / 10 分钟、窗口 / 冷却 10 分钟、共用 key `captcha-fail:ip:*`）；`builtin` 出题从 60 次/分钟降到 **5 次 / 10 分钟**，`VerifyToken` 增加 IP 参数并检查 / 记录失败桶；`turnstile` 增加 `Policies` / `NewServiceWithPolicies` 与 limiter，和 builtin 共用失败桶，只对空 token 与 Cloudflare 明确判负计数（`Unavailable` 不计）；`module.New` 把 limiter 注入 Turnstile；补 builtin / Turnstile / 跨 provider 共用桶 / policy 默认值测试；README、spec 同步；版本 0.24.0 → **0.24.1**（patch）。零迁移、零新接口、零新设置键、前端零改动。

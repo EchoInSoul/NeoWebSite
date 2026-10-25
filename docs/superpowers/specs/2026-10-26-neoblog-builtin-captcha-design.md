@@ -33,14 +33,13 @@
 
 ## 2. 生效条件
 
-`builtin` 对某个入口生效的四条件与 Turnstile 完全一致（既有语义，见 `backend/README.md` 设置章节）：
+`builtin` 对登录 / 注册两个入口同时生效（2026-10-26 回退「按入口启用」）：
 
 1. `captcha.captcha_enabled = true`；
 2. `captcha.captcha_provider = "builtin"`；
-3. 当前入口出现在 `captcha.captcha_scopes` 里（`login` / `register`）；
-4. 请求携带的 `captcha_token` 有效（Turnstile 那边是「私钥非空 + siteverify 通过」，builtin 这边是「凭证存在、未过期、未使用、scope 相符」）。
+3. 请求携带的 `captcha_token` 有效（Turnstile 那边是「私钥非空 + siteverify 通过」，builtin 这边是「凭证存在、未过期、未使用、scope 相符」）。
 
-任一条不满足且属于「该入口不在保护范围」时，`Verify` 放行；属于「要保护但凭证无效」时返回 `400 captcha_failed`。出题端点只在 1～3 全满足且 `scope` 合法时出题，否则 `403 captcha_disabled`。
+未启用或 provider 不匹配时，`Verify` 放行；启用且 provider 匹配但凭证无效时返回 `400 captcha_failed`。出题端点只在 1～2 全满足且 `scope` 合法（`login` / `register`）时出题，否则 `403 captcha_disabled`。
 
 ## 3. 协议
 
@@ -57,7 +56,7 @@
 ```
 
 - `scope` 必填，只接受 `login` / `register`；其它值 `400 invalid_request`（`param: "scope"`）。
-- 未启用 / provider 不是 `builtin` / scope 不在 `captcha_scopes` → `403 captcha_disabled`。
+- 未启用 / provider 不是 `builtin` → `403 captcha_disabled`。
 - 超限 → `429 rate_limited`，响应带 `Retry-After`。
 
 响应 `201`：
@@ -114,7 +113,7 @@
 | --- | --- | --- | --- |
 | 请求体非法、scope 未知、坐标非法、id 非 UUID | 400 | `invalid_request` | 对应字段名 |
 | 题目不存在 / 过期 / 已用 / 答案错 | 400 | `captcha_failed` | `null` |
-| 未启用 / provider 非 builtin / scope 未勾选 | 403 | `captcha_disabled` | `null` |
+| 未启用 / provider 非 builtin | 403 | `captcha_disabled` | `null` |
 | 限流 | 429 | `rate_limited` | `null`（带 `Retry-After`） |
 | 数据库不可用 | 503 | `service_unavailable` | `null`（沿用集中映射） |
 | 图片生成 / 编码失败 | 500 | `internal_error` | `null` |
@@ -159,8 +158,8 @@
 
 ### 5.1 出题（service）
 
-1. 读 `captcha_enabled` / `captcha_provider` / `captcha_scopes`；读失败直接上抛（`503`），不出题、不放行。
-2. 三个条件与 scope 校验不通过 → `ErrCaptchaDisabled`。
+1. 读 `captcha_enabled` / `captcha_provider`；读失败直接上抛（`503`），不出题、不放行。
+2. 两个条件与 scope 校验不通过 → `ErrCaptchaDisabled`。
 3. 限流（见 §6）。
 4. 调 generator 生成：主图、拼图块、尺寸、初始位置、正确答案；生成或编码失败 → `internal_error`。
 5. 清理过期行 → 落库（`status=0`，`expires_at=now+3min`）→ 返回 §3.1 响应。
@@ -180,7 +179,7 @@
 - `captcha_enabled` 读失败或为 false → 放行（既有语义，与 Turnstile 相同）。
 - `captcha_provider`：
   - `turnstile` → 现有判定链一行不动。
-  - `builtin` → 读 `captcha_scopes`（读失败上抛）；scope 不在清单 → 放行（该入口未受保护）；`token` 为空 → `ErrCaptchaFailed`；原子消费 `WHERE token_hash=sha256(token) AND status=1 AND expires_at>now() AND scope=?`，消费不到 → `ErrCaptchaFailed`。
+  - `builtin` → `token` 为空 → `ErrCaptchaFailed`；原子消费 `WHERE token_hash=sha256(token) AND status=1 AND expires_at>now() AND scope=?`，消费不到 → `ErrCaptchaFailed`。
   - 其它值 → 放行（既有语义）。
 - 凭证**一次性**：消费即置 `status=2`。凭证**只绑 scope**，不绑 IP：生产部署里后端直连对端是前端容器，所有访客的 `RemoteIP()` 相同，绑 IP 既是摆设又会误杀。
 - 凭证 TTL 5 分钟，题目 TTL 3 分钟；均为常量，不做设置项。
@@ -253,7 +252,7 @@
   - 错答案 → `captcha_failed`，随后用正确答案交同一题仍 `captcha_failed`。
   - 题目过期 / 凭证过期 → `captcha_failed`（直接改库时间）。
   - `login` 凭证用于 `register` scope → `captcha_failed`。
-  - `captcha_enabled=false`、scope 未勾选 → 放行；`provider=turnstile` 现有用例全部保持。
+  - `captcha_enabled=false`、provider 不匹配 → 放行；`provider=turnstile` 现有用例全部保持。
   - 空 token / 乱填 token → `captcha_failed`。
 - 端点：出题 201 形状、`scope` 非法 400、未启用 / 非 builtin 403、`:id` 非 UUID 400、坐标负数 400、限流 429（带 `Retry-After`）。
 - 端到端：设置切 `builtin` 后走「出题 → 交卷 → 用凭证登录成功」；切回 `turnstile` 后行为不变。

@@ -18,7 +18,7 @@
 - 新增出题 / 交卷的前端传输层与登录 / 注册共用的「提交前预取题目」闸门 hook。
 - `CaptchaDialog` 按 provider 分派：Turnstile 仍渲染原组件，builtin 渲染新滑块。
 - 登录 / 注册表单接入闸门：提交时先预取题目再开弹窗；答错 / 过期必须换新题。
-- 控制台「人机验证」设置页：作用域选择行对 `builtin` 也显示（当前只在 Turnstile 下显示，选了自研就配不了作用域）。
+- 控制台「人机验证」设置页不再暴露启用范围；登录 / 注册两个入口在启用后都受保护。
 - 中英文案、DEVLOG、`backend/README.md` 过时的「前端未接 builtin」说明。
 - 样式逐项照抄：弹窗 `sm:max-w-[340px]` / `p-5` / `gap-3`、滑轨 `h-10` + 40px 拇指、加载 / 校验中无文案与转圈（加载态不渲染占位）、失败占位、成功绿色条 + 耗时、失败红色条 + 弹窗摆动、800ms 后重试。
 
@@ -34,12 +34,11 @@
 
 ## 2. 生效条件与整体数据流
 
-登录 / 注册页面仍由服务端读 `GET /api/v1/public/settings`，`getCaptchaConfig(settings, scope)` 决定是否把 `captcha` 配置传给表单。命中条件与后端一致：
+登录 / 注册页面仍由服务端读 `GET /api/v1/public/settings`，`getCaptchaConfig(settings, scope)` 在两个入口都返回配置（`scope` 只用于 builtin 挑战 / 凭证的入口绑定）。命中条件与后端一致：
 
 1. `captcha.captcha_enabled = true`；
 2. `captcha.captcha_provider` 是 `turnstile` 或 `builtin`；
-3. 当前页面的 scope（`login` / `register`）出现在 `captcha.captcha_scopes` 里；
-4. Turnstile 还要求 `turnstile_site_key` 非空；builtin 无额外密钥条件。
+3. Turnstile 还要求 `turnstile_site_key` 非空；builtin 无额外密钥条件。
 
 数据流（builtin）：
 
@@ -155,7 +154,7 @@ export type CaptchaChallenge = {
 | `frontend/components/auth/captcha-dialog.tsx` | props 从 `siteKey` 改为 `config: CaptchaConfig`；新增可选 `challenge`；按 provider 渲染 `TurnstileCaptcha` 或 `BuiltinCaptcha`；弹窗尺寸对齐对照项目；用户主动关闭时清掉 1618ms 定时器 |
 | `frontend/app/login/signin-form.tsx` | 用 `useCaptchaGate(captcha)`；`onCaptchaRequired` 改接 `begin`；关闭 / 成功时走 `cancel`；弹窗传 config 与 challenge |
 | `frontend/app/register/signup-form.tsx` | 同上 |
-| `frontend/app/console/settings/captcha/captcha-settings-form.tsx` | 作用域行从「仅 Turnstile」改为「Turnstile 或 builtin」都显示；Turnstile 的 site/secret key 与「验证配置」按钮仍只在 Turnstile 下出现；自检弹窗改传 `{provider:"turnstile", siteKey}` |
+| `frontend/app/console/settings/captcha/captcha-settings-form.tsx` | 删除启用范围选择器与相关文案；Turnstile 的 site/secret key 与「验证配置」按钮仍只在 Turnstile 下出现；自检弹窗改传 `{provider:"turnstile", siteKey}` |
 | `frontend/messages/zh-CN.json` / `en.json` | 新增滑块文案（见 §8） |
 
 ### 5.3 组件契约
@@ -236,7 +235,7 @@ const submitY = challenge.tileY;
 
 ## 7. 设置页
 
-- 作用域下拉行显示条件：`captchaProvider === "turnstile" || captchaProvider === "builtin"`；`none` 与未知值维持现状。
+- 启用范围下拉行已移除（2026-10-26 回退）；登录 / 注册两个入口固定都启用。
 - Turnstile 的站点密钥、私钥、验证配置按钮仍只在 `turnstile` 下出现。
 - builtin 没有管理端自检端点，因此不新增「验证配置」按钮；保存后直接生效。
 - 设置写接口、权限、表单字段零改动。
@@ -260,7 +259,7 @@ const submitY = challenge.tileY;
 ## 9. 不变量
 
 - **I1 Turnstile 行为不变**：loader、signed token、`onUnavailable`、自检接口、登录 / 注册提交路径逐条保持；仅弹窗宽度 / 内边距对齐对照项目。
-- **I2 只按公开设置生效**：前端不写死 provider；`captcha_enabled` / provider / scope 任一不满足就不渲染滑块。
+- **I2 只按公开设置生效**：前端不写死 provider；`captcha_enabled` / provider 不满足就不渲染滑块。
 - **I3 token 来源唯一**：只有交卷 200 返回的非空 `captcha_token` 会进入登录 / 注册；不构造、不复用、不缓存到 storage。
 - **I4 一题一次**：同一 challenge 只交一次；答错、过期、网络失败后必须重新出题，绝不重复提交旧题。
 - **I5 坐标在后端坐标系**：提交值以主图像素为单位，公式见 §6.2；容差只由后端决定。
@@ -281,7 +280,7 @@ const submitY = challenge.tileY;
 | D5 | 不搬轨迹采集 | 后端协议只收最终 x/y；采集了也没有消费方 |
 | D6 | 拼图块从 `tile_x / tile_y` 起 | 与主图缺口同坐标系，视觉和判分一致 |
 | D7 | 占位用 300×220 宽高比预留 | 遵守「异步控件预留最终高度」；对照项目 150px 会在加载后跳高 |
-| D8 | 设置页作用域行对 builtin 显示 | 否则选 builtin 后无法配置生效入口，属于接线必需项 |
+| D8 | ~~设置页作用域行对 builtin 显示~~（2026-10-26 回退：选择器整块移除） | 启用范围设置已删除，两个入口固定启用 |
 | D9 | 不加 builtin 自检按钮 | 后端没有对应端点；不伪造一个前端本地校验 |
 | D10 | 纯前端不升版本 | 对齐既有 DEVLOG 口径 |
 | D11 | 加载态不渲染占位；校验中不显示文案 / 转圈 / 遮罩 | 用户 2026-10-26 点名整块移除加载占位与 `captchaVerifying`；沿用全站移除加载文案 / 转圈的口径 |
@@ -299,7 +298,7 @@ const submitY = challenge.tileY;
 
 ### 11.2 浏览器实测（dev server + 后端）
 
-准备：用测试库启动后端并临时把 `captcha` 组设为 `enabled=true / provider=builtin / scopes=login`，前端 `BACKEND_URL` 指向该后端；准备一个可登录的测试账号。验证只读测试库的题目答案用于拖拽定位。
+准备：用测试库启动后端并临时把 `captcha` 组设为 `enabled=true / provider=builtin`，前端 `BACKEND_URL` 指向该后端；准备一个可登录的测试账号。验证只读测试库的题目答案用于拖拽定位。
 
 逐项：
 
@@ -312,7 +311,7 @@ const submitY = challenge.tileY;
 7. 后端停掉 / 出题返回错误：弹窗显示失败卡与「重新加载」；恢复后按钮能重新出题。
 8. 出题限流：用同一 IP 触发 429，只弹 toast，不打开弹窗。
 9. `/register` 同样走一遍（若测试库注册关闭则临时开启，测完还原）。
-10. 设置页选 builtin：作用域行可见且能保存；选 turnstile：密钥行与验证按钮出现；两种 provider 下弹窗宽度与滑块外观一致。
+10. 设置页选 builtin：不再有启用范围行；选 turnstile：密钥行与验证按钮出现；两种 provider 下弹窗宽度与滑块外观一致。
 11. Turnstile 回归：切回 turnstile，登录仍弹原组件、token 提交成功。
 12. 样式对照：对 `sm:max-w-[340px]`、滑轨 `h-10` / 拇指 40px、六种状态逐一与对照项目源码比对；截图供用户确认。
 
