@@ -16,7 +16,7 @@ export function SignupView({ captcha }: { captcha: CaptchaConfig | null }) {
         <p className="mt-5 flex items-center justify-center gap-1 text-center text-sm text-muted-foreground">
           {t("prompt")}
           <Link
-            href="/signin"
+            href="/login"
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
             {t("link")}

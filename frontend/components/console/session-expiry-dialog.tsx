@@ -26,7 +26,7 @@ export function SessionExpiryDialog() {
   }, []);
 
   function handleRelogin() {
-    window.location.replace("/signin");
+    window.location.replace("/login");
   }
 
   return (

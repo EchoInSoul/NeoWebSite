@@ -6,7 +6,7 @@ export default function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  return NextResponse.redirect(new URL("/signin", request.nextUrl));
+  return NextResponse.redirect(new URL("/login", request.nextUrl));
 }
 
 export const config = {

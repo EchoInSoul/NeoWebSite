@@ -170,12 +170,12 @@ export function useSignupForm(
       if (payload?.status === "verification_pending") {
         markSignupPending();
         setValues(EMPTY_VALUES);
-        router.push("/signin");
+        router.push("/login");
         return undefined;
       }
       markSignupSuccess();
       setValues(EMPTY_VALUES);
-      router.push("/signin");
+      router.push("/login");
       return undefined;
     } catch (error) {
       if (error instanceof ApiError && error.code === "rate_limited") {

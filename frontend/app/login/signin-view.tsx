@@ -28,7 +28,7 @@ export function SigninView({
           <p className="mt-5 flex items-center justify-center gap-1 text-center text-sm text-muted-foreground">
             {t("prompt")}
             <Link
-              href="/signup"
+              href="/register"
               className="font-medium text-primary underline-offset-4 hover:underline"
             >
               {t("link")}

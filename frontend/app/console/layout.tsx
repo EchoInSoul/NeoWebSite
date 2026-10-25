@@ -61,7 +61,7 @@ export default async function ConsoleLayout({
   }
 
   if (!user) {
-    redirect("/signin");
+    redirect("/login");
   }
 
   return (

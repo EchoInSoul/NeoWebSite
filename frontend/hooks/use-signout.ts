@@ -16,12 +16,12 @@ export function useSignout() {
     try {
       await apiRequest("/api/v1/sessions/current", { method: "DELETE" });
       markSignoutSuccess();
-      router.replace("/signin");
+      router.replace("/login");
       return;
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         markSignoutSuccess();
-        window.location.replace("/signin");
+        window.location.replace("/login");
         return;
       }
       toast.error(t("signOutFailed"));

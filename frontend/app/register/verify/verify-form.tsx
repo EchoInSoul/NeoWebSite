@@ -36,7 +36,7 @@ export function VerifyForm({ token }: { token: string }) {
         body: { token },
       });
       markSignupSuccess();
-      router.push("/signin");
+      router.push("/login");
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.code === "email_verification_invalid") {
@@ -70,7 +70,7 @@ export function VerifyForm({ token }: { token: string }) {
 
         {missingToken ? (
           <Link
-            href="/signup"
+            href="/register"
             className="text-sm font-medium text-primary underline-offset-4 hover:underline"
           >
             {t("verifyGoSignup")}

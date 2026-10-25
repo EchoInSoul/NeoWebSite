@@ -2,7 +2,7 @@ export const THEME_STORAGE_KEY = "console-theme-mode";
 
 export const CHANGE_EVENT_NAME = "neoblog-preference-change";
 
-export const SYSTEM_THEME_ROUTES = ["/signin", "/signup"] as const;
+export const SYSTEM_THEME_ROUTES = ["/login", "/register"] as const;
 
 export function isSystemThemeRoute(pathname: string): boolean {
   return SYSTEM_THEME_ROUTES.some(
