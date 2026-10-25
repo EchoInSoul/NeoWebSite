@@ -76,7 +76,7 @@
     "mailTemplatePasswordReset": "密码重置验证码",
     "mailTemplateSubject": "邮件主题",
     "mailTemplateBody": "HTML 正文",
-    "mailTemplatePlaceholderHint": "可用占位符（注册验证邮件用 {{verifyUrl}}，密码重置用 {{code}}）",
+    "mailTemplatePlaceholderHint": "可用占位符（注册验证邮件用 '{{verifyUrl}}'，密码重置用 '{{code}}'）",
     "registerGroup": "注册",
     "allowPublicRegistration": "允许公开注册",
     "registerDefaultGroup": "注册默认组",

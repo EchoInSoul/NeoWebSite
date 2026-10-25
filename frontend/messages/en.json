@@ -76,7 +76,7 @@
     "mailTemplatePasswordReset": "Password reset verification code",
     "mailTemplateSubject": "Subject",
     "mailTemplateBody": "HTML body",
-    "mailTemplatePlaceholderHint": "Available placeholders (use {{verifyUrl}} for registration verification, {{code}} for password reset)",
+    "mailTemplatePlaceholderHint": "Available placeholders (use '{{verifyUrl}}' for registration verification, '{{code}}' for password reset)",
     "registerGroup": "Registration",
     "allowPublicRegistration": "Allow public registration",
     "registerDefaultGroup": "Default registration group",
