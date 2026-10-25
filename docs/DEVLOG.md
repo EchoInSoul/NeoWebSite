@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-10-26 · 自研人机验证前端接入（登录 / 注册滑块弹窗）
+
+**范围**：前端新增 `lib/captcha-challenge.ts`（出题 / 交卷传输与形状校验）、`hooks/use-captcha-gate.ts`（provider 分派 / 预取 / 429 / 关闭清理）、`components/auth/builtin-captcha.tsx`（滑块六阶段 / 拖拽 / 交卷 / 重试 / 摆动）、`lib/dialog-nudge.ts`；修改 `lib/api.ts`（signal）、`lib/public-settings.ts`（`CaptchaConfig` 联合 + builtin）、`components/auth/captcha-dialog.tsx`（按 provider 分派 / 340px / 成功定时器取消）、登录 / 注册表单、设置页作用域条件、中英文案；`backend/README.md` 删除「前端未接 builtin」的过时说明；spec / plan 入档。零后端生产代码、零迁移、零新依赖、零新路由；版本保持 0.24.0（纯前端，不单独进位）。**未提交。**
+
+**动机**：0.24.0 后端已支持 `builtin`，但前端没有滑块，切 provider 会把登录 / 注册全部拦死。
+
+**决策**：
+- 样式按 hao 博客 `selfhosted-widget.tsx` / `captcha-verify-dialog.tsx` 逐项照抄；弹窗 340px / p-5 / gap-3，滑轨 h-10 + 40px 拇指，成功绿条 + 耗时，答错红条 + 弹窗摆动，800ms 重试。
+- 提交前先出题再开窗；429 只 toast 不开窗；答错 / 过期一律换新题（后端判负，原题不可复用）；不搬轨迹采集（本仓只验落点 ±4px）。
+- **加载 / 校验中 UI 按用户两次点名移除**：第一次删「加载中」文案与转圈；第二次连空白占位整块删掉，并删 `captchaVerifying`（校验中…）与遮罩 / 转圈。当前加载态渲染 `null`，校验中只锁滑轨；文案表因此没有 `captchaLoading` / `captchaVerifying` 两键。
+- 拼图块从后端 `tile_x / tile_y` 起，滑轨拇指仍从 0 起；坐标按 `masterWidth / renderedWidth` 换回主图坐标；失败卡按 300×220 预留高度，避免重试成功后跳高。
+- 设置页「启用范围」行对 builtin 也显示；Turnstile 的站点密钥 / 私钥 / 验证配置仍只在 turnstile 下出现；管理端自检无 builtin 形态，本轮不加按钮。
+- Turnstile 分支只在弹窗分派处改 props；loader、token、unavailable 与自检逻辑不动。
+
+**验证**：
+- `npx tsc --noEmit` 通过；prettier --check 覆盖本轮 12 个改动文件全过；`git diff --check` 通过。
+- `npm run lint` 0 error / 10 warning：8 条既存（`.scratch` 7 + `components/ui/sonner.tsx` 1），新增 2 条 `@next/next/no-img-element`（data URL 图片，刻意用 `<img>`，与对照组件一致）。
+- `npm run format:check` 全量在当前 HEAD 的 `components/ui/select.tsx` 报既存格式问题；该文件本轮未改，未顺手格式化。
+- 浏览器实测（源码拷贝到临时 3001 前端 + 5733 development 后端，连 dev 库）：
+  1. builtin 登录：出题 → 拖拽 → 交卷 200 → 登录 200 → `/console`；development 模式下会话 cookie 持久。
+  2. 设置页：provider=builtin 时只显示作用域行（当时 dev 库值为「注册」），站点密钥 / 私钥 / 验证配置行不渲染。
+  3. 注册：连续两次提交只发 1 条出题；交卷成功后在 1618ms 内点 X → 只有 solutions 200、无 `/users`；重来一次让 1618ms 走完 → `/users` 201、账号建立并跳登录。
+  4. 缩放：登录时图片渲染宽 285px（scale 0.95）仍能拖到答案；注册时 300px（scale 1）通过。
+  5. 5733 后端停掉后弹窗保持空壳（按用户要求不再有加载占位），后端重启后同一请求恢复并出题；确切的失败卡 / 429 / 403 未单独实测。
+  6. 原 3000 前端连的 5732 后端是 production 模式（Secure cookie），登录后的整页跳转会丢会话；后半段改用 5733 development + 临时 3001 前端完成。共享 3000 / 5732 未重启。
+- 环境处理：验证期间并行会话把 dev 库 provider 从 turnstile 改成 builtin、scopes 在 `login,register` / `register` 间变动、`allowed_email_domains` 也变过；本轮未覆盖这些值。只临时把 register 的两个开关改成 false 做过注册实测，已恢复 true；创建的 2 个测试账号已删；临时前端副本、探针、5733 / 3001 进程已清理。测试库未动。
+- 计划文档里的验证脚本已按实测修正：题目表不存 `tile_x`，初值从 DOM 量；用合成 PointerEvent（临时把 `setPointerCapture` / `releasePointerCapture` 置空）代替不稳定的元素 drag。
+
+**已知缺口**：Turnstile 实机回归未做（dev 库 provider 被并行会话保持为 builtin，未强切）；403 / 429 / 5xx 的前端失败卡 / toast 未逐条实测；管理端自检无 builtin；公开设置 60 秒缓存窗口；滑块无键盘操作；前端无自动化测试框架。后端完全不可达时弹窗会是空壳直到请求失败 / 恢复，这是移掉加载占位的既定代价。
+
+**提交状态**：代码、spec、plan、本条目与 README 均**未提交**。
+
+---
+
 ## 2026-10-25 · 两步验证拆成独立能力模块
 
 **范围**：后端新增 `internal/modules/twofactor`（service / repository / totp / secretbox / ratelimit / dto / codetest），`auth` 删 `totp.go`、`secretbox.go`、`ratelimit.go` 与 9 个 2FA 方法、6 个仓库方法；auth controller 增 `twoFactorService` 字段，6 条 2FA 路由薄壳分发；`app.go` 装配（`TOTPEncryptionKey` 直达 twofactor）；README 模块表与会话章节引用修正；spec / plan 入档。零接口改动、零迁移、零前端改动。spec 见 [2026-10-25-neoblog-twofactor-module-design.md](superpowers/specs/2026-10-25-neoblog-twofactor-module-design.md)。**未提交。**
