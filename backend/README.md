@@ -190,7 +190,7 @@ bash scripts/test.sh ./internal/app/   # 只跑指定包（包名原样传给 go
 
 规则：
 
-- 注册**公开**、不验证邮箱（邮件基础设施见「邮件」章节，注册流程尚未接入；也没有找回密码）。
+- 注册**公开**：默认不验证邮箱、提交即建号；开启「邮箱所有权认证」（`register.email_verification_enabled`）后改为先发 30 分钟有效的验证链接、验证通过才建号（见上方接口表与「邮件」章节）。没有找回密码。
 - **登录与注册只接受 `Content-Type: application/json`**：带 `Origin` 头的请求，Origin 的 host 必须与 `X-Forwarded-Host`（缺省用请求的 `Host`）一致；不满足一律 400 `invalid_request`。跨站表单发不出 `application/json`，跨站 fetch 会触发预检；非浏览器客户端不带 Origin 时不受影响。前端经 Next rewrite 转发时，`X-Forwarded-Host` 是浏览器访问的前端主机。
 - 邮箱：`net/mail` 可解析、≤254 字符、入库统一小写；昵称：trim 后 2–32 字符（按 rune）、不含空白（含全角空格）与 `@`；密码：≥8 字符（按 rune）、同时含 ASCII 字母与数字、≤72 字节（bcrypt 上限）；简介：trim 后 ≤1000 字符（按 rune）、允许换行、可为空。
 - 改自己的资料（`PATCH /users/me`）挂 `RequireAuth` + `LoadIdentity`、**不需要权限点**（改的是自己）；字段可选、只改给出的字段（缺省与 `null` 同义，都表示不修改）；昵称 / 邮箱 / 简介沿用注册那套归一与校验、同一批错误码；简介提交空串（或纯空白）即清空、库中存 `NULL`；**不校验当前密码**；会话只存 `userID`，因此改完无需重新登录，`/users/me` 与侧栏下次读取即是新值。
@@ -280,7 +280,7 @@ mailer.Send(ctx, mail.Message{To: addr, Subject: "NeoBlog 邮件配置自检", B
 - 守卫链 `RequireAuth` → `LoadIdentity` → `RequirePresetGroup(owner, admin)`。**不走权限目录**：SMTP 配置是服务器级设置（`mail` 设置组 / 环境变量），不属于可授出的业务权限域；owner / admin 天然持有全部权限，自建组不可授。
 - 投递走 `SendSync`：**单次尝试、不重试**；死线为拨号 20s（go-mail 对每条 SMTP 命令续期死线，**慢速对端总耗时可超 20s**，不是硬性总上限），失败时操作者可自行重试；失败细节看服务端结构化日志。收件地址经 `net/mail.ParseAddress` 解析（支持 `Name <addr>` 形式，取纯地址）。主题与正文由服务器按 `template` 渲染：`example` 用内置自检模板；`signup_code` / `password_reset` 用内置模板，若 `mail` 设置组里对应 `*_subject` 非空则覆盖主题、`*_body` 非空则作为 HTML 模板覆盖正文（`signup_code` 的占位符为 `{{verifyUrl}}` / `{{expiresMinutes}}` / `{{siteTitle}}` / `{{siteUrl}}` / `{{username}}` / `{{sentAt}}`，测试发送的 `expiresMinutes` 为 30；`password_reset` 仍用 `{{code}}`；自定义 HTML 覆盖时纯文本部分仍用内置 txt 模板）。请求方不能直接传任意主题或正文。
 - 未配置 SMTP（设置组与 `SMTP_HOST` 都为空，或 `mail.enabled` 为 `false`）时降级为日志实现，接口永远 201（邮件全文在日志里，不真发）。
-- 前端「邮件」设置页的注册验证码 / 密码重置行右侧有发送图标：确认后把该模板的测试邮件发到**当前登录账号的邮箱**；按钮只对 owner / admin 渲染，其余账号即使有设置查看权限也不会显示。
+- 前端「邮件」设置页的注册验证邮件 / 密码重置验证码行右侧有发送图标：确认后把该模板的测试邮件发到**当前登录账号的邮箱**；按钮只对 owner / admin 渲染，其余账号即使有设置查看权限也不会显示。
 
 ### 运行时配置
 

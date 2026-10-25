@@ -195,7 +195,7 @@ func (s *Service) registrationEmailData(ctx context.Context, nickname string) (m
 		"siteTitle":      title,
 		"siteUrl":        base,
 		"username":       nickname,
-		"expiresMinutes": "30",
+		"expiresMinutes": fmt.Sprintf("%d", int(pendingRegistrationTTL/time.Minute)),
 		"sentAt":         time.Now().Format("2006-01-02 15:04:05"),
 		"code":           "",
 		"verifyUrl":      "",

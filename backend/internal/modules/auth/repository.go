@@ -161,7 +161,7 @@ func (r *repository) verifyPendingRegistration(ctx context.Context, tokenHash st
 	}
 	if !row.ExpiresAt.After(time.Now()) {
 		if _, err := r.client.PendingRegistration.Delete().
-			Where(pendingregistration.IDEQ(row.ID)).
+			Where(pendingregistration.IDEQ(row.ID), pendingregistration.TokenHashEQ(tokenHash)).
 			Exec(ctx); err != nil {
 			return nil, err
 		}
@@ -175,7 +175,9 @@ func (r *repository) verifyPendingRegistration(ctx context.Context, tokenHash st
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.User.Query().Where(user.EmailEQ(row.Email)).Only(ctx); err == nil {
-		if _, delErr := tx.PendingRegistration.Delete().Where(pendingregistration.IDEQ(row.ID)).Exec(ctx); delErr != nil {
+		if _, delErr := tx.PendingRegistration.Delete().
+			Where(pendingregistration.IDEQ(row.ID), pendingregistration.TokenHashEQ(tokenHash)).
+			Exec(ctx); delErr != nil {
 			return nil, delErr
 		}
 		if commitErr := tx.Commit(); commitErr != nil {
@@ -187,7 +189,9 @@ func (r *repository) verifyPendingRegistration(ctx context.Context, tokenHash st
 	}
 
 	if _, err := tx.User.Query().Where(user.NicknameEQ(row.Nickname)).Only(ctx); err == nil {
-		if _, delErr := tx.PendingRegistration.Delete().Where(pendingregistration.IDEQ(row.ID)).Exec(ctx); delErr != nil {
+		if _, delErr := tx.PendingRegistration.Delete().
+			Where(pendingregistration.IDEQ(row.ID), pendingregistration.TokenHashEQ(tokenHash)).
+			Exec(ctx); delErr != nil {
 			return nil, delErr
 		}
 		if commitErr := tx.Commit(); commitErr != nil {
@@ -199,7 +203,11 @@ func (r *repository) verifyPendingRegistration(ctx context.Context, tokenHash st
 	}
 
 	deleted, err := tx.PendingRegistration.Delete().
-		Where(pendingregistration.IDEQ(row.ID), pendingregistration.ExpiresAtGT(time.Now())).
+		Where(
+			pendingregistration.IDEQ(row.ID),
+			pendingregistration.TokenHashEQ(tokenHash),
+			pendingregistration.ExpiresAtGT(time.Now()),
+		).
 		Exec(ctx)
 	if err != nil {
 		return nil, err

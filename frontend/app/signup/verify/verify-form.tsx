@@ -39,9 +39,6 @@ export function VerifyForm({ token }: { token: string }) {
       router.push("/signin");
     } catch (error) {
       if (error instanceof ApiError) {
-        if (error.status === 401) {
-          return;
-        }
         if (error.code === "email_verification_invalid") {
           toast.error(t("verifyInvalid"));
           return;

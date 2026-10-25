@@ -6,7 +6,7 @@
 
 ## 2026-10-25 · 注册邮箱所有权认证（先验证后建号）
 
-**范围**：后端 `internal/modules/auth/*`、`mail/*`、`access/*`、`settings/registry.go`、ent schema + 新迁移 `20261025120001_email_verification.sql`、`app.go`、`apierror.go`；前端注册页 / 新验证页 / 用户注册设置页 / 用户列表 / 邮件设置页 / i18n；另加本条目。**未提交，待用户检查。**
+**范围**：后端 `internal/modules/auth/*`、`mail/*`、`access/*`、`settings/registry.go`、ent schema + 新迁移 `20261025120001_email_verification.sql`、`app.go`、`apierror.go`；前端注册页 / 新验证页 / 用户注册设置页 / 用户列表 / 邮件设置页 / i18n；另加本条目。**已入库。**
 
 **动机**：`register.email_verification_enabled` 此前零消费方。用户要求接入「邮箱所有权认证」：开关打开后，注册必须先证明邮箱归属；最终选「先验证、后建号」（不建未验证账号）。
 
@@ -29,6 +29,7 @@
 - `bash scripts/check.sh` → `check ok`；`bash scripts/test.sh ./...` 全绿。
 - 前端 `npx tsc --noEmit`、ESLint（仅既有 `sonner.tsx` warning）、改文件 Prettier 通过。
 - 变异自检：expires、删除计数、Configured、补偿删除、验证状态、202→201、登录密码、site.url、令牌哈希、公开白名单、RequireSMTP 共 11 条全部 RED；删除计数最初是假绿，补了 `TestVerifyDeleteCountGuard`（行锁 + 并发）后才稳定变红。「补偿改回按邮箱删」没有对应变异项——实现里不存在按邮箱删的路径，`TestRegisterCompensationDoesNotDeleteReplacedPending` 直接验证 id + token 删除不会误删替换后的记录。
+- **复核修复（2026-10-25 追加）**：验证消费的三处删除条件都追加 `token_hash`。原实现只在事务外按令牌读出记录、事务内按 id + 过期时间删除；若「重新提交注册」正好插在两者之间，旧链接会删掉刚换新的记录并用旧昵称/旧密码建号。新增 `TestVerifyStaleTokenDoesNotConsumeReplacedPending`：锁用户表让验证停在读完记录、尚未删除的位置，替换记录后放开，断言旧令牌返回失效且新记录保留——先红后绿。另把邮件文案的「30 分钟」改为按 `pendingRegistrationTTL` 计算。
 
 **已知缺口**：后台看不到待验证注册列表；没有重发；密码重置 / 2FA 恢复码邮件仍未接；改邮箱不要求重新验证；用用户名登录的待验证用户拿不到「账户尚未验证」提示；过期记录只在下一次注册时懒清理；`register.default_group` 仍未消费。
 

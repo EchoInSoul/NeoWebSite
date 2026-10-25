@@ -1139,3 +1139,119 @@ func TestVerifyDeleteCountGuard(t *testing.T) {
 		t.Fatal("verify did not finish")
 	}
 }
+
+func TestVerifyStaleTokenDoesNotConsumeReplacedPending(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	tag := uniqueTag(t)
+	email := "stale+" + tag + "@example.com"
+	oldPassword, err := bcrypt.GenerateFromPassword([]byte("oldpass123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("old password hash: %v", err)
+	}
+	newPassword, err := bcrypt.GenerateFromPassword([]byte("newpass123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("new password hash: %v", err)
+	}
+	_, oldHash, err := newPendingToken()
+	if err != nil {
+		t.Fatalf("old token: %v", err)
+	}
+	_, newHash, err := newPendingToken()
+	if err != nil {
+		t.Fatalf("new token: %v", err)
+	}
+	repo := newRepository(db)
+	if _, err := repo.replacePendingRegistration(ctx, pendingRegistrationInput{
+		Email:        email,
+		Nickname:     "old" + tag,
+		PasswordHash: string(oldPassword),
+		TokenHash:    oldHash,
+		ExpiresAt:    time.Now().Add(30 * time.Minute),
+	}); err != nil {
+		t.Fatalf("seed pending: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.Client.PendingRegistration.Delete().
+			Where(pendingregistration.EmailEQ(email)).Exec(context.Background())
+		_, _ = db.Client.User.Delete().
+			Where(user.EmailEQ(email)).Exec(context.Background())
+	})
+
+	lockTx, err := db.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin lock tx: %v", err)
+	}
+	defer func() { _ = lockTx.Rollback() }()
+	if _, err := lockTx.ExecContext(ctx, `LOCK TABLE users IN ACCESS EXCLUSIVE MODE`); err != nil {
+		t.Fatalf("lock users: %v", err)
+	}
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := newRepository(db).verifyPendingRegistration(context.Background(), oldHash)
+		result <- err
+	}()
+	waitForUsersLockWaiter(t, db)
+
+	if _, err := repo.replacePendingRegistration(ctx, pendingRegistrationInput{
+		Email:        email,
+		Nickname:     "new" + tag,
+		PasswordHash: string(newPassword),
+		TokenHash:    newHash,
+		ExpiresAt:    time.Now().Add(30 * time.Minute),
+	}); err != nil {
+		t.Fatalf("replace pending: %v", err)
+	}
+	if err := lockTx.Commit(); err != nil {
+		t.Fatalf("release users lock: %v", err)
+	}
+
+	select {
+	case err := <-result:
+		if !errors.Is(err, errPendingNotFound) {
+			t.Fatalf("stale verify error = %v, want errPendingNotFound", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stale verify did not finish")
+	}
+
+	row, err := db.Client.PendingRegistration.Query().
+		Where(pendingregistration.EmailEQ(email)).Only(ctx)
+	if err != nil {
+		t.Fatalf("find pending after stale verify: %v", err)
+	}
+	if row.TokenHash != newHash {
+		t.Fatalf("pending token hash = %q, want the resubmitted token", row.TokenHash)
+	}
+
+	created, err := repo.verifyPendingRegistration(ctx, newHash)
+	if err != nil {
+		t.Fatalf("verify resubmitted token: %v", err)
+	}
+	if created.Nickname != "new"+tag {
+		t.Fatalf("created nickname = %q, want the resubmitted nickname", created.Nickname)
+	}
+	if bcrypt.CompareHashAndPassword([]byte(created.PasswordHash), []byte("newpass123")) != nil {
+		t.Fatal("created user does not carry the resubmitted password")
+	}
+}
+
+func waitForUsersLockWaiter(t *testing.T, db *database.Database) {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var waiters int
+		if err := db.SQL().QueryRowContext(context.Background(),
+			`SELECT count(*) FROM pg_locks WHERE relation = 'public.users'::regclass AND NOT granted`,
+		).Scan(&waiters); err != nil {
+			t.Fatalf("count users lock waiters: %v", err)
+		}
+		if waiters > 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("verification did not block on the users table lock")
+}
