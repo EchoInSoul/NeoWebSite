@@ -66,7 +66,7 @@ export function CaptchaDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal>
-      <DialogContent>
+      <DialogContent blockOpenAutoFocus>
         <DialogHeader>
           <DialogTitle>{t("captchaDialogTitle")}</DialogTitle>
         </DialogHeader>
