@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-10-25 · 认证页 URL 改名（`/signin` `/signup` → `/login` `/register`）
+
+**范围**：前端路由目录 `app/signin/*` → `app/login/*`、`app/signup/*` → `app/register/*`（含 `verify` 子路由），另改 10 个文件里的 URL 字面量——`proxy.ts`、`lib/bootstrap-scripts.ts`、`hooks/{use-signout,use-signup}.ts`、`app/console/layout.tsx`、`components/console/session-expiry-dialog.tsx`、`app/login/signin-view.tsx`、`app/register/{signup-view.tsx,verify/verify-form.tsx}`、`app/ui-check/page.tsx`；后端 `internal/modules/auth/service.go`（邮件验证链接）+ `internal/modules/mail/controller.go`（预览链接）+ 两个测试断言；`backend/README.md` 一处路径提及；版本 0.23.0 → **0.23.1**（patch：邮件里的链接路径是对外可见行为）。零迁移、零接口改动、零依赖、零新文案。
+
+**动机**：用户要求把登录 / 注册页的地址栏路径从 `signin` 这类命名改为 `login` / `register`。
+
+**决策**：
+- **只改 URL**。文件名（`signin-form.tsx`）、模块名（`hooks/use-signup.ts`、`lib/signup-notice.ts`）、i18n 键（`auth.signin` / `auth.signup`）、sessionStorage 标记键（`neoblog.signin.success` / `neoblog.signup.pending|success`）、邮件模板名 `signup_code` 与 `mail.signup_code_*` 设置项全部不动——它们不进地址栏，改了要连数据一起迁，收益为零。
+- **不保留旧路径跳转**（用户 2026-10-25 明确裁定「不保留 3xx 等形式」）：`next.config.ts` 不加 redirect，`proxy.ts` 不做旧名兜底，`/signin` `/signup` `/signup/verify` 直接 404。代价当场生效：改名前发出、尚未消费的验证邮件链接（30 分钟有效）全部失效，用户须回 `/register` 重新提交。
+- 控制台 `app/console/settings/{login,register}` 是「登录设置 / 注册设置」配置页，与认证流程无关且本来就是这组词，不在改名范围。
+- 反向跳与守卫的目标同批改：`proxy.ts` 的未登录弹回、`console/layout.tsx` 的未登录弹回、登出成功 / 401 两条路径、会话过期弹窗「重新登录」、注册成功 / 待验证 / 验证成功后跳登录页，全部指向 `/login`。`SYSTEM_THEME_ROUTES`（登录注册页强制跟随系统主题）同步为 `["/login", "/register"]`，否则这两页的主题引导脚本静默失效。
+
+**验证**：
+- 实机 dev（`:3000`）：`/login`、`/register`、`/register/verify` 均 **200**；`/signin`、`/signup`、`/signup/verify` 均 **404**（无跳转，`redirect_url` 为空）。
+- 渲染出的链接直指新地址：`/login` 页只有 `href="/register"`，`/register` 页只有 `href="/login"`；主题引导内联脚本实测 `var s=["/login","/register"]`。
+- 后端 `bash scripts/check.sh` → `check ok`；`bash scripts/test.sh ./...` 全绿无 skip（含 `verifyUrl` 断言已改成 `/register/verify`）。前端 `npx tsc --noEmit`、ESLint、改文件 Prettier 全部干净。
+
+**实现发现**：整目录改名不能直接 `git mv app/signup app/register`——dev server 运行时 Windows 锁住该目录，报 `Permission denied`；改成先建好新目录、逐文件 `git mv`、最后 `rmdir` 空目录即可。另一处坑：`.next/types/validator.ts` 是生成产物，仍写着 `AppPageConfig<"/signin">`，改名后 `tsc` 会报 `Cannot find module '../../app/signin/page.js'`，这不是源码错误；删掉 `.next/types` 让 dev 重新生成后 `tsc` 归零。
+
+**已知缺口**：旧地址不留跳转，站外收藏、已发出的邮件链接、外部文档里的 `/signin` `/signup` 一律 404；URL 之外（文件名 / 模块名 / 文案键 / 设置键 / 模板名）仍是 signin / signup 语义。
+
+---
+
 ## 2026-10-25 · 注册邮箱所有权认证（先验证后建号）
 
 **范围**：后端 `internal/modules/auth/*`、`mail/*`、`access/*`、`settings/registry.go`、ent schema + 新迁移 `20261025120001_email_verification.sql`、`app.go`、`apierror.go`；前端注册页 / 新验证页 / 用户注册设置页 / 用户列表 / 邮件设置页 / i18n；另加本条目。**已入库。**
