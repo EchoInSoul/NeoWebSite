@@ -27,18 +27,19 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
 	"website/backend/internal/modules/access"
+	"website/backend/internal/modules/captcha/turnstile"
 	"website/backend/internal/modules/settings"
 )
 
 type fakeVerifier struct {
-	outcome Outcome
+	outcome turnstile.Outcome
 	calls   int
 	secret  string
 	token   string
 	ip      string
 }
 
-func (f *fakeVerifier) Verify(_ context.Context, secret, token, remoteIP string) Outcome {
+func (f *fakeVerifier) Verify(_ context.Context, secret, token, remoteIP string) turnstile.Outcome {
 	f.calls++
 	f.secret = secret
 	f.token = token
@@ -96,9 +97,10 @@ func newCaptchaRouteTestApp(t *testing.T, db *database.Database, verifier *fakeV
 
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.LoadIdentity(accessModule.Service, sm))
+	captchaService := NewService(settingsModule.Service, verifier)
 	module := &Module{
-		Service:    NewService(settingsModule.Service, verifier),
-		controller: newController(NewService(settingsModule.Service, verifier)),
+		Service:             captchaService,
+		turnstileController: turnstile.NewController(turnstile.NewService(settingsModule.Service, verifier)),
 	}
 	module.RegisterProtected(protected)
 
@@ -243,19 +245,19 @@ func decodeVerifyError(t *testing.T, resp *http.Response) (string, *string) {
 func TestVerifyCaptchaConfigRoute(t *testing.T) {
 	cases := []struct {
 		name     string
-		outcome  Outcome
+		outcome  turnstile.Outcome
 		groupID  func(t *testing.T, db *database.Database) uuid.UUID
 		body     map[string]any
 		wantCode int
 		wantErr  string
 		wantOK   bool
 	}{
-		{name: "passes", outcome: Passed, groupID: fixedGroup(rbac.GroupIDOwner), body: map[string]any{"secret_key": "the-secret", "token": "the-token"}, wantCode: http.StatusOK, wantOK: true},
-		{name: "rejection", outcome: Rejected, groupID: fixedGroup(rbac.GroupIDOwner), body: map[string]any{"secret_key": "wrong-secret", "token": "the-token"}, wantCode: http.StatusBadRequest, wantErr: "captcha_verification_failed"},
-		{name: "unavailable", outcome: Unavailable, groupID: fixedGroup(rbac.GroupIDOwner), body: map[string]any{"secret_key": "the-secret", "token": "the-token"}, wantCode: http.StatusServiceUnavailable, wantErr: "service_unavailable"},
-		{name: "missing keys", outcome: Passed, groupID: fixedGroup(rbac.GroupIDOwner), body: map[string]any{}, wantCode: http.StatusBadRequest, wantErr: "invalid_request"},
-		{name: "plain user forbidden", outcome: Passed, groupID: fixedGroup(rbac.GroupIDUser), body: map[string]any{"secret_key": "the-secret", "token": "the-token"}, wantCode: http.StatusForbidden, wantErr: "forbidden"},
-		{name: "captcha-edit group passes", outcome: Passed, groupID: captchaEditGroup, body: map[string]any{"secret_key": "the-secret", "token": "the-token"}, wantCode: http.StatusOK, wantOK: true},
+		{name: "passes", outcome: turnstile.Passed, groupID: fixedGroup(rbac.GroupIDOwner), body: map[string]any{"secret_key": "the-secret", "token": "the-token"}, wantCode: http.StatusOK, wantOK: true},
+		{name: "rejection", outcome: turnstile.Rejected, groupID: fixedGroup(rbac.GroupIDOwner), body: map[string]any{"secret_key": "wrong-secret", "token": "the-token"}, wantCode: http.StatusBadRequest, wantErr: "captcha_verification_failed"},
+		{name: "unavailable", outcome: turnstile.Unavailable, groupID: fixedGroup(rbac.GroupIDOwner), body: map[string]any{"secret_key": "the-secret", "token": "the-token"}, wantCode: http.StatusServiceUnavailable, wantErr: "service_unavailable"},
+		{name: "missing keys", outcome: turnstile.Passed, groupID: fixedGroup(rbac.GroupIDOwner), body: map[string]any{}, wantCode: http.StatusBadRequest, wantErr: "invalid_request"},
+		{name: "plain user forbidden", outcome: turnstile.Passed, groupID: fixedGroup(rbac.GroupIDUser), body: map[string]any{"secret_key": "the-secret", "token": "the-token"}, wantCode: http.StatusForbidden, wantErr: "forbidden"},
+		{name: "captcha-edit group passes", outcome: turnstile.Passed, groupID: captchaEditGroup, body: map[string]any{"secret_key": "the-secret", "token": "the-token"}, wantCode: http.StatusOK, wantOK: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -278,7 +280,7 @@ func TestVerifyCaptchaConfigRoute(t *testing.T) {
 				}
 			}
 			if tc.wantOK {
-				var body CaptchaVerificationResponse
+				var body turnstile.VerificationResponse
 				if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 					t.Fatalf("decode body: %v", err)
 				}
@@ -298,7 +300,7 @@ func TestVerifyCaptchaConfigRoute(t *testing.T) {
 
 func TestVerifyCaptchaConfigRouteRequiresJSONRequest(t *testing.T) {
 	db := testDB(t)
-	verifier := &fakeVerifier{outcome: Passed}
+	verifier := &fakeVerifier{outcome: turnstile.Passed}
 	ts, _ := newCaptchaRouteTestApp(t, db, verifier)
 	tag := uniqueTag(t)
 	userID := seedUserInGroup(t, db, tag, rbac.GroupIDOwner)
@@ -328,7 +330,7 @@ func TestVerifyCaptchaConfigRouteRequiresJSONRequest(t *testing.T) {
 
 func TestVerifyCaptchaConfigRouteRequiresAuth(t *testing.T) {
 	db := testDB(t)
-	verifier := &fakeVerifier{outcome: Passed}
+	verifier := &fakeVerifier{outcome: turnstile.Passed}
 	ts, _ := newCaptchaRouteTestApp(t, db, verifier)
 
 	resp := postJSON(t, &http.Client{}, ts.URL+"/api/v1/admin/captcha/verifications", map[string]any{"secret_key": "the-secret", "token": "the-token"})

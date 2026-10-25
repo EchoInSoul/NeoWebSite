@@ -1,4 +1,4 @@
-package captcha
+package turnstile
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestTurnstileVerifierClassifiesResponses(t *testing.T) {
+func TestVerifierClassifiesResponses(t *testing.T) {
 	cases := []struct {
 		name   string
 		status int
@@ -35,7 +35,7 @@ func TestTurnstileVerifierClassifiesResponses(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 
-			verifier := newTurnstileVerifier(server.URL, time.Second)
+			verifier := New(server.URL, time.Second)
 			if got := verifier.Verify(context.Background(), "secret", "token", "203.0.113.9"); got != tc.want {
 				t.Fatalf("outcome = %d, want %d", got, tc.want)
 			}
@@ -43,7 +43,7 @@ func TestTurnstileVerifierClassifiesResponses(t *testing.T) {
 	}
 }
 
-func TestTurnstileVerifierSendsExpectedForm(t *testing.T) {
+func TestVerifierSendsExpectedForm(t *testing.T) {
 	var received url.Values
 	var contentType string
 
@@ -57,7 +57,7 @@ func TestTurnstileVerifierSendsExpectedForm(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	verifier := newTurnstileVerifier(server.URL, time.Second)
+	verifier := New(server.URL, time.Second)
 	if got := verifier.Verify(context.Background(), "the-secret", "the-token", "203.0.113.9"); got != Passed {
 		t.Fatalf("outcome = %d, want %d", got, Passed)
 	}
@@ -76,7 +76,7 @@ func TestTurnstileVerifierSendsExpectedForm(t *testing.T) {
 	}
 }
 
-func TestTurnstileVerifierOmitsUnknownRemoteIP(t *testing.T) {
+func TestVerifierOmitsUnknownRemoteIP(t *testing.T) {
 	for _, remoteIP := range []string{"", "unknown"} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if err := r.ParseForm(); err != nil {
@@ -88,7 +88,7 @@ func TestTurnstileVerifierOmitsUnknownRemoteIP(t *testing.T) {
 			_, _ = io.WriteString(w, `{"success":true}`)
 		}))
 
-		verifier := newTurnstileVerifier(server.URL, time.Second)
+		verifier := New(server.URL, time.Second)
 		if got := verifier.Verify(context.Background(), "secret", "token", remoteIP); got != Passed {
 			t.Fatalf("remoteip %q: outcome = %d, want %d", remoteIP, got, Passed)
 		}
@@ -96,7 +96,7 @@ func TestTurnstileVerifierOmitsUnknownRemoteIP(t *testing.T) {
 	}
 }
 
-func TestTurnstileVerifierReportsTimeoutAsUnavailable(t *testing.T) {
+func TestVerifierReportsTimeoutAsUnavailable(t *testing.T) {
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -109,7 +109,7 @@ func TestTurnstileVerifierReportsTimeoutAsUnavailable(t *testing.T) {
 		server.Close()
 	})
 
-	verifier := newTurnstileVerifier(server.URL, 50*time.Millisecond)
+	verifier := New(server.URL, 50*time.Millisecond)
 	if got := verifier.Verify(context.Background(), "secret", "token", "203.0.113.9"); got != Unavailable {
 		t.Fatalf("outcome = %d, want %d", got, Unavailable)
 	}

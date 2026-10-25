@@ -11,18 +11,19 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/captcha"
+	"website/backend/internal/modules/captcha/turnstile"
 	"website/backend/internal/modules/settings"
 )
 
 type fakeCaptchaVerifier struct {
-	outcome captcha.Outcome
+	outcome turnstile.Outcome
 	calls   int
 	secret  string
 	token   string
 	ip      string
 }
 
-func (f *fakeCaptchaVerifier) Verify(_ context.Context, secret, token, remoteIP string) captcha.Outcome {
+func (f *fakeCaptchaVerifier) Verify(_ context.Context, secret, token, remoteIP string) turnstile.Outcome {
 	f.calls++
 	f.secret = secret
 	f.token = token
@@ -110,7 +111,7 @@ func assertCaptchaFailed(t *testing.T, resp *http.Response) {
 func TestLoginRequiresCaptchaWhenEnabled(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Passed}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Passed}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -142,7 +143,7 @@ func TestLoginRequiresCaptchaWhenEnabled(t *testing.T) {
 func TestLoginRejectedCaptchaBlocksLogin(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -159,7 +160,7 @@ func TestLoginRejectedCaptchaBlocksLogin(t *testing.T) {
 func TestLoginRejectsWhenCaptchaUnavailable(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Unavailable}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Unavailable}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -176,11 +177,11 @@ func TestLoginRejectsWhenCaptchaUnavailable(t *testing.T) {
 func TestLoginSkipsCaptchaForOtherProviders(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
-	setCaptchaProvider(t, svc, "builtin", "the-secret")
+	setCaptchaProvider(t, svc, "geetest", "the-secret")
 
 	client := testClient(t)
 	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password})
@@ -196,7 +197,7 @@ func TestLoginSkipsCaptchaForOtherProviders(t *testing.T) {
 func TestLoginSkipsCaptchaWhenDisabled(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -215,7 +216,7 @@ func TestLoginSkipsCaptchaWhenDisabled(t *testing.T) {
 func TestLoginSkipsCaptchaWithoutSecret(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -235,7 +236,7 @@ func TestLoginSkipsCaptchaWithoutSecret(t *testing.T) {
 func TestLoginSkipsCaptchaOutsideScopes(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -256,7 +257,7 @@ func TestLoginSkipsCaptchaOutsideScopes(t *testing.T) {
 func TestRegisterSkipsCaptchaOutsideScopes(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
@@ -284,7 +285,7 @@ func TestRegisterSkipsCaptchaOutsideScopes(t *testing.T) {
 func TestCaptchaScopesEmptySkipsEverywhere(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -319,7 +320,7 @@ func TestCaptchaScopesEmptySkipsEverywhere(t *testing.T) {
 func TestLoginCaptchaFailuresDoNotLockAccount(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, defaultRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -331,7 +332,7 @@ func TestLoginCaptchaFailuresDoNotLockAccount(t *testing.T) {
 		assertCaptchaFailed(t, resp)
 	}
 
-	verifier.outcome = captcha.Passed
+	verifier.outcome = turnstile.Passed
 	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "good-token"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -342,7 +343,7 @@ func TestLoginCaptchaFailuresDoNotLockAccount(t *testing.T) {
 func TestRegisterRequiresCaptchaWhenEnabled(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Passed}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Passed}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
@@ -380,7 +381,7 @@ func TestRegisterRequiresCaptchaWhenEnabled(t *testing.T) {
 func TestRegisterRejectedCaptchaCreatesNoUser(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
@@ -402,7 +403,7 @@ func TestRegisterRejectedCaptchaCreatesNoUser(t *testing.T) {
 func TestRegisterRejectsWhenCaptchaUnavailable(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captcha.Unavailable}
+	verifier := &fakeCaptchaVerifier{outcome: turnstile.Unavailable}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")

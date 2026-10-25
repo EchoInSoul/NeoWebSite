@@ -1,4 +1,4 @@
-package captcha
+package turnstile
 
 import (
 	"mime"
@@ -13,25 +13,25 @@ import (
 	"website/backend/internal/common/rbac"
 )
 
-type controller struct {
+type Controller struct {
 	service *Service
 }
 
-func newController(service *Service) *controller {
-	return &controller{service: service}
+func NewController(service *Service) *Controller {
+	return &Controller{service: service}
 }
 
-func (c *controller) registerProtected(r *gin.RouterGroup) {
+func (c *Controller) RegisterProtected(r *gin.RouterGroup) {
 	r.POST("/admin/captcha/verifications", guard.RequirePermission(rbac.PermissionCaptchaEdit), c.verify)
 }
 
-func (c *controller) verify(ctx *gin.Context) {
+func (c *Controller) verify(ctx *gin.Context) {
 	if !requireJSONRequest(ctx) {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 
-	var req CaptchaVerificationRequest
+	var req VerificationRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.SecretKey == "" || req.Token == "" {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
@@ -42,7 +42,7 @@ func (c *controller) verify(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, CaptchaVerificationResponse{Verified: true})
+	ctx.JSON(http.StatusOK, VerificationResponse{Verified: true})
 }
 
 func clientIP(ctx *gin.Context) string {

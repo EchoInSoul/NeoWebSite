@@ -1,10 +1,10 @@
-package captcha
+package turnstile
 
-type CaptchaVerificationRequest struct {
+type VerificationRequest struct {
 	SecretKey string `json:"secret_key"`
 	Token     string `json:"token"`
 }
 
-type CaptchaVerificationResponse struct {
+type VerificationResponse struct {
 	Verified bool `json:"verified"`
 }

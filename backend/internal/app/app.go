@@ -78,13 +78,17 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 
 	limiter := ratelimit.New()
 	sessionService := session.New(settingsModule.Service, sessions)
-	captchaModule := captcha.New(settingsModule.Service)
+	captchaModule, err := captcha.New(db, settingsModule.Service, limiter)
+	if err != nil {
+		return nil, err
+	}
 	captchaService := captchaModule.Service
 	loginService := login.New(db, sessionService, limiter, captchaService)
 	registrationService := registration.New(db, settingsModule.Service, limiter, mailModule.Mailer, captchaService)
 	twoFactorService := twofactor.New(db, sessionService, settingsModule.Service, limiter, cfg.TOTPEncryptionKey)
 	authModule := auth.New(db, sessionService, settingsModule.Service, loginService, registrationService, twoFactorService)
 	authModule.Register(api)
+	captchaModule.Register(api)
 	settingsModule.Register(api)
 
 	accessModule := access.New(db)

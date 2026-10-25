@@ -2,13 +2,18 @@ package captcha
 
 import (
 	"context"
-	"slices"
+
+	"github.com/google/uuid"
 
 	"website/backend/internal/common/apierror"
-	"website/backend/internal/modules/settings"
+	"website/backend/internal/modules/captcha/builtin"
+	"website/backend/internal/modules/captcha/turnstile"
 )
 
-const providerTurnstile = "turnstile"
+const (
+	providerTurnstile = "turnstile"
+	providerBuiltin   = "builtin"
+)
 
 type Settings interface {
 	GetBool(ctx context.Context, group, name string) (bool, error)
@@ -16,15 +21,17 @@ type Settings interface {
 }
 
 type Service struct {
-	settings Settings
-	verifier Verifier
+	settings  Settings
+	turnstile *turnstile.Service
+	builtin   *builtin.Service
 }
 
 func NewService(settings Settings, verifier Verifier) *Service {
-	if verifier == nil {
-		verifier = unavailableVerifier{}
-	}
-	return &Service{settings: settings, verifier: verifier}
+	return newService(settings, turnstile.NewService(settings, verifier), nil)
+}
+
+func newService(settingsService Settings, turnstileService *turnstile.Service, builtinService *builtin.Service) *Service {
+	return &Service{settings: settingsService, turnstile: turnstileService, builtin: builtinService}
 }
 
 func (s *Service) Verify(ctx context.Context, scope, token, ip string) error {
@@ -34,40 +41,32 @@ func (s *Service) Verify(ctx context.Context, scope, token, ip string) error {
 	}
 
 	provider, _ := s.settings.GetString(ctx, "captcha", "captcha_provider")
-	if provider != providerTurnstile {
+	switch provider {
+	case providerTurnstile:
+		if s.turnstile == nil {
+			return apierror.ErrServiceUnavailable
+		}
+		return s.turnstile.Verify(ctx, scope, token, ip)
+	case providerBuiltin:
+		if s.builtin == nil {
+			return apierror.ErrServiceUnavailable
+		}
+		return s.builtin.VerifyToken(ctx, scope, token)
+	default:
 		return nil
 	}
-
-	secret, _ := s.settings.GetString(ctx, "captcha", "turnstile_secret_key")
-	if secret == "" {
-		return nil
-	}
-
-	scopes, err := s.settings.GetString(ctx, "captcha", "captcha_scopes")
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(settings.SplitListValue(scopes), scope) {
-		return nil
-	}
-
-	if token == "" {
-		return apierror.ErrCaptchaFailed
-	}
-	if s.verifier.Verify(ctx, secret, token, ip) != Passed {
-		return apierror.ErrCaptchaFailed
-	}
-
-	return nil
 }
 
-func (s *Service) VerifyConfig(ctx context.Context, secret, token, ip string) error {
-	switch s.verifier.Verify(ctx, secret, token, ip) {
-	case Passed:
-		return nil
-	case Rejected:
-		return apierror.ErrCaptchaVerifyFailed
-	default:
-		return apierror.ErrServiceUnavailable
+func (s *Service) Challenge(ctx context.Context, scope, ip string) (builtin.ChallengeResponse, error) {
+	if s.builtin == nil {
+		return builtin.ChallengeResponse{}, apierror.ErrServiceUnavailable
 	}
+	return s.builtin.Challenge(ctx, scope, ip)
+}
+
+func (s *Service) Solve(ctx context.Context, id uuid.UUID, x, y int) (builtin.SolveChallengeResponse, error) {
+	if s.builtin == nil {
+		return builtin.SolveChallengeResponse{}, apierror.ErrServiceUnavailable
+	}
+	return s.builtin.Solve(ctx, id, x, y)
 }

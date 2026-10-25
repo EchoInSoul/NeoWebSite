@@ -1,4 +1,4 @@
-package captcha
+package turnstile
 
 import (
 	"context"
@@ -10,35 +10,43 @@ import (
 )
 
 const (
-	turnstileSiteverifyURL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-	turnstileTimeout       = 2500 * time.Millisecond
+	SiteverifyURL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+	Timeout       = 2500 * time.Millisecond
 )
 
-type turnstileVerifier struct {
+type Outcome int
+
+const (
+	Passed Outcome = iota
+	Rejected
+	Unavailable
+)
+
+type Client struct {
 	client   *http.Client
 	endpoint string
 }
 
-func newTurnstileVerifier(endpoint string, timeout time.Duration) *turnstileVerifier {
-	return &turnstileVerifier{
+func New(endpoint string, timeout time.Duration) *Client {
+	return &Client{
 		client:   &http.Client{Timeout: timeout},
 		endpoint: endpoint,
 	}
 }
 
-type turnstileSiteverifyResponse struct {
+type siteverifyResponse struct {
 	Success    bool     `json:"success"`
 	ErrorCodes []string `json:"error-codes"`
 }
 
-var turnstileRejectedErrorCodes = map[string]bool{
+var rejectedErrorCodes = map[string]bool{
 	"missing-input-response": true,
 	"invalid-input-response": true,
 	"timeout-or-duplicate":   true,
 	"invalid-input-secret":   true,
 }
 
-func (v *turnstileVerifier) Verify(ctx context.Context, secret, token, remoteIP string) Outcome {
+func (v *Client) Verify(ctx context.Context, secret, token, remoteIP string) Outcome {
 	form := url.Values{"secret": {secret}, "response": {token}}
 	if remoteIP != "" && remoteIP != "unknown" {
 		form.Set("remoteip", remoteIP)
@@ -60,7 +68,7 @@ func (v *turnstileVerifier) Verify(ctx context.Context, secret, token, remoteIP 
 		return Unavailable
 	}
 
-	var payload turnstileSiteverifyResponse
+	var payload siteverifyResponse
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		return Unavailable
 	}
@@ -68,7 +76,7 @@ func (v *turnstileVerifier) Verify(ctx context.Context, secret, token, remoteIP 
 		return Passed
 	}
 	for _, code := range payload.ErrorCodes {
-		if turnstileRejectedErrorCodes[code] {
+		if rejectedErrorCodes[code] {
 			return Rejected
 		}
 	}
