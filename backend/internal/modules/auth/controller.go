@@ -15,19 +15,22 @@ import (
 	"website/backend/internal/modules/login"
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
+	"website/backend/internal/modules/twofactor"
 )
 
 type controller struct {
 	service             *Service
 	loginService        *login.Service
 	registrationService *registration.Service
+	twoFactorService    *twofactor.Service
 }
 
-func newController(service *Service, loginService *login.Service, registrationService *registration.Service) *controller {
+func newController(service *Service, loginService *login.Service, registrationService *registration.Service, twoFactorService *twofactor.Service) *controller {
 	return &controller{
 		service:             service,
 		loginService:        loginService,
 		registrationService: registrationService,
+		twoFactorService:    twoFactorService,
 	}
 }
 
@@ -203,13 +206,13 @@ func (c *controller) changePassword(ctx *gin.Context) {
 }
 
 func (c *controller) setupTwoFactor(ctx *gin.Context) {
-	var req TwoFactorSetupRequest
+	var req twofactor.TwoFactorSetupRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Password == "" {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 
-	resp, err := c.service.SetupTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Password)
+	resp, err := c.twoFactorService.Setup(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Password)
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -219,7 +222,7 @@ func (c *controller) setupTwoFactor(ctx *gin.Context) {
 }
 
 func (c *controller) enableTwoFactor(ctx *gin.Context) {
-	var req TwoFactorEnableRequest
+	var req twofactor.TwoFactorEnableRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Code == "" || req.Password == "" {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
@@ -231,7 +234,7 @@ func (c *controller) enableTwoFactor(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := c.service.EnableTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Code, req.Password, currentToken)
+	resp, err := c.twoFactorService.Enable(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Code, req.Password, currentToken)
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -241,7 +244,7 @@ func (c *controller) enableTwoFactor(ctx *gin.Context) {
 }
 
 func (c *controller) disableTwoFactor(ctx *gin.Context) {
-	var req TwoFactorDisableRequest
+	var req twofactor.TwoFactorDisableRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Password == "" {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
@@ -253,7 +256,7 @@ func (c *controller) disableTwoFactor(ctx *gin.Context) {
 		return
 	}
 
-	err = c.service.DisableTOTP(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Password, currentToken)
+	err = c.twoFactorService.Disable(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Password, currentToken)
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -263,13 +266,13 @@ func (c *controller) disableTwoFactor(ctx *gin.Context) {
 }
 
 func (c *controller) regenerateRecoveryCodes(ctx *gin.Context) {
-	var req TwoFactorDisableRequest
+	var req twofactor.TwoFactorDisableRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Password == "" {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
 
-	resp, err := c.service.RegenerateRecoveryCodes(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Password)
+	resp, err := c.twoFactorService.RegenerateRecoveryCodes(ctx.Request.Context(), ctx.GetString(guard.SessionUserIDKey), req.Password)
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -283,13 +286,13 @@ func (c *controller) emailRecoveryCodes(ctx *gin.Context) {
 }
 
 func (c *controller) verifySecondFactor(ctx *gin.Context) {
-	var req TwoFactorCodeRequest
+	var req twofactor.TwoFactorCodeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil || req.Code == "" {
 		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, "code"))
 		return
 	}
 
-	user, err := c.service.VerifySecondFactor(ctx.Request.Context(), req.Code, requestSessionMeta(ctx))
+	user, err := c.twoFactorService.VerifySecondFactor(ctx.Request.Context(), req.Code, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return

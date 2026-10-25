@@ -14,6 +14,8 @@ import (
 
 	"website/backend/internal/config"
 	"website/backend/internal/database"
+	"website/backend/internal/database/ent/pendingregistration"
+	"website/backend/internal/database/ent/user"
 )
 
 func testDB(t *testing.T) *database.Database {
@@ -148,6 +150,44 @@ func TestCreateAdminUserRejectsDuplicates(t *testing.T) {
 	}
 	if errors.Is(err, errUserNotFound) {
 		t.Fatal("duplicate nickname must not be reported as errUserNotFound")
+	}
+}
+
+func TestCreateAdminUserMarksNotRequiredAndClearsPending(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	tag := uniqueTag(t)
+	email := "adminpending+" + tag + "@example.com"
+	pending, err := db.Client.PendingRegistration.Create().
+		SetEmail(email).
+		SetNickname("ap" + tag).
+		SetPasswordHash("hash").
+		SetTokenHash("token-" + tag).
+		SetExpiresAt(time.Now().Add(30 * time.Minute)).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("seed pending: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Client.PendingRegistration.DeleteOneID(pending.ID).Exec(context.Background()) })
+
+	if _, err := CreateAdminUser(ctx, db, email, "ap"+tag, "pass1234"); err != nil {
+		t.Fatalf("CreateAdminUser: %v", err)
+	}
+	t.Cleanup(func() { _, _ = db.Client.User.Delete().Where(user.EmailEQ(email)).Exec(context.Background()) })
+
+	row, err := db.Client.User.Query().Where(user.EmailEQ(email)).Only(ctx)
+	if err != nil {
+		t.Fatalf("find user: %v", err)
+	}
+	if row.EmailVerificationStatus != "not_required" {
+		t.Fatalf("status = %q, want not_required", row.EmailVerificationStatus)
+	}
+	count, err := db.Client.PendingRegistration.Query().Where(pendingregistration.EmailEQ(email)).Count(ctx)
+	if err != nil {
+		t.Fatalf("count pending: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("pending rows = %d, want 0", count)
 	}
 }
 

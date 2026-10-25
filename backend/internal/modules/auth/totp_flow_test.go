@@ -21,17 +21,10 @@ import (
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
+	"website/backend/internal/modules/twofactor"
 )
 
-const testCodeHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-
-var testTOTPKey = []byte("0123456789abcdef0123456789abcdef")
-
 var recoveryCodePattern = regexp.MustCompile(`^[A-Z2-7]{4}(-[A-Z2-7]{4}){3}$`)
-
-func currentWindow() int64 {
-	return totpNow().Unix() / totpPeriodSeconds
-}
 
 func loginOK(t *testing.T, client *http.Client, tsURL, identifier, password string) {
 	t.Helper()
@@ -49,18 +42,18 @@ func post2FA(t *testing.T, client *http.Client, tsURL, path string, body any) *h
 	return postJSON(t, client, tsURL+"/api/v1/users/me/2fa/"+path, body)
 }
 
-func setup2FA(t *testing.T, client *http.Client, tsURL, password string) TwoFactorSetupResponse {
+func setup2FA(t *testing.T, client *http.Client, tsURL, password string) twofactor.TwoFactorSetupResponse {
 	t.Helper()
 
-	resp := post2FA(t, client, tsURL, "setup", TwoFactorSetupRequest{Password: password})
-	return decodeJSON[TwoFactorSetupResponse](t, resp, http.StatusOK)
+	resp := post2FA(t, client, tsURL, "setup", twofactor.TwoFactorSetupRequest{Password: password})
+	return decodeJSON[twofactor.TwoFactorSetupResponse](t, resp, http.StatusOK)
 }
 
-func enable2FA(t *testing.T, client *http.Client, tsURL, secret, password string) RecoveryCodesResponse {
+func enable2FA(t *testing.T, client *http.Client, tsURL, secret, password string) twofactor.RecoveryCodesResponse {
 	t.Helper()
 
-	resp := post2FA(t, client, tsURL, "enable", TwoFactorEnableRequest{Code: codeAt(t, secret, currentWindow()), Password: password})
-	return decodeJSON[RecoveryCodesResponse](t, resp, http.StatusOK)
+	resp := post2FA(t, client, tsURL, "enable", twofactor.TwoFactorEnableRequest{Code: twofactor.CodeAt(t, secret, twofactor.CurrentWindow()), Password: password})
+	return decodeJSON[twofactor.RecoveryCodesResponse](t, resp, http.StatusOK)
 }
 
 func decodeJSON[T any](t *testing.T, resp *http.Response, want int) T {
@@ -107,10 +100,10 @@ func assertErrorCode(t *testing.T, resp *http.Response, wantStatus int, wantCode
 func wrongCodesFor(t *testing.T, secret string, count int) []string {
 	t.Helper()
 
-	window := currentWindow()
-	taken := make(map[string]struct{}, totpSkewWindows*2+1)
-	for offset := -int64(totpSkewWindows); offset <= int64(totpSkewWindows); offset++ {
-		taken[codeAt(t, secret, window+offset)] = struct{}{}
+	window := twofactor.CurrentWindow()
+	taken := make(map[string]struct{}, twofactor.SkewWindows*2+1)
+	for offset := -int64(twofactor.SkewWindows); offset <= int64(twofactor.SkewWindows); offset++ {
+		taken[twofactor.CodeAt(t, secret, window+offset)] = struct{}{}
 	}
 
 	codes := make([]string, 0, count)
@@ -148,145 +141,6 @@ func recoveryCodeHashes(t *testing.T, db *database.Database, id uuid.UUID) []str
 	return hashes
 }
 
-func TestConsumeRecoveryCodeConcurrent(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-
-	tag := uniqueTag(t)
-	u, _ := createTestUser(t, db, tag)
-	userID := uuid.MustParse(u.ID)
-	repo := newRepository(db)
-
-	if _, err := db.Client.RecoveryCode.Create().SetUserID(userID).SetCodeHash(testCodeHash).Save(ctx); err != nil {
-		t.Fatalf("seed recovery code: %v", err)
-	}
-
-	results := make([]bool, 8)
-	var wg sync.WaitGroup
-	for i := range results {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			consumed, err := repo.consumeRecoveryCode(ctx, userID, testCodeHash)
-			if err != nil {
-				t.Errorf("consume %d: %v", i, err)
-				return
-			}
-			results[i] = consumed
-		}(i)
-	}
-	wg.Wait()
-
-	consumed := 0
-	for _, ok := range results {
-		if ok {
-			consumed++
-		}
-	}
-	if consumed != 1 {
-		t.Fatalf("consumed = %d, want exactly 1", consumed)
-	}
-
-	remaining, err := db.Client.RecoveryCode.Query().
-		Where(recoverycode.UserIDEQ(userID), recoverycode.UsedAtIsNil()).
-		Count(ctx)
-	if err != nil {
-		t.Fatalf("count unused codes: %v", err)
-	}
-	if remaining != 0 {
-		t.Fatalf("unused codes = %d, want 0", remaining)
-	}
-}
-
-func TestClaimTOTPCounterConcurrent(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-
-	tag := uniqueTag(t)
-	u, _ := createTestUser(t, db, tag)
-	userID := uuid.MustParse(u.ID)
-	repo := newRepository(db)
-
-	results := make([]bool, 8)
-	var wg sync.WaitGroup
-	for i := range results {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			claimed, err := repo.claimTOTPCounter(ctx, userID, 100)
-			if err != nil {
-				t.Errorf("claim %d: %v", i, err)
-				return
-			}
-			results[i] = claimed
-		}(i)
-	}
-	wg.Wait()
-
-	claimed := 0
-	for _, ok := range results {
-		if ok {
-			claimed++
-		}
-	}
-	if claimed != 1 {
-		t.Fatalf("claimed = %d, want exactly 1", claimed)
-	}
-
-	fetched, err := db.Client.User.Get(ctx, userID)
-	if err != nil {
-		t.Fatalf("reload user: %v", err)
-	}
-	if fetched.TotpLastCounter == nil || *fetched.TotpLastCounter != 100 {
-		t.Fatalf("stored counter = %v, want 100", fetched.TotpLastCounter)
-	}
-}
-
-func TestClaimTOTPCounterOrdering(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-
-	tag := uniqueTag(t)
-	u, _ := createTestUser(t, db, tag)
-	userID := uuid.MustParse(u.ID)
-	repo := newRepository(db)
-
-	for _, tc := range []struct {
-		counter int64
-		want    bool
-		kind    string
-	}{
-		{counter: 100, want: true, kind: "first claim from nil"},
-		{counter: 99, want: false, kind: "lower than stored"},
-		{counter: 100, want: false, kind: "equal to stored"},
-		{counter: 101, want: true, kind: "higher than stored"},
-	} {
-		claimed, err := repo.claimTOTPCounter(ctx, userID, tc.counter)
-		if err != nil {
-			t.Fatalf("claim %d (%s): %v", tc.counter, tc.kind, err)
-		}
-		if claimed != tc.want {
-			t.Fatalf("claim %d (%s) = %v, want %v", tc.counter, tc.kind, claimed, tc.want)
-		}
-	}
-
-	fetched, err := db.Client.User.Get(ctx, userID)
-	if err != nil {
-		t.Fatalf("reload user: %v", err)
-	}
-	if fetched.TotpLastCounter == nil || *fetched.TotpLastCounter != 101 {
-		t.Fatalf("stored counter = %v, want 101", fetched.TotpLastCounter)
-	}
-
-	missing, err := repo.claimTOTPCounter(ctx, uuid.New(), 500)
-	if err != nil && !ent.IsNotFound(err) {
-		t.Fatalf("claim for unknown user: %v", err)
-	}
-	if missing {
-		t.Fatal("claim for unknown user = true, want false")
-	}
-}
-
 func TestTwoFactorSetupEnableLifecycle(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
@@ -307,8 +161,8 @@ func TestTwoFactorSetupEnableLifecycle(t *testing.T) {
 	}
 
 	issued := enable2FA(t, client, ts.URL, setup.Secret, password)
-	if len(issued.RecoveryCodes) != recoveryCodesPerBatch {
-		t.Fatalf("recovery codes = %d, want %d", len(issued.RecoveryCodes), recoveryCodesPerBatch)
+	if len(issued.RecoveryCodes) != twofactor.RecoveryCodesPerBatch {
+		t.Fatalf("recovery codes = %d, want %d", len(issued.RecoveryCodes), twofactor.RecoveryCodesPerBatch)
 	}
 	for _, code := range issued.RecoveryCodes {
 		if !recoveryCodePattern.MatchString(code) {
@@ -327,11 +181,11 @@ func TestTwoFactorSetupEnableLifecycle(t *testing.T) {
 		t.Fatalf("current session me = %d, want 200", status)
 	}
 	stored := recoveryCodeHashes(t, db, id)
-	if len(stored) != recoveryCodesPerBatch {
-		t.Fatalf("recovery code rows = %d, want %d", len(stored), recoveryCodesPerBatch)
+	if len(stored) != twofactor.RecoveryCodesPerBatch {
+		t.Fatalf("recovery code rows = %d, want %d", len(stored), twofactor.RecoveryCodesPerBatch)
 	}
 	for _, code := range issued.RecoveryCodes {
-		if !containsHash(stored, hashRecoveryCode(code)) {
+		if !containsHash(stored, twofactor.HashRecoveryCode(code)) {
 			t.Fatalf("code %q hash missing from storage", code)
 		}
 	}
@@ -353,7 +207,7 @@ func TestTwoFactorSetupOverwritesSecret(t *testing.T) {
 		t.Fatalf("totp_last_counter = %d after setup, want nil", *row.TotpLastCounter)
 	}
 
-	advance(base.Add(totpSetupReuseWindow + time.Second))
+	advance(base.Add(twofactor.SetupReuseWindow + time.Second))
 	second := setup2FA(t, client, ts.URL, password)
 	if first.Secret == second.Secret {
 		t.Fatal("second setup returned the same secret")
@@ -362,12 +216,12 @@ func TestTwoFactorSetupOverwritesSecret(t *testing.T) {
 		t.Fatalf("totp_last_counter = %d after overwrite, want nil", *row.TotpLastCounter)
 	}
 
-	stale := post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: codeAt(t, first.Secret, currentWindow()), Password: password})
+	stale := post2FA(t, client, ts.URL, "enable", twofactor.TwoFactorEnableRequest{Code: twofactor.CodeAt(t, first.Secret, twofactor.CurrentWindow()), Password: password})
 	assertErrorCode(t, stale, http.StatusUnauthorized, "two_factor_invalid_code")
 
 	replacement := enable2FA(t, client, ts.URL, second.Secret, password)
-	if len(replacement.RecoveryCodes) != recoveryCodesPerBatch {
-		t.Fatalf("recovery codes = %d, want %d", len(replacement.RecoveryCodes), recoveryCodesPerBatch)
+	if len(replacement.RecoveryCodes) != twofactor.RecoveryCodesPerBatch {
+		t.Fatalf("recovery codes = %d, want %d", len(replacement.RecoveryCodes), twofactor.RecoveryCodesPerBatch)
 	}
 }
 
@@ -382,7 +236,7 @@ func TestTwoFactorSetupRejectedWhenEnabled(t *testing.T) {
 	setup := setup2FA(t, client, ts.URL, password)
 	enable2FA(t, client, ts.URL, setup.Secret, password)
 
-	resp := post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password})
+	resp := post2FA(t, client, ts.URL, "setup", twofactor.TwoFactorSetupRequest{Password: password})
 	assertErrorCode(t, resp, http.StatusConflict, "two_factor_already_enabled")
 }
 
@@ -394,7 +248,7 @@ func TestTwoFactorEnableWithoutSetup(t *testing.T) {
 	client := testClient(t)
 	loginOK(t, client, ts.URL, u.Email, password)
 
-	resp := post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: "123456", Password: password})
+	resp := post2FA(t, client, ts.URL, "enable", twofactor.TwoFactorEnableRequest{Code: "123456", Password: password})
 	assertErrorCode(t, resp, http.StatusConflict, "two_factor_not_setup")
 }
 
@@ -406,7 +260,7 @@ func TestTwoFactorDisableWithoutSetup(t *testing.T) {
 	client := testClient(t)
 	loginOK(t, client, ts.URL, u.Email, password)
 
-	resp := post2FA(t, client, ts.URL, "disable", TwoFactorDisableRequest{Password: password})
+	resp := post2FA(t, client, ts.URL, "disable", twofactor.TwoFactorDisableRequest{Password: password})
 	assertErrorCode(t, resp, http.StatusConflict, "two_factor_not_setup")
 }
 
@@ -422,7 +276,7 @@ func TestTwoFactorEnableWrongCode(t *testing.T) {
 	setup := setup2FA(t, client, ts.URL, password)
 	wrong := wrongCodesFor(t, setup.Secret, 1)[0]
 
-	resp := post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: wrong, Password: password})
+	resp := post2FA(t, client, ts.URL, "enable", twofactor.TwoFactorEnableRequest{Code: wrong, Password: password})
 	if resp.StatusCode != http.StatusUnauthorized {
 		resp.Body.Close()
 		t.Fatalf("status = %d, want 401", resp.StatusCode)
@@ -453,13 +307,13 @@ func TestTwoFactorSetupRequiresPassword(t *testing.T) {
 	client := testClient(t)
 	loginOK(t, client, ts.URL, u.Email, password)
 
-	assertErrorCode(t, post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{}), http.StatusBadRequest, "invalid_request")
-	assertErrorCode(t, post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password + "-wrong"}), http.StatusUnauthorized, "invalid_credentials")
+	assertErrorCode(t, post2FA(t, client, ts.URL, "setup", twofactor.TwoFactorSetupRequest{}), http.StatusBadRequest, "invalid_request")
+	assertErrorCode(t, post2FA(t, client, ts.URL, "setup", twofactor.TwoFactorSetupRequest{Password: password + "-wrong"}), http.StatusUnauthorized, "invalid_credentials")
 	if row := userRow(t, db, id); row.TotpSecret != nil {
 		t.Fatal("wrong password wrote a totp secret")
 	}
 
-	first := decodeJSON[TwoFactorSetupResponse](t, post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password}), http.StatusOK)
+	first := decodeJSON[twofactor.TwoFactorSetupResponse](t, post2FA(t, client, ts.URL, "setup", twofactor.TwoFactorSetupRequest{Password: password}), http.StatusOK)
 	if first.Secret == "" {
 		t.Fatal("setup returned an empty secret")
 	}
@@ -468,7 +322,7 @@ func TestTwoFactorSetupRequiresPassword(t *testing.T) {
 		t.Fatal("setup did not persist a sealed secret")
 	}
 
-	assertErrorCode(t, post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password + "-wrong"}), http.StatusUnauthorized, "invalid_credentials")
+	assertErrorCode(t, post2FA(t, client, ts.URL, "setup", twofactor.TwoFactorSetupRequest{Password: password + "-wrong"}), http.StatusUnauthorized, "invalid_credentials")
 	after := userRow(t, db, id)
 	if after.TotpSecret == nil || *after.TotpSecret != *before.TotpSecret {
 		t.Fatal("wrong password changed the stored totp secret")
@@ -485,10 +339,10 @@ func TestTwoFactorEnableRequiresPassword(t *testing.T) {
 	loginOK(t, client, ts.URL, u.Email, password)
 
 	setup := setup2FA(t, client, ts.URL, password)
-	code := codeAt(t, setup.Secret, currentWindow())
+	code := twofactor.CodeAt(t, setup.Secret, twofactor.CurrentWindow())
 
-	assertErrorCode(t, post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: code}), http.StatusBadRequest, "invalid_request")
-	assertErrorCode(t, post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: code, Password: password + "-wrong"}), http.StatusUnauthorized, "invalid_credentials")
+	assertErrorCode(t, post2FA(t, client, ts.URL, "enable", twofactor.TwoFactorEnableRequest{Code: code}), http.StatusBadRequest, "invalid_request")
+	assertErrorCode(t, post2FA(t, client, ts.URL, "enable", twofactor.TwoFactorEnableRequest{Code: code, Password: password + "-wrong"}), http.StatusUnauthorized, "invalid_credentials")
 	if row := userRow(t, db, id); row.TotpEnabledAt != nil {
 		t.Fatal("wrong password enabled two-factor authentication")
 	}
@@ -496,9 +350,9 @@ func TestTwoFactorEnableRequiresPassword(t *testing.T) {
 		t.Fatalf("recovery code rows = %d after wrong password, want 0", len(hashes))
 	}
 
-	issued := decodeJSON[RecoveryCodesResponse](t, post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: code, Password: password}), http.StatusOK)
-	if len(issued.RecoveryCodes) != recoveryCodesPerBatch {
-		t.Fatalf("recovery codes = %d, want %d", len(issued.RecoveryCodes), recoveryCodesPerBatch)
+	issued := decodeJSON[twofactor.RecoveryCodesResponse](t, post2FA(t, client, ts.URL, "enable", twofactor.TwoFactorEnableRequest{Code: code, Password: password}), http.StatusOK)
+	if len(issued.RecoveryCodes) != twofactor.RecoveryCodesPerBatch {
+		t.Fatalf("recovery codes = %d, want %d", len(issued.RecoveryCodes), twofactor.RecoveryCodesPerBatch)
 	}
 }
 
@@ -520,7 +374,7 @@ func TestTwoFactorSecretEncryptedAtRest(t *testing.T) {
 		t.Fatal("totp_secret stored as plaintext")
 	}
 
-	opened, err := openSecret(testTOTPKey, *stored)
+	opened, err := twofactor.OpenSecret(twofactor.TestTOTPKey, *stored)
 	if err != nil {
 		t.Fatalf("open stored secret: %v", err)
 	}
@@ -541,7 +395,7 @@ func TestTwoFactorDisableLifecycle(t *testing.T) {
 	setup := setup2FA(t, client, ts.URL, password)
 	enable2FA(t, client, ts.URL, setup.Secret, password)
 
-	resp := post2FA(t, client, ts.URL, "disable", TwoFactorDisableRequest{Password: password})
+	resp := post2FA(t, client, ts.URL, "disable", twofactor.TwoFactorDisableRequest{Password: password})
 	decodeJSON[map[string]any](t, resp, http.StatusOK)
 
 	row := userRow(t, db, id)
@@ -571,28 +425,28 @@ func TestTwoFactorRegenerateRecoveryCodes(t *testing.T) {
 	client := testClient(t)
 	loginOK(t, client, ts.URL, u.Email, password)
 
-	notEnabled := post2FA(t, client, ts.URL, "recovery-codes", TwoFactorDisableRequest{Password: password})
+	notEnabled := post2FA(t, client, ts.URL, "recovery-codes", twofactor.TwoFactorDisableRequest{Password: password})
 	assertErrorCode(t, notEnabled, http.StatusConflict, "two_factor_not_enabled")
 
 	setup := setup2FA(t, client, ts.URL, password)
 	issued := enable2FA(t, client, ts.URL, setup.Secret, password)
 
-	badPassword := post2FA(t, client, ts.URL, "recovery-codes", TwoFactorDisableRequest{Password: "wrong-password-1"})
+	badPassword := post2FA(t, client, ts.URL, "recovery-codes", twofactor.TwoFactorDisableRequest{Password: "wrong-password-1"})
 	assertErrorCode(t, badPassword, http.StatusUnauthorized, "invalid_credentials")
 
-	regen := post2FA(t, client, ts.URL, "recovery-codes", TwoFactorDisableRequest{Password: password})
-	replacement := decodeJSON[RecoveryCodesResponse](t, regen, http.StatusOK)
-	if len(replacement.RecoveryCodes) != recoveryCodesPerBatch {
-		t.Fatalf("regenerated codes = %d, want %d", len(replacement.RecoveryCodes), recoveryCodesPerBatch)
+	regen := post2FA(t, client, ts.URL, "recovery-codes", twofactor.TwoFactorDisableRequest{Password: password})
+	replacement := decodeJSON[twofactor.RecoveryCodesResponse](t, regen, http.StatusOK)
+	if len(replacement.RecoveryCodes) != twofactor.RecoveryCodesPerBatch {
+		t.Fatalf("regenerated codes = %d, want %d", len(replacement.RecoveryCodes), twofactor.RecoveryCodesPerBatch)
 	}
 
 	oldHashes := make(map[string]struct{}, len(issued.RecoveryCodes))
 	for _, code := range issued.RecoveryCodes {
-		oldHashes[hashRecoveryCode(code)] = struct{}{}
+		oldHashes[twofactor.HashRecoveryCode(code)] = struct{}{}
 	}
 	stored := recoveryCodeHashes(t, db, id)
-	if len(stored) != recoveryCodesPerBatch {
-		t.Fatalf("recovery code rows = %d, want %d", len(stored), recoveryCodesPerBatch)
+	if len(stored) != twofactor.RecoveryCodesPerBatch {
+		t.Fatalf("recovery code rows = %d, want %d", len(stored), twofactor.RecoveryCodesPerBatch)
 	}
 	for _, hash := range stored {
 		if _, ok := oldHashes[hash]; ok {
@@ -600,7 +454,7 @@ func TestTwoFactorRegenerateRecoveryCodes(t *testing.T) {
 		}
 	}
 	for _, code := range replacement.RecoveryCodes {
-		if _, ok := oldHashes[hashRecoveryCode(code)]; ok {
+		if _, ok := oldHashes[twofactor.HashRecoveryCode(code)]; ok {
 			t.Fatalf("regenerated code %q repeats an old one", code)
 		}
 	}
@@ -675,13 +529,13 @@ func logoutOK(t *testing.T, client *http.Client, tsURL string) {
 func verify2FA(t *testing.T, client *http.Client, tsURL, code string) *http.Response {
 	t.Helper()
 
-	return postJSON(t, client, tsURL+"/api/v1/sessions/current/verify", TwoFactorCodeRequest{Code: code})
+	return postJSON(t, client, tsURL+"/api/v1/sessions/current/verify", twofactor.TwoFactorCodeRequest{Code: code})
 }
 
 func nextWindowCode(t *testing.T, secret string) string {
 	t.Helper()
 
-	return pinWindow(t, secret, currentWindow()+2)
+	return twofactor.PinWindow(t, secret, twofactor.CurrentWindow()+2)
 }
 
 func meStatus(t *testing.T, client *http.Client, tsURL string) int {
@@ -711,7 +565,7 @@ func unusedCodeCount(t *testing.T, db *database.Database, id uuid.UUID, code str
 	count, err := db.Client.RecoveryCode.Query().
 		Where(
 			recoverycode.UserIDEQ(id),
-			recoverycode.CodeHashEQ(hashRecoveryCode(code)),
+			recoverycode.CodeHashEQ(twofactor.HashRecoveryCode(code)),
 			recoverycode.UsedAtIsNil(),
 		).
 		Count(context.Background())
@@ -902,7 +756,7 @@ func TestTwoFactorDecryptFailureIsServerError(t *testing.T) {
 		t.Fatalf("counter after decrypt failure = %v, want unchanged %v", after, *claimed)
 	}
 
-	sealed, err := sealSecret(testTOTPKey, setup.Secret)
+	sealed, err := twofactor.SealSecret(twofactor.TestTOTPKey, setup.Secret)
 	if err != nil {
 		t.Fatalf("reseal secret: %v", err)
 	}
@@ -947,7 +801,7 @@ func TestTwoFactorDisableRevokesOtherSessions(t *testing.T) {
 	assertErrorCode(t, cLogin, http.StatusUnauthorized, "two_factor_required")
 	decodeJSON[UserResponse](t, verify2FA(t, clientC, ts.URL, nextWindowCode(t, setup.Secret)), http.StatusOK)
 
-	disable := post2FA(t, clientC, ts.URL, "disable", TwoFactorDisableRequest{Password: password})
+	disable := post2FA(t, clientC, ts.URL, "disable", twofactor.TwoFactorDisableRequest{Password: password})
 	decodeJSON[map[string]any](t, disable, http.StatusOK)
 
 	if status := meStatus(t, clientA, ts.URL); status != http.StatusUnauthorized {
@@ -968,47 +822,7 @@ func containsHash(hashes []string, want string) bool {
 }
 
 func fakeTOTPClock(t *testing.T, base time.Time) func(time.Time) {
-	t.Helper()
-	previous := totpNow
-	now := base
-	totpNow = func() time.Time { return now }
-	t.Cleanup(func() { totpNow = previous })
-	return func(at time.Time) { now = at }
-}
-
-func TestClaimTOTPSetupRejectedWhenFresh(t *testing.T) {
-	db := testDB(t)
-	ctx := context.Background()
-
-	tag := uniqueTag(t)
-	u, _ := createTestUser(t, db, tag)
-	userID := uuid.MustParse(u.ID)
-	repo := newRepository(db)
-	base := time.Unix(1700000001, 0)
-
-	claimed, err := repo.claimTOTPSetup(ctx, userID, testCodeHash, base)
-	if err != nil {
-		t.Fatalf("first claim: %v", err)
-	}
-	if !claimed {
-		t.Fatal("first claim on fresh user rejected, want success")
-	}
-
-	reclaimed, err := repo.claimTOTPSetup(ctx, userID, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", base)
-	if err != nil {
-		t.Fatalf("second claim: %v", err)
-	}
-	if reclaimed {
-		t.Fatal("second claim inside reuse window accepted, want rejected")
-	}
-
-	stale, err := repo.claimTOTPSetup(ctx, userID, "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", base.Add(totpSetupReuseWindow+time.Second))
-	if err != nil {
-		t.Fatalf("stale claim: %v", err)
-	}
-	if !stale {
-		t.Fatal("claim past reuse window rejected, want success")
-	}
+	return twofactor.FakeTOTPClock(t, base)
 }
 
 func TestTwoFactorSetupReusesSecretImmediately(t *testing.T) {
@@ -1044,7 +858,7 @@ func TestTwoFactorSetupReusesSecretJustInsideWindow(t *testing.T) {
 	u, password := createTestUser(t, db, tag)
 	ts := newTestApp(t, db)
 	client := testClient(t)
-	window := totpSetupReuseWindow
+	window := twofactor.SetupReuseWindow
 	advance := fakeTOTPClock(t, time.Unix(1700000001, 0))
 	loginOK(t, client, ts.URL, u.Email, password)
 
@@ -1065,7 +879,7 @@ func TestTwoFactorSetupRegeneratesAtWindowBoundary(t *testing.T) {
 	ts := newTestApp(t, db)
 	client := testClient(t)
 	base := time.Unix(1700000001, 0)
-	window := totpSetupReuseWindow
+	window := twofactor.SetupReuseWindow
 	advance := fakeTOTPClock(t, base)
 	loginOK(t, client, ts.URL, u.Email, password)
 
@@ -1081,7 +895,7 @@ func TestTwoFactorSetupRegeneratesAtWindowBoundary(t *testing.T) {
 		t.Fatalf("totp_setup_at = %v, want %v", row.TotpSetupAt, base.Add(window))
 	}
 
-	stale := post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: codeAt(t, first.Secret, currentWindow()), Password: password})
+	stale := post2FA(t, client, ts.URL, "enable", twofactor.TwoFactorEnableRequest{Code: twofactor.CodeAt(t, first.Secret, twofactor.CurrentWindow()), Password: password})
 	assertErrorCode(t, stale, http.StatusUnauthorized, "two_factor_invalid_code")
 
 	enable2FA(t, client, ts.URL, second.Secret, password)
@@ -1097,16 +911,16 @@ func TestTwoFactorSetupConcurrentCallsShareSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
 	}
-	svc := newService(db, session.New(settingsModule.Service, scs.New()), testTOTPKey, settingsModule.Service, ratelimit.New(), verifyPolicies{})
+	svc := twofactor.New(db, session.New(settingsModule.Service, scs.New()), settingsModule.Service, ratelimit.New(), twofactor.TestTOTPKey)
 
-	results := make([]TwoFactorSetupResponse, 8)
+	results := make([]twofactor.TwoFactorSetupResponse, 8)
 	errs := make([]error, 8)
 	var wg sync.WaitGroup
 	for i := range results {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			results[i], errs[i] = svc.SetupTOTP(context.Background(), u.ID, password)
+			results[i], errs[i] = svc.Setup(context.Background(), u.ID, password)
 		}(i)
 	}
 	wg.Wait()
@@ -1125,7 +939,7 @@ func TestTwoFactorSetupConcurrentCallsShareSecret(t *testing.T) {
 	if sealed == nil {
 		t.Fatal("totp_secret nil after concurrent setup")
 	}
-	plain, err := openSecret(testTOTPKey, *sealed)
+	plain, err := twofactor.OpenSecret(twofactor.TestTOTPKey, *sealed)
 	if err != nil {
 		t.Fatalf("open stored secret: %v", err)
 	}
@@ -1149,7 +963,7 @@ func TestTwoFactorSetupAtClearedByDisable(t *testing.T) {
 		t.Fatal("totp_setup_at nil after setup, precondition broken")
 	}
 
-	resp := post2FA(t, client, ts.URL, "disable", TwoFactorDisableRequest{Password: password})
+	resp := post2FA(t, client, ts.URL, "disable", twofactor.TwoFactorDisableRequest{Password: password})
 	decodeJSON[map[string]any](t, resp, http.StatusOK)
 
 	row := userRow(t, db, id)
@@ -1191,7 +1005,7 @@ func userRowSecret(t *testing.T, db *database.Database, id uuid.UUID) string {
 	if row.TotpSecret == nil {
 		t.Fatal("totp_secret nil, want sealed secret")
 	}
-	plain, err := openSecret(testTOTPKey, *row.TotpSecret)
+	plain, err := twofactor.OpenSecret(twofactor.TestTOTPKey, *row.TotpSecret)
 	if err != nil {
 		t.Fatalf("open stored secret: %v", err)
 	}
@@ -1240,7 +1054,7 @@ func TestTwoFactorSetupReuseDecryptFailureIsServerError(t *testing.T) {
 		t.Fatalf("corrupt secret column: %v", err)
 	}
 
-	resp := post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password})
+	resp := post2FA(t, client, ts.URL, "setup", twofactor.TwoFactorSetupRequest{Password: password})
 	assertErrorCode(t, resp, http.StatusInternalServerError, "internal_error")
 
 	row := userRow(t, db, id)
@@ -1261,7 +1075,7 @@ func TestTwoFactorSetupReuseEmptySecretIsServerError(t *testing.T) {
 	loginOK(t, client, ts.URL, u.Email, password)
 
 	setup2FA(t, client, ts.URL, password)
-	sealed, err := sealSecret(testTOTPKey, "")
+	sealed, err := twofactor.SealSecret(twofactor.TestTOTPKey, "")
 	if err != nil {
 		t.Fatalf("seal empty secret: %v", err)
 	}
@@ -1269,7 +1083,7 @@ func TestTwoFactorSetupReuseEmptySecretIsServerError(t *testing.T) {
 		t.Fatalf("seed empty plaintext: %v", err)
 	}
 
-	resp := post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password})
+	resp := post2FA(t, client, ts.URL, "setup", twofactor.TwoFactorSetupRequest{Password: password})
 	assertErrorCode(t, resp, http.StatusInternalServerError, "internal_error")
 
 	if row := userRow(t, db, id); row.TotpSecret == nil || *row.TotpSecret != sealed {

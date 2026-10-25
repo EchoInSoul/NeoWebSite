@@ -1,16 +1,17 @@
 package auth
 
 import (
+	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/modules/login"
 	"website/backend/internal/modules/registration"
 )
 
 type rateLimitPolicies struct {
-	LoginIdentifier     failurePolicy
-	LoginIP             windowPolicy
-	RegisterEmail       windowPolicy
-	RegisterIP          windowPolicy
-	EmailVerificationIP windowPolicy
+	LoginIdentifier     ratelimit.FailurePolicy
+	LoginIP             ratelimit.WindowPolicy
+	RegisterEmail       ratelimit.WindowPolicy
+	RegisterIP          ratelimit.WindowPolicy
+	EmailVerificationIP ratelimit.WindowPolicy
 }
 
 func defaultRateLimitPolicies() rateLimitPolicies {

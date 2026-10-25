@@ -29,6 +29,7 @@ import (
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
+	"website/backend/internal/modules/twofactor"
 )
 
 func newTestAppWithSessions(t *testing.T, db *database.Database) (*httptest.Server, *scs.SessionManager) {
@@ -65,7 +66,7 @@ func newTestAppWithRatePolicies(t *testing.T, db *database.Database, policies ra
 	return newTestAppWithSettings(t, db, settingsModule.Service, ratelimit.New(), policies)
 }
 
-func newTestAppWithVerifyPolicies(t *testing.T, db *database.Database, policies verifyPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+func newTestAppWithVerifyPolicies(t *testing.T, db *database.Database, policies twofactor.Policies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
 
 	settingsModule, err := settings.New(db)
@@ -85,10 +86,11 @@ func newTestAppWithVerifyPolicies(t *testing.T, db *database.Database, policies 
 
 	sessionService := session.New(settingsModule.Service, sm)
 	captchaService := captcha.NewService(settingsModule.Service, nil)
-	service := newService(db, sessionService, testTOTPKey, settingsModule.Service, ratelimit.New(), policies)
+	service := newService(db, sessionService, settingsModule.Service)
 	loginService := login.New(db, sessionService, ratelimit.New(), captchaService)
 	registrationService := registration.New(db, settingsModule.Service, ratelimit.New(), &fakeMailer{configured: true}, captchaService)
-	module := &Module{Service: service, controller: newController(service, loginService, registrationService)}
+	twoFactorService := twofactor.NewWithPolicies(db, sessionService, settingsModule.Service, ratelimit.New(), policies, []byte("0123456789abcdef0123456789abcdef"))
+	module := &Module{Service: service, controller: newController(service, loginService, registrationService, twoFactorService)}
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))
@@ -136,7 +138,7 @@ func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settings
 
 	sessionService := session.New(settingsService, sm)
 	captchaService := captcha.NewService(settingsService, verifier)
-	service := newService(db, sessionService, testTOTPKey, settingsService, limiter, defaultVerifyPolicies())
+	service := newService(db, sessionService, settingsService)
 	loginService := login.NewWithPolicies(db, sessionService, limiter, login.Policies{
 		IdentifierFailure: policies.LoginIdentifier,
 		IPWindow:          policies.LoginIP,
@@ -146,7 +148,8 @@ func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settings
 		IPWindow:                policies.RegisterIP,
 		EmailVerificationWindow: policies.EmailVerificationIP,
 	}, mailer, captchaService)
-	module := &Module{Service: service, controller: newController(service, loginService, registrationService)}
+	twoFactorService := twofactor.New(db, sessionService, settingsService, ratelimit.New(), []byte("0123456789abcdef0123456789abcdef"))
+	module := &Module{Service: service, controller: newController(service, loginService, registrationService, twoFactorService)}
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))

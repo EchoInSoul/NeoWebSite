@@ -10,6 +10,7 @@ import (
 	"website/backend/internal/config"
 	"website/backend/internal/database"
 	"website/backend/internal/modules/settings"
+	"website/backend/internal/modules/twofactor"
 )
 
 func resetSessionMaxAge(t *testing.T, svc *settings.Service) {
@@ -103,7 +104,7 @@ func TestSetupTOTPBlockedWhenGloballyDisabled(t *testing.T) {
 	client := testClient(t)
 	loginOK(t, client, ts.URL, user.Email, password)
 
-	resp := post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password})
+	resp := post2FA(t, client, ts.URL, "setup", twofactor.TwoFactorSetupRequest{Password: password})
 	if resp.StatusCode != http.StatusForbidden {
 		resp.Body.Close()
 		t.Fatalf("setup status = %d, want 403", resp.StatusCode)
@@ -128,7 +129,7 @@ func TestEnableTOTPBlockedWhenGloballyDisabled(t *testing.T) {
 		t.Fatalf("disable totp: %v", err)
 	}
 
-	resp := post2FA(t, client, ts.URL, "enable", TwoFactorEnableRequest{Code: codeAt(t, setup.Secret, currentWindow()), Password: password})
+	resp := post2FA(t, client, ts.URL, "enable", twofactor.TwoFactorEnableRequest{Code: twofactor.CodeAt(t, setup.Secret, twofactor.CurrentWindow()), Password: password})
 	if resp.StatusCode != http.StatusForbidden {
 		resp.Body.Close()
 		t.Fatalf("enable status = %d, want 403", resp.StatusCode)
@@ -173,10 +174,10 @@ func TestRecoveryCodesStillWorkWhenSiteSwitchOff(t *testing.T) {
 		t.Fatalf("disable totp: %v", err)
 	}
 
-	resp := post2FA(t, client, ts.URL, "recovery-codes", TwoFactorDisableRequest{Password: password})
-	codes := decodeJSON[RecoveryCodesResponse](t, resp, http.StatusOK)
-	if len(codes.RecoveryCodes) != recoveryCodesPerBatch {
-		t.Fatalf("recovery codes = %d, want %d", len(codes.RecoveryCodes), recoveryCodesPerBatch)
+	resp := post2FA(t, client, ts.URL, "recovery-codes", twofactor.TwoFactorDisableRequest{Password: password})
+	codes := decodeJSON[twofactor.RecoveryCodesResponse](t, resp, http.StatusOK)
+	if len(codes.RecoveryCodes) != twofactor.RecoveryCodesPerBatch {
+		t.Fatalf("recovery codes = %d, want %d", len(codes.RecoveryCodes), twofactor.RecoveryCodesPerBatch)
 	}
 }
 
@@ -263,7 +264,7 @@ func TestTOTPSetupFailsWhenSettingsUnavailable(t *testing.T) {
 		_ = svc.ResetItem(context.Background(), "auth", "totp_enabled")
 	})
 
-	resp := post2FA(t, client, ts.URL, "setup", TwoFactorSetupRequest{Password: password})
+	resp := post2FA(t, client, ts.URL, "setup", twofactor.TwoFactorSetupRequest{Password: password})
 	assertErrorCode(t, resp, http.StatusInternalServerError, "internal_error")
 }
 
@@ -283,7 +284,7 @@ func TestDisableTOTPStillWorksWhenGloballyDisabled(t *testing.T) {
 		t.Fatalf("disable totp: %v", err)
 	}
 
-	resp := post2FA(t, client, ts.URL, "disable", TwoFactorDisableRequest{Password: password})
+	resp := post2FA(t, client, ts.URL, "disable", twofactor.TwoFactorDisableRequest{Password: password})
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
 		t.Fatalf("disable status = %d, want 200", resp.StatusCode)

@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/modules/settings"
+	"website/backend/internal/modules/twofactor"
 )
 
 func openRegistration(t *testing.T, svc *settings.Service) {
@@ -93,7 +95,7 @@ func TestLoginRateLimitIPWindow(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
 	policies := disabledRateLimitPolicies()
-	policies.LoginIP = windowPolicy{Limit: 2, Window: time.Hour}
+	policies.LoginIP = ratelimit.WindowPolicy{Limit: 2, Window: time.Hour}
 	ts, _, _ := newTestAppWithRatePolicies(t, db, policies)
 	client := testClient(t)
 
@@ -164,7 +166,7 @@ func TestLoginRateLimitCooldownExpires(t *testing.T) {
 	tag := uniqueTag(t)
 	u, password := createTestUser(t, db, tag)
 	policies := disabledRateLimitPolicies()
-	policies.LoginIdentifier = failurePolicy{Limit: 2, Window: time.Minute, Cooldown: 50 * time.Millisecond}
+	policies.LoginIdentifier = ratelimit.FailurePolicy{Limit: 2, Window: time.Minute, Cooldown: 50 * time.Millisecond}
 	ts, _, _ := newTestAppWithRatePolicies(t, db, policies)
 	client := testClient(t)
 
@@ -180,7 +182,7 @@ func TestLoginRateLimitCooldownExpires(t *testing.T) {
 	loginOK(t, client, ts.URL, u.Email, password)
 }
 
-func enableRateLimitTOTP(t *testing.T, tsURL, email, password string) TwoFactorSetupResponse {
+func enableRateLimitTOTP(t *testing.T, tsURL, email, password string) twofactor.TwoFactorSetupResponse {
 	t.Helper()
 
 	client := testClient(t)
@@ -220,8 +222,8 @@ func TestVerifyRateLimitAcrossSessions(t *testing.T) {
 
 func TestVerifyRateLimitIPGate(t *testing.T) {
 	db := testDB(t)
-	policies := defaultVerifyPolicies()
-	policies.VerifyIP = windowPolicy{Limit: 2, Window: time.Hour}
+	policies := twofactor.DefaultPolicies()
+	policies.IP = ratelimit.WindowPolicy{Limit: 2, Window: time.Hour}
 	ts, _, _ := newTestAppWithVerifyPolicies(t, db, policies)
 	client := testClient(t)
 

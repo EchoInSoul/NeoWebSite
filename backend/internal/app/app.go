@@ -29,6 +29,7 @@ import (
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
+	"website/backend/internal/modules/twofactor"
 )
 
 const (
@@ -81,7 +82,8 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	captchaService := captchaModule.Service
 	loginService := login.New(db, sessionService, limiter, captchaService)
 	registrationService := registration.New(db, settingsModule.Service, limiter, mailModule.Mailer, captchaService)
-	authModule := auth.New(db, sessionService, cfg.TOTPEncryptionKey, settingsModule.Service, limiter, loginService, registrationService)
+	twoFactorService := twofactor.New(db, sessionService, settingsModule.Service, limiter, cfg.TOTPEncryptionKey)
+	authModule := auth.New(db, sessionService, settingsModule.Service, loginService, registrationService, twoFactorService)
 	authModule.Register(api)
 	settingsModule.Register(api)
 

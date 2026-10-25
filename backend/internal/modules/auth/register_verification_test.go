@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/user"
@@ -884,7 +885,7 @@ func TestVerifyEmailRegistrationAfterSwitchOff(t *testing.T) {
 
 func TestVerifyRateLimit(t *testing.T) {
 	db := testDB(t)
-	policies := rateLimitPolicies{EmailVerificationIP: windowPolicy{Limit: 1, Window: time.Hour}}
+	policies := rateLimitPolicies{EmailVerificationIP: ratelimit.WindowPolicy{Limit: 1, Window: time.Hour}}
 	ts, _, _ := newTestAppWithRatePolicies(t, db, policies)
 
 	first := postJSON(t, testClient(t), ts.URL+"/api/v1/users/email-verifications", map[string]string{"token": "bogus"})
@@ -1013,7 +1014,7 @@ func TestLoginPendingRegistrationWrongPasswordCountsFailure(t *testing.T) {
 			Where(pendingregistration.EmailEQ(email)).Exec(context.Background())
 	})
 
-	policies := rateLimitPolicies{LoginIdentifier: failurePolicy{Limit: 1, Window: time.Minute, Cooldown: time.Minute}}
+	policies := rateLimitPolicies{LoginIdentifier: ratelimit.FailurePolicy{Limit: 1, Window: time.Minute, Cooldown: time.Minute}}
 	ts, _, _ := newTestAppWithRatePolicies(t, db, policies)
 
 	first := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: "wrong123"})

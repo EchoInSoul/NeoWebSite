@@ -3,12 +3,12 @@ package auth
 import (
 	"github.com/gin-gonic/gin"
 
-	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
 	"website/backend/internal/modules/login"
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
+	"website/backend/internal/modules/twofactor"
 )
 
 type Module struct {
@@ -17,11 +17,11 @@ type Module struct {
 	controller *controller
 }
 
-func New(db *database.Database, sessions *session.Service, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, loginService *login.Service, registrationService *registration.Service) *Module {
-	service := newService(db, sessions, totpKey, settingsService, limiter, defaultVerifyPolicies())
+func New(db *database.Database, sessions *session.Service, settingsService *settings.Service, loginService *login.Service, registrationService *registration.Service, twoFactorService *twofactor.Service) *Module {
+	service := newService(db, sessions, settingsService)
 	return &Module{
 		Service:    service,
-		controller: newController(service, loginService, registrationService),
+		controller: newController(service, loginService, registrationService, twoFactorService),
 	}
 }
 
