@@ -1,4 +1,4 @@
-package auth
+package registration_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"website/backend/internal/database"
+	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/settings"
 )
 
@@ -43,7 +44,7 @@ func TestRegisterBlockedWhenSettingOff(t *testing.T) {
 	cleanupUserByEmail(t, db, email)
 	before := userCount(t, db)
 
-	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: "closed" + tag, Password: "pass1234"})
+	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users", auth.RegisterRequest{Email: email, Nickname: "closed" + tag, Password: "pass1234"})
 	status := resp.StatusCode
 	code := decodeError(t, resp)
 	if status != http.StatusForbidden {
@@ -63,7 +64,7 @@ func TestRegisterGatePrecedesFieldValidation(t *testing.T) {
 	ts, _, settingsService := newTestAppWithSessionsAndSettings(t, db)
 	closeRegistration(t, settingsService)
 
-	body := RegisterRequest{Email: "no-at", Nickname: "nickgate", Password: "pass1234"}
+	body := auth.RegisterRequest{Email: "no-at", Nickname: "nickgate", Password: "pass1234"}
 
 	closed := postJSON(t, testClient(t), ts.URL+"/api/v1/users", body)
 	if code := decodeError(t, closed); code != "registration_closed" {
@@ -86,7 +87,7 @@ func TestLoginUnaffectedWhenRegistrationClosed(t *testing.T) {
 
 	email := "login+" + tag + "@example.com"
 	cleanupUserByEmail(t, db, email)
-	created := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: "login" + tag, Password: "pass1234"})
+	created := postJSON(t, testClient(t), ts.URL+"/api/v1/users", auth.RegisterRequest{Email: email, Nickname: "login" + tag, Password: "pass1234"})
 	if created.StatusCode != http.StatusCreated {
 		created.Body.Close()
 		t.Fatalf("setup register status = %d, want 201", created.StatusCode)
@@ -95,7 +96,7 @@ func TestLoginUnaffectedWhenRegistrationClosed(t *testing.T) {
 
 	closeRegistration(t, settingsService)
 
-	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: "pass1234"})
+	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: email, Password: "pass1234"})
 	if resp.StatusCode != http.StatusOK {
 		code := decodeError(t, resp)
 		t.Fatalf("login while registration closed: status = %d, code = %q, want 200", resp.StatusCode, code)
@@ -112,7 +113,7 @@ func TestCreateAdminUserUnaffectedWhenClosed(t *testing.T) {
 	email := "admin+" + tag + "@example.com"
 	cleanupUserByEmail(t, db, email)
 
-	user, err := CreateAdminUser(context.Background(), db, email, "adm"+tag, "pass1234")
+	user, err := auth.CreateAdminUser(context.Background(), db, email, "adm"+tag, "pass1234")
 	if err != nil {
 		t.Fatalf("CreateAdminUser while closed = %v, want success", err)
 	}

@@ -1,4 +1,4 @@
-package auth
+package session_test
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 
 	"website/backend/internal/common/guard"
+	"website/backend/internal/modules/auth"
 )
 
 const (
@@ -102,7 +103,7 @@ func TestLoginStoresSessionMetadata(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"User-Agent": "probe/1.0",
 	})
 	resp.Body.Close()
@@ -139,7 +140,7 @@ func TestLoginTruncatesOversizedUserAgent(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"User-Agent": strings.Repeat("a", 2000),
 	})
 	resp.Body.Close()
@@ -161,7 +162,7 @@ func TestSessionIPIgnoresForwardedFor(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"X-Forwarded-For": "203.0.113.7",
 	})
 	resp.Body.Close()
@@ -196,7 +197,7 @@ func TestEstablishSessionClearsPendingKeys(t *testing.T) {
 	}
 	setSessionCookie(t, client, ts.URL, token)
 
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: u.Email, Password: password})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -224,7 +225,7 @@ func TestSessionActivityTouchThrottled(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", login.StatusCode)
@@ -266,14 +267,14 @@ func TestSessionActivityTouchThrottled(t *testing.T) {
 	}
 }
 
-func fetchSessions(t *testing.T, client *http.Client, tsURL string) (int, []SessionResponse) {
+func fetchSessions(t *testing.T, client *http.Client, tsURL string) (int, []auth.SessionResponse) {
 	t.Helper()
 
 	resp := doGET(t, client, tsURL+"/api/v1/users/me/sessions")
 	defer resp.Body.Close()
 
 	var body struct {
-		Items []SessionResponse `json:"items"`
+		Items []auth.SessionResponse `json:"items"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -288,7 +289,7 @@ func TestSessionsListIncludesCurrentWithMetadata(t *testing.T) {
 	ts, _ := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	login := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+	login := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"User-Agent": "probe/1.0",
 	})
 	login.Body.Close()
@@ -331,13 +332,13 @@ func TestSessionsListIsolatedPerUser(t *testing.T) {
 	ts, _ := newTestAppWithSessions(t, db)
 
 	firstClient := testClient(t)
-	firstLogin := postJSON(t, firstClient, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: first.Email, Password: firstPassword})
+	firstLogin := postJSON(t, firstClient, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: first.Email, Password: firstPassword})
 	firstLogin.Body.Close()
 	if firstLogin.StatusCode != http.StatusOK {
 		t.Fatalf("first login status = %d, want 200", firstLogin.StatusCode)
 	}
 	secondClient := testClient(t)
-	secondLogin := postJSON(t, secondClient, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: second.Email, Password: secondPassword})
+	secondLogin := postJSON(t, secondClient, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: second.Email, Password: secondPassword})
 	secondLogin.Body.Close()
 	if secondLogin.StatusCode != http.StatusOK {
 		t.Fatalf("second login status = %d, want 200", secondLogin.StatusCode)
@@ -360,7 +361,7 @@ func TestSessionsListExcludesPendingSessions(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", login.StatusCode)
@@ -416,7 +417,7 @@ func loginAs(t *testing.T, tsURL, email, password string) *http.Client {
 	t.Helper()
 
 	client := testClient(t)
-	resp := postJSON(t, client, tsURL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: password})
+	resp := postJSON(t, client, tsURL+"/api/v1/sessions", auth.LoginRequest{Identifier: email, Password: password})
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", resp.StatusCode)
@@ -621,7 +622,7 @@ func TestLoginTruncatesHeadersAtRuneBoundary(t *testing.T) {
 	ts, sm := newTestAppWithSessions(t, db)
 	client := testClient(t)
 
-	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
+	resp := postJSONWithHeaders(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: u.Email, Password: password}, map[string]string{
 		"User-Agent": strings.Repeat("日", 200),
 	})
 	resp.Body.Close()

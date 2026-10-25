@@ -1,10 +1,11 @@
-package auth
+package registration_test
 
 import (
 	"context"
 	"net/http"
 	"testing"
 
+	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/settings"
 )
 
@@ -54,7 +55,7 @@ func TestRegisterDomainControlBlocksOtherDomains(t *testing.T) {
 
 	blocked := "blocked+" + tag + "@gmail.com"
 	before := userCount(t, db)
-	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: blocked, Nickname: "blk" + tag, Password: "pass1234"})
+	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users", auth.RegisterRequest{Email: blocked, Nickname: "blk" + tag, Password: "pass1234"})
 	if resp.StatusCode != http.StatusBadRequest {
 		resp.Body.Close()
 		t.Fatalf("blocked status = %d, want 400", resp.StatusCode)
@@ -67,7 +68,7 @@ func TestRegisterDomainControlBlocksOtherDomains(t *testing.T) {
 	}
 
 	cleanupUserByEmail(t, db, "ok+"+tag+"@example.com")
-	allowed := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: "ok+" + tag + "@Example.COM", Nickname: "ok" + tag, Password: "pass1234"})
+	allowed := postJSON(t, testClient(t), ts.URL+"/api/v1/users", auth.RegisterRequest{Email: "ok+" + tag + "@Example.COM", Nickname: "ok" + tag, Password: "pass1234"})
 	allowed.Body.Close()
 	if allowed.StatusCode != http.StatusCreated {
 		t.Fatalf("allowed status = %d, want 201", allowed.StatusCode)
@@ -86,7 +87,7 @@ func TestRegisterDomainControlEmptyListAllowsAnyDomain(t *testing.T) {
 		t.Cleanup(func() {
 			cleanupUserByEmail(t, db, email)
 		})
-		resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: email, Nickname: nickname, Password: "pass1234"})
+		resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users", auth.RegisterRequest{Email: email, Nickname: nickname, Password: "pass1234"})
 		if resp.StatusCode != http.StatusCreated {
 			code := decodeError(t, resp)
 			t.Fatalf("%s: status = %d, want 201 (code %q)", email, resp.StatusCode, code)
@@ -100,7 +101,7 @@ func TestRegisterPasswordPolicyMinLength(t *testing.T) {
 	ts, _, settingsService := newTestAppWithSessionsAndSettings(t, db)
 	enablePasswordRequirements(t, settingsService, 10)
 
-	weak := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: "weak+" + tag + "@example.com", Nickname: "wk" + tag, Password: "pass12345"})
+	weak := postJSON(t, testClient(t), ts.URL+"/api/v1/users", auth.RegisterRequest{Email: "weak+" + tag + "@example.com", Nickname: "wk" + tag, Password: "pass12345"})
 	if weak.StatusCode != http.StatusBadRequest {
 		weak.Body.Close()
 		t.Fatalf("weak status = %d, want 400", weak.StatusCode)
@@ -110,7 +111,7 @@ func TestRegisterPasswordPolicyMinLength(t *testing.T) {
 	}
 
 	cleanupUserByEmail(t, db, "strong+"+tag+"@example.com")
-	strong := postJSON(t, testClient(t), ts.URL+"/api/v1/users", RegisterRequest{Email: "strong+" + tag + "@example.com", Nickname: "str" + tag, Password: "pass123456"})
+	strong := postJSON(t, testClient(t), ts.URL+"/api/v1/users", auth.RegisterRequest{Email: "strong+" + tag + "@example.com", Nickname: "str" + tag, Password: "pass123456"})
 	strong.Body.Close()
 	if strong.StatusCode != http.StatusCreated {
 		t.Fatalf("strong status = %d, want 201", strong.StatusCode)
@@ -125,13 +126,13 @@ func TestChangePasswordFollowsRequirementsSetting(t *testing.T) {
 	enablePasswordRequirements(t, settingsService, 10)
 
 	client := testClient(t)
-	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: u.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: u.Email, Password: password})
 	login.Body.Close()
 	if login.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", login.StatusCode)
 	}
 
-	weak := postJSON(t, client, ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "pass12345"})
+	weak := postJSON(t, client, ts.URL+"/api/v1/users/me/password", auth.PasswordChangeRequest{CurrentPassword: password, NewPassword: "pass12345"})
 	if weak.StatusCode != http.StatusBadRequest {
 		weak.Body.Close()
 		t.Fatalf("weak change status = %d, want 400", weak.StatusCode)
@@ -140,7 +141,7 @@ func TestChangePasswordFollowsRequirementsSetting(t *testing.T) {
 		t.Fatalf("weak change code = %q, want weak_password", code)
 	}
 
-	ok := postJSON(t, client, ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{CurrentPassword: password, NewPassword: "pass123456"})
+	ok := postJSON(t, client, ts.URL+"/api/v1/users/me/password", auth.PasswordChangeRequest{CurrentPassword: password, NewPassword: "pass123456"})
 	ok.Body.Close()
 	if ok.StatusCode != http.StatusOK {
 		t.Fatalf("ok change status = %d, want 200", ok.StatusCode)

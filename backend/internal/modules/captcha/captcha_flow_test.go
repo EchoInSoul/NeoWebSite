@@ -1,4 +1,4 @@
-package auth
+package captcha_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
+	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/captcha"
 	"website/backend/internal/modules/settings"
 )
@@ -116,7 +117,7 @@ func TestLoginRequiresCaptchaWhenEnabled(t *testing.T) {
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
 
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password})
 	assertCaptchaFailed(t, resp)
 	if cookie := sessionCookie(t, client.Jar, ts.URL); cookie != "" {
 		t.Fatalf("session cookie = %q, want none after a captcha rejection", cookie)
@@ -125,7 +126,7 @@ func TestLoginRequiresCaptchaWhenEnabled(t *testing.T) {
 		t.Fatalf("verifier calls = %d, want 0 for a blank token", verifier.calls)
 	}
 
-	ok := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "the-token"})
+	ok := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "the-token"})
 	defer ok.Body.Close()
 	if ok.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", ok.StatusCode, http.StatusOK)
@@ -148,7 +149,7 @@ func TestLoginRejectedCaptchaBlocksLogin(t *testing.T) {
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
 
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "bad-token"})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "bad-token"})
 	assertCaptchaFailed(t, resp)
 	if cookie := sessionCookie(t, client.Jar, ts.URL); cookie != "" {
 		t.Fatalf("session cookie = %q, want none after a rejected captcha", cookie)
@@ -165,7 +166,7 @@ func TestLoginRejectsWhenCaptchaUnavailable(t *testing.T) {
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
 
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "anything"})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "anything"})
 	assertCaptchaFailed(t, resp)
 	if cookie := sessionCookie(t, client.Jar, ts.URL); cookie != "" {
 		t.Fatalf("session cookie = %q, want none when the verifier is unavailable", cookie)
@@ -182,7 +183,7 @@ func TestLoginSkipsCaptchaForOtherProviders(t *testing.T) {
 	setCaptchaProvider(t, svc, "builtin", "the-secret")
 
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d for a non-turnstile provider", resp.StatusCode, http.StatusOK)
@@ -201,7 +202,7 @@ func TestLoginSkipsCaptchaWhenDisabled(t *testing.T) {
 	user, password := createTestUser(t, db, tag)
 
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d with captcha disabled", resp.StatusCode, http.StatusOK)
@@ -221,7 +222,7 @@ func TestLoginSkipsCaptchaWithoutSecret(t *testing.T) {
 	setCaptchaProvider(t, svc, "turnstile", "")
 
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d when no secret is configured", resp.StatusCode, http.StatusOK)
@@ -242,7 +243,7 @@ func TestLoginSkipsCaptchaOutsideScopes(t *testing.T) {
 	setCaptchaScopes(t, svc, "register")
 
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d when login is outside the captcha scopes", resp.StatusCode, http.StatusOK)
@@ -263,7 +264,7 @@ func TestRegisterSkipsCaptchaOutsideScopes(t *testing.T) {
 
 	before := userCount(t, db)
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{
+	resp := postJSON(t, client, ts.URL+"/api/v1/users", auth.RegisterRequest{
 		Email:    "open+" + tag + "@example.com",
 		Nickname: "open" + tag,
 		Password: "pass-" + tag,
@@ -291,14 +292,14 @@ func TestCaptchaScopesEmptySkipsEverywhere(t *testing.T) {
 	setCaptchaScopes(t, svc, "")
 
 	client := testClient(t)
-	login := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password})
+	login := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password})
 	defer login.Body.Close()
 	if login.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want %d with an empty scope list", login.StatusCode, http.StatusOK)
 	}
 
 	before := userCount(t, db)
-	register := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{
+	register := postJSON(t, client, ts.URL+"/api/v1/users", auth.RegisterRequest{
 		Email:    "open+" + tag + "@example.com",
 		Nickname: "open" + tag,
 		Password: "pass-" + tag,
@@ -326,12 +327,12 @@ func TestLoginCaptchaFailuresDoNotLockAccount(t *testing.T) {
 
 	client := testClient(t)
 	for attempt := 0; attempt < defaultRateLimitPolicies().LoginIdentifier.Limit+1; attempt++ {
-		resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "bad-token"})
+		resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "bad-token"})
 		assertCaptchaFailed(t, resp)
 	}
 
 	verifier.outcome = captcha.Passed
-	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "good-token"})
+	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "good-token"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d — captcha rejections must not consume the login failure budget", resp.StatusCode, http.StatusOK)
@@ -348,7 +349,7 @@ func TestRegisterRequiresCaptchaWhenEnabled(t *testing.T) {
 
 	before := userCount(t, db)
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{
+	resp := postJSON(t, client, ts.URL+"/api/v1/users", auth.RegisterRequest{
 		Email:    "signup+" + tag + "@example.com",
 		Nickname: "signup" + tag,
 		Password: "pass-" + tag,
@@ -361,7 +362,7 @@ func TestRegisterRequiresCaptchaWhenEnabled(t *testing.T) {
 		t.Fatalf("verifier calls = %d, want 0 for a blank token", verifier.calls)
 	}
 
-	ok := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{
+	ok := postJSON(t, client, ts.URL+"/api/v1/users", auth.RegisterRequest{
 		Email:        "signup+" + tag + "@example.com",
 		Nickname:     "signup" + tag,
 		Password:     "pass-" + tag,
@@ -386,7 +387,7 @@ func TestRegisterRejectedCaptchaCreatesNoUser(t *testing.T) {
 
 	before := userCount(t, db)
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{
+	resp := postJSON(t, client, ts.URL+"/api/v1/users", auth.RegisterRequest{
 		Email:        "blocked+" + tag + "@example.com",
 		Nickname:     "blocked" + tag,
 		Password:     "pass-" + tag,
@@ -408,7 +409,7 @@ func TestRegisterRejectsWhenCaptchaUnavailable(t *testing.T) {
 
 	before := userCount(t, db)
 	client := testClient(t)
-	resp := postJSON(t, client, ts.URL+"/api/v1/users", RegisterRequest{
+	resp := postJSON(t, client, ts.URL+"/api/v1/users", auth.RegisterRequest{
 		Email:        "open+" + tag + "@example.com",
 		Nickname:     "open" + tag,
 		Password:     "pass-" + tag,

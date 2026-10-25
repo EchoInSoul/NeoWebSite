@@ -1,4 +1,4 @@
-package auth
+package registration_test
 
 import (
 	"bytes"
@@ -24,6 +24,7 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/user"
+	"website/backend/internal/modules/auth"
 	"website/backend/internal/modules/mail"
 	"website/backend/internal/modules/settings"
 )
@@ -152,7 +153,7 @@ func TestRegisterCreatesPendingInsteadOfUser(t *testing.T) {
 	before := userCount(t, db)
 	email := "verify+" + tag + "@example.com"
 	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "v" + tag, Password: "pass1234"})
+		auth.RegisterRequest{Email: email, Nickname: "v" + tag, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202", resp.StatusCode)
@@ -209,7 +210,7 @@ func TestRegisterVerificationOffCreatesNotRequiredUser(t *testing.T) {
 	})
 
 	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "off" + tag, Password: "pass1234"})
+		auth.RegisterRequest{Email: email, Nickname: "off" + tag, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
@@ -240,7 +241,7 @@ func TestRegisterWithoutSMTPFailsClosed(t *testing.T) {
 	before := userCount(t, db)
 
 	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "ns" + tag, Password: "pass1234"})
+		auth.RegisterRequest{Email: email, Nickname: "ns" + tag, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", resp.StatusCode)
@@ -269,7 +270,7 @@ func TestRegisterWithoutSiteURLFailsClosed(t *testing.T) {
 	email := "nosite+" + tag + "@example.com"
 
 	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "nsite" + tag, Password: "pass1234"})
+		auth.RegisterRequest{Email: email, Nickname: "nsite" + tag, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", resp.StatusCode)
@@ -299,7 +300,7 @@ func TestRegisterInvalidSiteURL(t *testing.T) {
 			email := "badurl+" + tag + "@example.com"
 
 			resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-				RegisterRequest{Email: email, Nickname: "bu" + tag, Password: "pass1234"})
+				auth.RegisterRequest{Email: email, Nickname: "bu" + tag, Password: "pass1234"})
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusServiceUnavailable {
 				t.Fatalf("status = %d, want 503 for %q", resp.StatusCode, siteURL)
@@ -321,7 +322,7 @@ func TestRegisterBuildsVerifyLinkWithSitePath(t *testing.T) {
 	email := "path+" + tag + "@example.com"
 
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "p" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "p" + tag, Password: "pass1234"}).Body.Close()
 	mails := mailer.sent()
 	if len(mails) != 1 {
 		t.Fatalf("mails = %d, want 1", len(mails))
@@ -342,7 +343,7 @@ func TestRegisterSendFailureDeletesPending(t *testing.T) {
 	before := userCount(t, db)
 
 	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "sf" + tag, Password: "pass1234"})
+		auth.RegisterRequest{Email: email, Nickname: "sf" + tag, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", resp.StatusCode)
@@ -365,9 +366,9 @@ func TestRegisterResubmitReplacesPending(t *testing.T) {
 	email := "resubmit+" + tag + "@example.com"
 
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "rs" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "rs" + tag, Password: "pass1234"}).Body.Close()
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "rs" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "rs" + tag, Password: "pass1234"}).Body.Close()
 
 	if pendingCount(t, db, email) != 1 {
 		t.Fatal("resubmit must keep exactly one pending row")
@@ -407,7 +408,7 @@ func TestRegisterVerificationConcurrentSameEmail(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			statuses[i], errs[i] = postJSONStatus(testClient(t), ts.URL+"/api/v1/users",
-				RegisterRequest{Email: email, Nickname: "race" + tag, Password: "pass1234"})
+				auth.RegisterRequest{Email: email, Nickname: "race" + tag, Password: "pass1234"})
 		}(i)
 	}
 	wg.Wait()
@@ -434,7 +435,7 @@ func TestRegisterWithPendingAndSwitchOffCreatesUser(t *testing.T) {
 	email := "switchoff+" + tag + "@example.com"
 
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "so" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "so" + tag, Password: "pass1234"}).Body.Close()
 	if pendingCount(t, db, email) != 1 {
 		t.Fatal("setup did not create a pending row")
 	}
@@ -446,7 +447,7 @@ func TestRegisterWithPendingAndSwitchOffCreatesUser(t *testing.T) {
 	})
 
 	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "so" + tag, Password: "pass1234"})
+		auth.RegisterRequest{Email: email, Nickname: "so" + tag, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
@@ -482,7 +483,7 @@ func TestRegisterVerificationEnabledRejectsExistingEmail(t *testing.T) {
 	})
 
 	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "te" + tag, Password: "pass1234"})
+		auth.RegisterRequest{Email: email, Nickname: "te" + tag, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", resp.StatusCode)
@@ -514,7 +515,7 @@ func TestRegisterVerificationEnabledRejectsExistingNickname(t *testing.T) {
 	})
 
 	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: "newemail+" + tag + "@example.com", Nickname: nickname, Password: "pass1234"})
+		auth.RegisterRequest{Email: "newemail+" + tag + "@example.com", Nickname: nickname, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", resp.StatusCode)
@@ -539,7 +540,7 @@ func TestRegisterAllowsSameNicknameAcrossPending(t *testing.T) {
 				Where(pendingregistration.EmailEQ(email)).Exec(context.Background())
 		})
 		resp := postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-			RegisterRequest{Email: email, Nickname: nickname, Password: "pass1234"})
+			auth.RegisterRequest{Email: email, Nickname: nickname, Password: "pass1234"})
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusAccepted {
 			t.Fatalf("%s: status = %d, want 202", email, resp.StatusCode)
@@ -562,7 +563,7 @@ func TestRegisterDoesNotUseLogSender(t *testing.T) {
 	email := "requiresmtp+" + tag + "@example.com"
 
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "rsmtp" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "rsmtp" + tag, Password: "pass1234"}).Body.Close()
 	mails := mailer.sent()
 	if len(mails) != 1 {
 		t.Fatalf("mails = %d, want 1", len(mails))
@@ -590,7 +591,7 @@ func TestVerifyEmailRegistration(t *testing.T) {
 	setSiteURL(t, settingsService, "https://example.com")
 	email := "verifyok+" + tag + "@example.com"
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "vo" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "vo" + tag, Password: "pass1234"}).Body.Close()
 	token := extractToken(t, mailer.sent()[0].Body.Text)
 
 	client := testClient(t)
@@ -623,7 +624,7 @@ func TestVerifyEmailRegistrationRejectsUnknownAndExpired(t *testing.T) {
 	setSiteURL(t, settingsService, "https://example.com")
 	email := "expired+" + tag + "@example.com"
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "ex" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "ex" + tag, Password: "pass1234"}).Body.Close()
 	token := extractToken(t, mailer.sent()[0].Body.Text)
 
 	unknown := postJSON(t, testClient(t), ts.URL+"/api/v1/users/email-verifications", map[string]string{"token": "unknown"})
@@ -655,7 +656,7 @@ func TestVerifyEmailRegistrationConcurrent(t *testing.T) {
 	setSiteURL(t, settingsService, "https://example.com")
 	email := "vrace+" + tag + "@example.com"
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "vr" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "vr" + tag, Password: "pass1234"}).Body.Close()
 	token := extractToken(t, mailer.sent()[0].Body.Text)
 
 	statuses := make([]int, 2)
@@ -697,7 +698,7 @@ func TestVerifyPendingEmailTaken(t *testing.T) {
 	setSiteURL(t, settingsService, "https://example.com")
 	email := "taken+" + tag + "@example.com"
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "tk" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "tk" + tag, Password: "pass1234"}).Body.Close()
 	token := extractToken(t, mailer.sent()[0].Body.Text)
 	_, err := db.Client.User.Create().SetEmail(email).SetNickname("other" + tag).SetPasswordHash("hash").
 		SetEmailVerificationStatus("not_required").Save(context.Background())
@@ -728,7 +729,7 @@ func TestVerifyPendingNicknameTaken(t *testing.T) {
 	email := "nt+" + tag + "@example.com"
 	nickname := "nt" + tag
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: nickname, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: nickname, Password: "pass1234"}).Body.Close()
 	token := extractToken(t, mailer.sent()[0].Body.Text)
 	_, err := db.Client.User.Create().SetEmail("other+" + tag + "@example.com").SetNickname(nickname).SetPasswordHash("hash").
 		SetEmailVerificationStatus("not_required").Save(context.Background())
@@ -846,10 +847,10 @@ func TestVerifyOldTokenInvalidAfterResubmit(t *testing.T) {
 	email := "oldtoken+" + tag + "@example.com"
 
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "ot" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "ot" + tag, Password: "pass1234"}).Body.Close()
 	first := extractToken(t, mailer.sent()[0].Body.Text)
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "ot" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "ot" + tag, Password: "pass1234"}).Body.Close()
 	second := extractToken(t, mailer.sent()[1].Body.Text)
 
 	old := postJSON(t, testClient(t), ts.URL+"/api/v1/users/email-verifications", map[string]string{"token": first})
@@ -871,7 +872,7 @@ func TestVerifyEmailRegistrationAfterSwitchOff(t *testing.T) {
 	setSiteURL(t, settingsService, "https://example.com")
 	email := "afterswitch+" + tag + "@example.com"
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "as" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "as" + tag, Password: "pass1234"}).Body.Close()
 	token := extractToken(t, mailer.sent()[0].Body.Text)
 	if err := settingsService.SetBool(context.Background(), "register", "email_verification_enabled", false); err != nil {
 		t.Fatalf("disable verification: %v", err)
@@ -925,9 +926,9 @@ func TestLoginPendingRegistrationCorrectPassword(t *testing.T) {
 	setSiteURL(t, settingsService, "https://example.com")
 	email := "pend+" + tag + "@example.com"
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "pd" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "pd" + tag, Password: "pass1234"}).Body.Close()
 
-	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: "pass1234"})
+	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: email, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden || decodeError(t, resp) != "email_not_verified" {
 		t.Fatalf("status = %d, want 403 email_not_verified", resp.StatusCode)
@@ -943,9 +944,9 @@ func TestLoginPendingRegistrationWrongPassword(t *testing.T) {
 	setSiteURL(t, settingsService, "https://example.com")
 	email := "pendwrong+" + tag + "@example.com"
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "pw" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "pw" + tag, Password: "pass1234"}).Body.Close()
 
-	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: "wrong123"})
+	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: email, Password: "wrong123"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized || decodeError(t, resp) != "invalid_credentials" {
 		t.Fatalf("status = %d, want 401 invalid_credentials", resp.StatusCode)
@@ -961,7 +962,7 @@ func TestLoginPendingRegistrationExpired(t *testing.T) {
 	setSiteURL(t, settingsService, "https://example.com")
 	email := "pendexp+" + tag + "@example.com"
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: email, Nickname: "pe" + tag, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: email, Nickname: "pe" + tag, Password: "pass1234"}).Body.Close()
 	if _, err := db.Client.PendingRegistration.Update().
 		Where(pendingregistration.EmailEQ(email)).
 		SetExpiresAt(time.Now().Add(-time.Minute)).
@@ -969,7 +970,7 @@ func TestLoginPendingRegistrationExpired(t *testing.T) {
 		t.Fatalf("expire pending: %v", err)
 	}
 
-	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: "pass1234"})
+	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: email, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized || decodeError(t, resp) != "invalid_credentials" {
 		t.Fatalf("status = %d, want 401 invalid_credentials", resp.StatusCode)
@@ -985,9 +986,9 @@ func TestLoginPendingRegistrationByNickname(t *testing.T) {
 	setSiteURL(t, settingsService, "https://example.com")
 	nickname := "pn" + tag
 	postJSON(t, testClient(t), ts.URL+"/api/v1/users",
-		RegisterRequest{Email: "pennick+" + tag + "@example.com", Nickname: nickname, Password: "pass1234"}).Body.Close()
+		auth.RegisterRequest{Email: "pennick+" + tag + "@example.com", Nickname: nickname, Password: "pass1234"}).Body.Close()
 
-	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: nickname, Password: "pass1234"})
+	resp := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: nickname, Password: "pass1234"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized || decodeError(t, resp) != "invalid_credentials" {
 		t.Fatalf("status = %d, want 401 invalid_credentials", resp.StatusCode)
@@ -1017,11 +1018,11 @@ func TestLoginPendingRegistrationWrongPasswordCountsFailure(t *testing.T) {
 	policies := rateLimitPolicies{LoginIdentifier: ratelimit.FailurePolicy{Limit: 1, Window: time.Minute, Cooldown: time.Minute}}
 	ts, _, _ := newTestAppWithRatePolicies(t, db, policies)
 
-	first := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: "wrong123"})
+	first := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: email, Password: "wrong123"})
 	if first.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("first status = %d, want 401", first.StatusCode)
 	}
-	second := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", LoginRequest{Identifier: email, Password: "wrong123"})
+	second := postJSON(t, testClient(t), ts.URL+"/api/v1/sessions", auth.LoginRequest{Identifier: email, Password: "wrong123"})
 	if second.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("second status = %d, want 429", second.StatusCode)
 	}
