@@ -4,6 +4,50 @@
 
 ---
 
+## 2026-10-25 · 登录 / 注册拆成独立模块，限流与校验下沉共享层
+
+**范围**：后端新增 `internal/modules/{login,registration,session}` 三个能力模块与 `internal/common/userinput`、`internal/common/ratelimit/policy.go`；删除 `auth` 的 `session.go`、`email_verification.go`、`validate.go`（实现与对应单测随迁）；`auth` 保留 2FA / 会话管理 / 账号资料 / 管理端 captcha 自检薄壳，`Login` / `Register` / `VerifyEmailRegistration` 三条路由改由 controller 分发到注入的 login / registration 服务；`app.go` 装配四个新依赖；README 模块表重写。零接口改动、零迁移、零前端改动。**未提交。**
+
+**动机**：登录、注册与人机验证一样继续挤在 `auth` 的 service 里；本轮把登录、注册也拆出去，速率限制（策略与 key 生成）跟着各自模块走，而不是留在 auth 的共享结构体字段里。
+
+**决策**：
+- `modules/login`：密码登录、bcrypt、未验证 pending 密码比对、2FA 分叉、失败计数与 IP 窗口；`Policies{IdentifierFailure, IPWindow}`，`DefaultPolicies()` 载默认值，测试走 `NewWithPolicies`。
+- `modules/registration`：注册全流程（开关、字段、域名白名单、pending upsert、验证邮件与补偿）、`VerifyEmail`；`Policies{EmailWindow, IPWindow, EmailVerificationWindow}`；`verifyPendingRegistration` 的建号事务与冲突分类随迁到该模块 repository，三个直接测仓库内部的用例（补偿不删 replaced、删除计数守卫、旧 token 不消费）一并搬走并保留在案。
+- `modules/session`：scs 封装——`Establish`（含 session_max_age 截止期）、`EnterPending2FA`、pending 用户与尝试次数读写、auth version、会话列表 / 撤销 / 吊销其他会话；pending 2FA 的会话键常量从 auth 挪到 session 包，测试用的键名字面量留在 auth 测试里。
+- `common/ratelimit`：`WindowPolicy` / `FailurePolicy` 类型 + `AllowWindow` / `CheckFailure` / `RecordFailure` / `ResetFailure` + `IPKey` / `HashedKey`；auth 的 `windowPolicy` / `failurePolicy` 变为类型别名，原有 2FA 验证限流策略与默认值仍归 auth。
+- `common/userinput`：邮箱 / 昵称 / bio / 密码校验与归一化、密码最小长度钳制、邮箱域名匹配；auth 与 registration 共用同一套，避免安全规则两份。
+- `auth` 的 captcha 窄接口收敛为只有 `VerifyConfig`（管理端自检用），登录 / 注册各自直接依赖注入的 captcha 服务。
+- 装配链：`settings → session → captcha → login → registration → auth`，全部在 `app.go` 显式注入；auth 模块签名新增 `loginService` / `registrationService` 两个参数。
+- 测试装配：auth 的 `newTestAppWithCaptchaVerifier` 同时构造 login / registration（login 策略沿用测试传入的 Login 字段，registration 同理）；2FA 验证限流测试改走新的 `newTestAppWithVerifyPolicies`。
+
+**行为**：不变。三条登录限流、两条注册限流、两条邮箱验证限流、2FA 验证失败锁定的阈值 / 窗口 / 冷却全部保持；错误码、路由、响应形状不变。
+
+**验证**：`gofmt -l` 干净、`go build ./...` 通过、`scripts/check.sh` 输出 `check ok`、全量 `scripts/test.sh` 全绿（含偶发的 `TestVerifyEmailRegistrationConcurrent` 本轮通过）。app_test 的 `login` helper 因与新包名冲突改名为 `postLogin`（仅测试内改名）。
+
+**已知缺口**：`auth` 设置组仍未拆 captcha 组；管理端自检路由仍在 auth；`builtin` provider 仍无实现；`access` 模块读 users 表与 `findUserByIdentifier` 双用途（登录 vs 注册查重）未在本轮处理，留待邮箱登录轮。
+
+---
+
+## 2026-10-25 · 人机验证拆成独立能力模块
+
+**范围**：后端新增 `internal/modules/captcha/{service,verifier,turnstile}.go` 与 `turnstile_test.go`；删除 `internal/modules/auth/captcha.go`、`captcha_test.go`；`auth` 的 `service.go` / `module.go` / 三个测试文件改为通过窄接口调用；`internal/app/app.go` 装配并注入 captcha 服务；`backend/README.md` 模块表更新；`backend/scripts/check.sh` 的 gofmt 清单跳过工作区已删除的文件。零接口改动、零迁移、零前端改动。**未提交。**
+
+**动机**：`auth` 包同时承接注册、登录、2FA、会话、账号资料、限流与人机验证；先拆人机验证，为后续 go-captcha 落地留出独立边界。
+
+**决策**：
+- captcha 做成**无路由的能力模块**（按 STYLE.md §1），只提供 `New`（生产用 Turnstile）、`NewService`（测试注入假 verifier）、`Service.Verify`、`Service.VerifyConfig`；包名即前缀，调用处是 `captcha.Verify` / `captcha.VerifyConfig`。
+- 管理端自检路由 `POST /admin/captcha/verifications` 及其 DTO 仍留在 auth，作为薄壳调用 captcha 服务；登录 / 注册的 captcha 校验也只保留薄委托。
+- 设置键仍读 `auth` 组（`captcha_enabled` / `captcha_provider` / `captcha_scopes` / `turnstile_secret_key`），本轮不搬设置组，避免同时改公开设置形状。
+- `auth` 的 captcha 依赖改为消费方窄接口（两个方法）；`newService` 收到 nil 直接 panic，不再静默退化为不可用实现。
+
+**行为**：不变。Turnstile 三态、开关 / provider / scope 判定、空 token 不调用 verifier、判负与不可用都映射 `captcha_failed`、管理端 400/503/403/401 全部保持。
+
+**验证**：`gofmt -l` 干净、`go build ./...` 通过、`scripts/check.sh` 输出 `check ok`、`scripts/test.sh ./internal/modules/captcha/ ./internal/modules/auth/ ./internal/app/` 全绿。全量 `scripts/test.sh` 仅 `TestVerifyEmailRegistrationConcurrent` 偶发失败（同一 token 并发验证，落败方有时收到 409 而非 400），已在改动前 HEAD `81c0ab2` 的临时 worktree 复现，与本次无关。
+
+**已知缺口**：`auth` 设置组尚未拆出 captcha 组；管理端自检路由仍在 auth；go-captcha 未实现，选择 `builtin` 仍然是前后端静默放行。
+
+---
+
 ## 2026-10-25 · 认证页 URL 改名（`/signin` `/signup` → `/login` `/register`）
 
 **范围**：前端路由目录 `app/signin/*` → `app/login/*`、`app/signup/*` → `app/register/*`（含 `verify` 子路由），另改 10 个文件里的 URL 字面量——`proxy.ts`、`lib/bootstrap-scripts.ts`、`hooks/{use-signout,use-signup}.ts`、`app/console/layout.tsx`、`components/console/session-expiry-dialog.tsx`、`app/login/signin-view.tsx`、`app/register/{signup-view.tsx,verify/verify-form.tsx}`、`app/ui-check/page.tsx`；后端 `internal/modules/auth/service.go`（邮件验证链接）+ `internal/modules/mail/controller.go`（预览链接）+ 两个测试断言；`backend/README.md` 一处路径提及；版本 0.23.0 → **0.23.1**（patch：邮件里的链接路径是对外可见行为）。零迁移、零接口改动、零依赖、零新文案。
