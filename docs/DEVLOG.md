@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-10-25 · 两步验证拆成独立能力模块
+
+**范围**：后端新增 `internal/modules/twofactor`（service / repository / totp / secretbox / ratelimit / dto / codetest），`auth` 删 `totp.go`、`secretbox.go`、`ratelimit.go` 与 9 个 2FA 方法、6 个仓库方法；auth controller 增 `twoFactorService` 字段，6 条 2FA 路由薄壳分发；`app.go` 装配（`TOTPEncryptionKey` 直达 twofactor）；README 模块表与会话章节引用修正；spec / plan 入档。零接口改动、零迁移、零前端改动。spec 见 [2026-10-25-neoblog-twofactor-module-design.md](superpowers/specs/2026-10-25-neoblog-twofactor-module-design.md)。**未提交。**
+
+**动机**：auth 历经 captcha、login、registration、session 四次拆分后，2FA 是最后一大块残留耦合（实现、仓库、路由 DTO、验证限流、加密钥匙）。
+
+**决策**：
+- twofactor 为无路由能力模块，`New` 注入 session / settings / limiter / `TOTPEncryptionKey`；settings 是消费方窄接口（仅 `GetBool`），nil 依赖 panic（禁兜底）。
+- **自包含裁定**：验密码、活跃用户（已删销毁会话 401）、吊销其他会话、auth version 读写这些共享动作为包内私有副本；已知代价——bcrypt 校验与销毁会话语义在 auth（ChangePassword）与 twofactor 各一份，改语义需两处同步。
+- **flow 测试留 auth 包**（spec §4.1 的"整体随迁"未执行）：twofactor 测试需打生产登录路由，登录 handler 在 auth 包，twofactor 测试 import auth 即成环（auth→twofactor），经 app 包也环。改为 flow 留 auth、`SetupTOTP` 等调用点改 `twofactor.X` 新名；twofactor 包保留纯单测（totp / secretbox / repository / 构造，24 条）。跨包引用的测试助手（`CodeAt` / `PinWindow` / `CurrentWindow` / `FakeTOTPClock` / `SealSecret` / `OpenSecret` / `TestTOTPKey` / `TestCodeHash` / `RecoveryCodesPerBatch` / `MatchTOTPCounter` / `SetupReuseWindow` / `SkewWindows` / `HashRecoveryCode` / `GenerateRecoveryCodes`）经导出桥接，其中测试工具落在生产文件 `codetest.go`。
+- 限流测试 `ratelimit_test.go` 整体留 auth（11 条），`TestVerifyRateLimitIPGate` 改 `twofactor.NewWithPolicies` 注入自定义 IP 窗口；`New` 拆出 `NewWithPolicies`（login 先例）。
+- `auth.totp_enabled` 不搬组（auth 域站级开关）；恢复码邮件接口 501 占位随薄壳保留。
+
+**验证**：`go build ./...`、`go vet ./...`、`gofmt` 干净；`scripts/check.sh` → `check ok`；全仓 `scripts/test.sh` 17 包绿（含偶发用例本轮通过）。变异自检三条实测红：①`recordAccountFailure` 注释 → `TestVerifyRateLimitAcrossSessions` 红；②锁定阈值改 `1<<30` → `TestTwoFactorVerifyLockout` 红（变异残留曾致全量三红，已恢复复绿）；③`toUser` 的 `TwoFactorEnabled` 改 `false` → `TestTwoFactorLoginSecondStageLifecycle` 红。装配单例核对：`twofactor.New` 全仓仅 `app.go` 一处。
+
+**已知缺口**：恢复码邮件仍 501；`totp_enabled` 不搬组；`findUserByIdentifier` 双用途留邮箱登录轮；测试工具在生产包可见（`codetest.go`），是跨包测试的既定妥协。
+
+---
+
 ## 2026-10-25 · 人机验证设置组归位与自检路由迁移
 
 **范围**：后端 `common/rbac`（新增 `system.captcha.view/edit`）、`modules/settings/{registry,controller}` 及测试、`modules/captcha`（升级为有路由模块：`module.go` / `controller.go` / `dto.go` / `verify_route_test.go`）、`modules/auth`（删自检路由薄壳与 captcha 依赖）、`app.go` 装配、新迁移 `20261025130000_relocate_captcha_settings.sql` + `20261025130100_seed_captcha_group.sql`、三条历史 seed 迁移改写；前端 `use-captcha-settings-save` / `admin-settings.ts` / `public-settings.ts` / `groups.ts` / 双语 i18n；README、本条目。spec 见 [2026-10-25-neoblog-captcha-settings-relocation-design.md](superpowers/specs/2026-10-25-neoblog-captcha-settings-relocation-design.md)。**未提交。**
