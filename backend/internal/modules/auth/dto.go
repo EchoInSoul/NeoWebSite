@@ -8,11 +8,6 @@ type User struct {
 	TwoFactorEnabled bool
 }
 
-type RegisterResult struct {
-	User                *User
-	VerificationPending bool
-}
-
 type RegisterPendingResponse struct {
 	Status string `json:"status"`
 }

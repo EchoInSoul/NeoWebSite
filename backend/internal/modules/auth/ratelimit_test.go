@@ -220,9 +220,9 @@ func TestVerifyRateLimitAcrossSessions(t *testing.T) {
 
 func TestVerifyRateLimitIPGate(t *testing.T) {
 	db := testDB(t)
-	policies := disabledRateLimitPolicies()
+	policies := defaultVerifyPolicies()
 	policies.VerifyIP = windowPolicy{Limit: 2, Window: time.Hour}
-	ts, _, _ := newTestAppWithRatePolicies(t, db, policies)
+	ts, _, _ := newTestAppWithVerifyPolicies(t, db, policies)
 	client := testClient(t)
 
 	for i := 0; i < 2; i++ {

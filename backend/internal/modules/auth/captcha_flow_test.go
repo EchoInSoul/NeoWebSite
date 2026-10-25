@@ -9,18 +9,19 @@ import (
 
 	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
+	"website/backend/internal/modules/captcha"
 	"website/backend/internal/modules/settings"
 )
 
 type fakeCaptchaVerifier struct {
-	outcome captchaOutcome
+	outcome captcha.Outcome
 	calls   int
 	secret  string
 	token   string
 	ip      string
 }
 
-func (f *fakeCaptchaVerifier) Verify(_ context.Context, secret, token, remoteIP string) captchaOutcome {
+func (f *fakeCaptchaVerifier) Verify(_ context.Context, secret, token, remoteIP string) captcha.Outcome {
 	f.calls++
 	f.secret = secret
 	f.token = token
@@ -28,7 +29,7 @@ func (f *fakeCaptchaVerifier) Verify(_ context.Context, secret, token, remoteIP 
 	return f.outcome
 }
 
-func newCaptchaTestApp(t *testing.T, db *database.Database, verifier captchaVerifier, policies rateLimitPolicies) (*httptest.Server, *settings.Service) {
+func newCaptchaTestApp(t *testing.T, db *database.Database, verifier captcha.Verifier, policies rateLimitPolicies) (*httptest.Server, *settings.Service) {
 	t.Helper()
 
 	settingsModule, err := settings.New(db)
@@ -108,7 +109,7 @@ func assertCaptchaFailed(t *testing.T, resp *http.Response) {
 func TestLoginRequiresCaptchaWhenEnabled(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaPassed}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Passed}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -140,7 +141,7 @@ func TestLoginRequiresCaptchaWhenEnabled(t *testing.T) {
 func TestLoginRejectedCaptchaBlocksLogin(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -157,7 +158,7 @@ func TestLoginRejectedCaptchaBlocksLogin(t *testing.T) {
 func TestLoginRejectsWhenCaptchaUnavailable(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaUnavailable}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Unavailable}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -174,7 +175,7 @@ func TestLoginRejectsWhenCaptchaUnavailable(t *testing.T) {
 func TestLoginSkipsCaptchaForOtherProviders(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -194,7 +195,7 @@ func TestLoginSkipsCaptchaForOtherProviders(t *testing.T) {
 func TestLoginSkipsCaptchaWhenDisabled(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -213,7 +214,7 @@ func TestLoginSkipsCaptchaWhenDisabled(t *testing.T) {
 func TestLoginSkipsCaptchaWithoutSecret(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -233,7 +234,7 @@ func TestLoginSkipsCaptchaWithoutSecret(t *testing.T) {
 func TestLoginSkipsCaptchaOutsideScopes(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -254,7 +255,7 @@ func TestLoginSkipsCaptchaOutsideScopes(t *testing.T) {
 func TestRegisterSkipsCaptchaOutsideScopes(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
@@ -282,7 +283,7 @@ func TestRegisterSkipsCaptchaOutsideScopes(t *testing.T) {
 func TestCaptchaScopesEmptySkipsEverywhere(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
@@ -317,19 +318,19 @@ func TestCaptchaScopesEmptySkipsEverywhere(t *testing.T) {
 func TestLoginCaptchaFailuresDoNotLockAccount(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, defaultRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	user, password := createTestUser(t, db, tag)
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
 
 	client := testClient(t)
-	for attempt := 0; attempt < loginFailureLimit+1; attempt++ {
+	for attempt := 0; attempt < defaultRateLimitPolicies().LoginIdentifier.Limit+1; attempt++ {
 		resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "bad-token"})
 		assertCaptchaFailed(t, resp)
 	}
 
-	verifier.outcome = captchaPassed
+	verifier.outcome = captcha.Passed
 	resp := postJSON(t, client, ts.URL+"/api/v1/sessions", LoginRequest{Identifier: user.Email, Password: password, CaptchaToken: "good-token"})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -340,7 +341,7 @@ func TestLoginCaptchaFailuresDoNotLockAccount(t *testing.T) {
 func TestRegisterRequiresCaptchaWhenEnabled(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaPassed}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Passed}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
@@ -378,7 +379,7 @@ func TestRegisterRequiresCaptchaWhenEnabled(t *testing.T) {
 func TestRegisterRejectedCaptchaCreatesNoUser(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")
@@ -400,7 +401,7 @@ func TestRegisterRejectedCaptchaCreatesNoUser(t *testing.T) {
 func TestRegisterRejectsWhenCaptchaUnavailable(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaUnavailable}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Unavailable}
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 	resetCaptchaSettings(t, svc)
 	setCaptchaProvider(t, svc, "turnstile", "the-secret")

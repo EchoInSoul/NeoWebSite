@@ -1,12 +1,13 @@
 package auth
 
 import (
-	"github.com/alexedwards/scs/v2"
 	"github.com/gin-gonic/gin"
 
 	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
-	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/login"
+	"website/backend/internal/modules/registration"
+	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
 )
 
@@ -16,11 +17,11 @@ type Module struct {
 	controller *controller
 }
 
-func New(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, mailer mail.Mailer) *Module {
-	service := newService(db, sessions, totpKey, settingsService, limiter, defaultRateLimitPolicies(), newTurnstileVerifier(turnstileSiteverifyURL, turnstileTimeout), mailer)
+func New(db *database.Database, sessions *session.Service, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, verifier captchaVerifier, loginService *login.Service, registrationService *registration.Service) *Module {
+	service := newService(db, sessions, totpKey, settingsService, limiter, defaultVerifyPolicies(), verifier)
 	return &Module{
 		Service:    service,
-		controller: newController(service),
+		controller: newController(service, loginService, registrationService),
 	}
 }
 

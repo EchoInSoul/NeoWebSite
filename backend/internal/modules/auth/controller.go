@@ -13,14 +13,23 @@ import (
 	"website/backend/internal/common/apiresponse"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/common/rbac"
+	"website/backend/internal/modules/login"
+	"website/backend/internal/modules/registration"
+	"website/backend/internal/modules/session"
 )
 
 type controller struct {
-	service *Service
+	service             *Service
+	loginService        *login.Service
+	registrationService *registration.Service
 }
 
-func newController(service *Service) *controller {
-	return &controller{service: service}
+func newController(service *Service, loginService *login.Service, registrationService *registration.Service) *controller {
+	return &controller{
+		service:             service,
+		loginService:        loginService,
+		registrationService: registrationService,
+	}
 }
 
 func (c *controller) register(r *gin.RouterGroup) {
@@ -57,7 +66,7 @@ func (c *controller) login(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.Login(ctx.Request.Context(), req.Identifier, req.Password, req.CaptchaToken, requestSessionMeta(ctx))
+	user, err := c.loginService.Login(ctx.Request.Context(), req.Identifier, req.Password, req.CaptchaToken, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -78,7 +87,7 @@ func (c *controller) signup(ctx *gin.Context) {
 		return
 	}
 
-	result, err := c.service.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password, req.CaptchaToken, requestSessionMeta(ctx))
+	result, err := c.registrationService.Register(ctx.Request.Context(), req.Email, req.Nickname, req.Password, req.CaptchaToken, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -104,7 +113,7 @@ func (c *controller) verifyEmailRegistration(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.service.VerifyEmailRegistration(ctx.Request.Context(), req.Token, requestSessionMeta(ctx))
+	user, err := c.registrationService.VerifyEmail(ctx.Request.Context(), req.Token, requestSessionMeta(ctx))
 	if err != nil {
 		apierror.Write(ctx, err)
 		return
@@ -319,15 +328,15 @@ func (c *controller) listSessions(ctx *gin.Context) {
 	}
 
 	items := make([]SessionResponse, 0, len(sessions))
-	for _, session := range sessions {
+	for _, item := range sessions {
 		items = append(items, SessionResponse{
-			ID:         session.ID,
-			Current:    session.Current,
-			UserAgent:  session.UserAgent,
-			IP:         session.IP,
-			CreatedAt:  session.CreatedAt,
-			LastSeenAt: session.LastSeenAt,
-			ExpiresAt:  session.ExpiresAt,
+			ID:         item.ID,
+			Current:    item.Current,
+			UserAgent:  item.UserAgent,
+			IP:         item.IP,
+			CreatedAt:  item.CreatedAt,
+			LastSeenAt: item.LastSeenAt,
+			ExpiresAt:  item.ExpiresAt,
 		})
 	}
 
@@ -348,8 +357,8 @@ const (
 	maxIPLength        = 64
 )
 
-func requestSessionMeta(ctx *gin.Context) SessionMeta {
-	return SessionMeta{
+func requestSessionMeta(ctx *gin.Context) session.Meta {
+	return session.Meta{
 		UserAgent: truncateHeader(ctx.GetHeader("User-Agent"), maxUserAgentLength),
 		IP:        truncateHeader(ctx.RemoteIP(), maxIPLength),
 	}

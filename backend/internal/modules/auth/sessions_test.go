@@ -15,6 +15,11 @@ import (
 	"website/backend/internal/common/guard"
 )
 
+const (
+	pendingUserIDKey   = "auth.pending_2fa_user_id"
+	pendingAttemptsKey = "auth.pending_2fa_attempts"
+)
+
 func postJSONWithHeaders(t *testing.T, client *http.Client, endpoint string, body any, headers map[string]string) *http.Response {
 	t.Helper()
 

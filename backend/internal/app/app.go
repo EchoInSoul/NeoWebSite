@@ -22,8 +22,12 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/modules/access"
 	"website/backend/internal/modules/auth"
+	"website/backend/internal/modules/captcha"
 	"website/backend/internal/modules/health"
+	"website/backend/internal/modules/login"
 	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/registration"
+	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
 )
 
@@ -72,7 +76,11 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	mailModule := mail.New(cfg, settingsModule.Service)
 
 	limiter := ratelimit.New()
-	authModule := auth.New(db, sessions, cfg.TOTPEncryptionKey, settingsModule.Service, limiter, mailModule.Mailer)
+	sessionService := session.New(settingsModule.Service, sessions)
+	captchaService := captcha.New(settingsModule.Service)
+	loginService := login.New(db, sessionService, limiter, captchaService)
+	registrationService := registration.New(db, settingsModule.Service, limiter, mailModule.Mailer, captchaService)
+	authModule := auth.New(db, sessionService, cfg.TOTPEncryptionKey, settingsModule.Service, limiter, captchaService, loginService, registrationService)
 	authModule.Register(api)
 	settingsModule.Register(api)
 

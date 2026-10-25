@@ -3,293 +3,52 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log/slog"
-	"net/url"
-	"slices"
-	"strings"
 	"time"
 
-	"github.com/alexedwards/scs/v2"
 	"golang.org/x/crypto/bcrypt"
 
 	"website/backend/internal/common/apierror"
-	"website/backend/internal/common/guard"
 	"website/backend/internal/common/ratelimit"
+	"website/backend/internal/common/userinput"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
-	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
 )
 
 const (
-	pendingUserIDKey   = "auth.pending_2fa_user_id"
-	pendingAttemptsKey = "auth.pending_2fa_attempts"
-	maxVerifyAttempts  = 5
+	maxVerifyAttempts = 5
 )
 
 const recoveryCodesPerBatch = 5
 
-type Service struct {
-	repo      *repository
-	sessions  *scs.SessionManager
-	dummyHash []byte
-	totpKey   []byte
-	settings  *settings.Service
-	limiter   *ratelimit.Limiter
-	policies  rateLimitPolicies
-	captcha   captchaVerifier
-	mailer    mail.Mailer
+type captchaVerifier interface {
+	VerifyConfig(ctx context.Context, secret, token, ip string) error
 }
 
-func newService(db *database.Database, sessions *scs.SessionManager, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captchaVerifier, mailer mail.Mailer) *Service {
-	dummy, err := bcrypt.GenerateFromPassword([]byte("timing-defense-placeholder"), bcrypt.DefaultCost)
-	if err != nil {
-		panic(fmt.Sprintf("auth: generate dummy hash: %v", err))
-	}
+type Service struct {
+	repo     *repository
+	sessions *session.Service
+	totpKey  []byte
+	settings *settings.Service
+	limiter  *ratelimit.Limiter
+	policies verifyPolicies
+	captcha  captchaVerifier
+}
+
+func newService(db *database.Database, sessions *session.Service, totpKey []byte, settingsService *settings.Service, limiter *ratelimit.Limiter, policies verifyPolicies, verifier captchaVerifier) *Service {
 	if verifier == nil {
-		verifier = unavailableCaptchaVerifier{}
+		panic("auth: captcha service is required")
 	}
 	return &Service{
-		repo:      newRepository(db),
-		sessions:  sessions,
-		dummyHash: dummy,
-		totpKey:   totpKey,
-		settings:  settingsService,
-		limiter:   limiter,
-		policies:  policies,
-		captcha:   verifier,
-		mailer:    mailer,
+		repo:     newRepository(db),
+		sessions: sessions,
+		totpKey:  totpKey,
+		settings: settingsService,
+		limiter:  limiter,
+		policies: policies,
+		captcha:  verifier,
 	}
-}
-
-func (s *Service) Register(ctx context.Context, email, nickname, password, captchaToken string, meta SessionMeta) (RegisterResult, error) {
-	if err := s.allowWindow(s.policies.RegisterIP, ipKey("register", meta.IP)); err != nil {
-		return RegisterResult{}, err
-	}
-
-	enabled, err := s.settings.GetBool(ctx, "register", "enabled")
-	if err != nil {
-		return RegisterResult{}, err
-	}
-	if !enabled {
-		return RegisterResult{}, apierror.ErrRegistrationClosed
-	}
-
-	email = normalizeEmail(email)
-	nickname = normalizeNickname(nickname)
-
-	if !validEmail(email) || !validNickname(nickname) {
-		return RegisterResult{}, apierror.ErrInvalidRequest
-	}
-	if err := s.verifyCaptcha(ctx, settings.CaptchaScopeRegister, captchaToken, meta); err != nil {
-		return RegisterResult{}, err
-	}
-	if err := s.allowWindow(s.policies.RegisterEmail, registerEmailKey(email)); err != nil {
-		return RegisterResult{}, err
-	}
-	minLength, err := s.passwordMinLength(ctx)
-	if err != nil {
-		return RegisterResult{}, err
-	}
-	if !validPassword(password, minLength) {
-		return RegisterResult{}, apierror.ErrWeakPassword
-	}
-
-	if err := s.ensureRegistrationDomain(ctx, email); err != nil {
-		return RegisterResult{}, err
-	}
-
-	if _, err := s.repo.findUserByIdentifier(ctx, email); err == nil {
-		return RegisterResult{}, apierror.ErrEmailTaken
-	} else if !errors.Is(err, errUserNotFound) {
-		return RegisterResult{}, err
-	}
-	if _, err := s.repo.findUserByIdentifier(ctx, nickname); err == nil {
-		return RegisterResult{}, apierror.ErrNicknameTaken
-	} else if !errors.Is(err, errUserNotFound) {
-		return RegisterResult{}, err
-	}
-
-	verificationEnabled, err := s.settings.GetBool(ctx, "register", "email_verification_enabled")
-	if err != nil {
-		return RegisterResult{}, err
-	}
-
-	if !verificationEnabled {
-		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			return RegisterResult{}, err
-		}
-		created, err := s.repo.createUser(ctx, email, nickname, string(hash), emailVerificationNotRequired)
-		if err != nil {
-			if ent.IsConstraintError(err) {
-				return RegisterResult{}, apierror.ErrAlreadyTaken
-			}
-			return RegisterResult{}, err
-		}
-		user := toUser(created)
-		return RegisterResult{User: &user}, nil
-	}
-
-	configured, err := s.mailer.Configured(ctx)
-	if err != nil || !configured {
-		return RegisterResult{}, apierror.ErrMailUnavailable
-	}
-	data, err := s.registrationEmailData(ctx, nickname)
-	if err != nil {
-		return RegisterResult{}, apierror.ErrMailUnavailable
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return RegisterResult{}, err
-	}
-	rawToken, tokenHash, err := newPendingToken()
-	if err != nil {
-		return RegisterResult{}, err
-	}
-	record, err := s.repo.replacePendingRegistration(ctx, pendingRegistrationInput{
-		Email:        email,
-		Nickname:     nickname,
-		PasswordHash: string(hash),
-		TokenHash:    tokenHash,
-		ExpiresAt:    time.Now().Add(pendingRegistrationTTL),
-	})
-	if err != nil {
-		return RegisterResult{}, err
-	}
-
-	data["verifyUrl"] = data["siteUrl"] + "/register/verify?token=" + url.QueryEscape(rawToken)
-	subject, body, err := mail.Compose(ctx, s.settings, mail.TemplateSignupCode, data)
-	if err != nil {
-		s.compensatePending(ctx, record)
-		return RegisterResult{}, apierror.ErrMailUnavailable
-	}
-	if err := s.mailer.SendSync(ctx, mail.Message{To: email, Subject: subject, Body: body, RequireSMTP: true}); err != nil {
-		s.compensatePending(ctx, record)
-		return RegisterResult{}, apierror.ErrMailUnavailable
-	}
-
-	return RegisterResult{VerificationPending: true}, nil
-}
-
-func (s *Service) registrationEmailData(ctx context.Context, nickname string) (map[string]string, error) {
-	site, err := s.settings.GetGroup(ctx, "site")
-	if err != nil {
-		return nil, err
-	}
-	title, ok := site["title"].(string)
-	if !ok {
-		return nil, errors.New("auth: site.title is not a string")
-	}
-	rawURL, ok := site["url"].(string)
-	if !ok {
-		return nil, errors.New("auth: site.url is not a string")
-	}
-	base, err := mail.SiteURL(rawURL)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]string{
-		"siteTitle":      title,
-		"siteUrl":        base,
-		"username":       nickname,
-		"expiresMinutes": fmt.Sprintf("%d", int(pendingRegistrationTTL/time.Minute)),
-		"sentAt":         time.Now().Format("2006-01-02 15:04:05"),
-		"code":           "",
-		"verifyUrl":      "",
-	}, nil
-}
-
-func (s *Service) compensatePending(ctx context.Context, record pendingRegistrationRecord) {
-	if _, err := s.repo.deletePendingRegistration(ctx, record.ID, record.TokenHash); err != nil {
-		slog.Error("auth: delete pending registration", "err", err)
-	}
-}
-
-func (s *Service) VerifyEmailRegistration(ctx context.Context, token string, meta SessionMeta) (User, error) {
-	if err := s.allowWindow(s.policies.EmailVerificationIP, ipKey("emailverify", meta.IP)); err != nil {
-		return User{}, err
-	}
-
-	created, err := s.repo.verifyPendingRegistration(ctx, hashPendingToken(token))
-	if err != nil {
-		switch {
-		case errors.Is(err, errPendingNotFound):
-			return User{}, apierror.ErrEmailVerificationInvalid
-		case errors.Is(err, errPendingEmailTaken):
-			return User{}, apierror.ErrEmailTaken
-		case errors.Is(err, errPendingNicknameTaken):
-			return User{}, apierror.ErrNicknameTaken
-		case errors.Is(err, errPendingConflict):
-			return User{}, apierror.ErrAlreadyTaken
-		default:
-			return User{}, err
-		}
-	}
-	return toUser(created), nil
-}
-
-func (s *Service) Login(ctx context.Context, identifier, password, captchaToken string, meta SessionMeta) (User, error) {
-	if err := s.allowWindow(s.policies.LoginIP, ipKey("login", meta.IP)); err != nil {
-		return User{}, err
-	}
-	accountKey := loginIdentifierKey(identifier)
-	if err := s.checkFailure(s.policies.LoginIdentifier, accountKey); err != nil {
-		return User{}, err
-	}
-	if err := s.verifyCaptcha(ctx, settings.CaptchaScopeLogin, captchaToken, meta); err != nil {
-		return User{}, err
-	}
-
-	if len(password) > maxPasswordBytes {
-		return User{}, apierror.ErrInvalidCredentials
-	}
-
-	found, err := s.repo.findUserByIdentifier(ctx, identifier)
-	if err != nil {
-		if errors.Is(err, errUserNotFound) {
-			if strings.Contains(identifier, "@") {
-				pending, pendingErr := s.repo.findPendingRegistrationByEmail(ctx, normalizeEmail(identifier))
-				if pendingErr == nil && pending.ExpiresAt.After(time.Now()) {
-					if bcrypt.CompareHashAndPassword([]byte(pending.PasswordHash), []byte(password)) == nil {
-						s.resetFailure(accountKey)
-						return User{}, apierror.ErrEmailNotVerified
-					}
-					s.recordFailure(s.policies.LoginIdentifier, accountKey)
-					return User{}, apierror.ErrInvalidCredentials
-				}
-				if pendingErr != nil && !errors.Is(pendingErr, errPendingNotFound) {
-					return User{}, pendingErr
-				}
-			}
-			_ = bcrypt.CompareHashAndPassword(s.dummyHash, []byte(password))
-			s.recordFailure(s.policies.LoginIdentifier, accountKey)
-			return User{}, apierror.ErrInvalidCredentials
-		}
-		return User{}, err
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(found.PasswordHash), []byte(password)); err != nil {
-		s.recordFailure(s.policies.LoginIdentifier, accountKey)
-		return User{}, apierror.ErrInvalidCredentials
-	}
-	s.resetFailure(accountKey)
-
-	if found.TotpEnabledAt != nil {
-		if err := s.sessions.RenewToken(ctx); err != nil {
-			return User{}, err
-		}
-		s.enterPendingSession(ctx, found.ID.String())
-		return User{}, apierror.ErrTwoFactorRequired
-	}
-
-	if err := s.establishSession(ctx, found.ID.String(), found.AuthVersion, meta); err != nil {
-		return User{}, err
-	}
-
-	return toUser(found), nil
 }
 
 func (s *Service) Logout(ctx context.Context) error {
@@ -305,13 +64,13 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 		}
 		return err
 	}
-	currentVersion := s.sessions.GetInt(ctx, guard.SessionAuthVersionKey)
+	currentVersion := s.sessions.AuthVersion(ctx)
 
 	minLength, err := s.passwordMinLength(ctx)
 	if err != nil {
 		return err
 	}
-	if !validPassword(newPassword, minLength) {
+	if !userinput.ValidPassword(newPassword, minLength) {
 		return apierror.ErrWeakPassword
 	}
 
@@ -323,7 +82,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 		return apierror.ErrPasswordUnchanged
 	}
 
-	if err := s.revokeOtherSessions(userID, currentToken); err != nil {
+	if err := s.sessions.RevokeOtherSessions(ctx, userID, currentToken); err != nil {
 		return err
 	}
 
@@ -337,21 +96,17 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentToken, curr
 		return err
 	}
 	if updated.AuthVersion == currentVersion+1 {
-		s.sessions.Put(ctx, guard.SessionAuthVersionKey, updated.AuthVersion)
+		s.sessions.SetAuthVersion(ctx, updated.AuthVersion)
 	}
 	return nil
 }
 
-func (s *Service) revokeOtherSessions(userID, currentToken string) error {
-	return s.eachSession(func(token string, values map[string]any, _ time.Time) error {
-		if token == currentToken {
-			return nil
-		}
-		if sessionString(values, guard.SessionUserIDKey) != userID {
-			return nil
-		}
-		return s.sessions.Store.Delete(token)
-	})
+func (s *Service) ListSessions(ctx context.Context, userID string) ([]session.Session, error) {
+	return s.sessions.List(ctx, userID)
+}
+
+func (s *Service) RevokeSession(ctx context.Context, userID, sessionID string) error {
+	return s.sessions.Revoke(ctx, userID, sessionID)
 }
 
 func (s *Service) CurrentUser(ctx context.Context, userID string) (User, error) {
@@ -374,24 +129,24 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, nickname, em
 	var nextNickname, nextEmail, nextBio *string
 
 	if nickname != nil {
-		normalized := normalizeNickname(*nickname)
-		if !validNickname(normalized) {
+		normalized := userinput.NormalizeNickname(*nickname)
+		if !userinput.ValidNickname(normalized) {
 			return User{}, apierror.WithParam(apierror.ErrInvalidRequest, "nickname")
 		}
 		nextNickname = &normalized
 	}
 
 	if email != nil {
-		normalized := normalizeEmail(*email)
-		if !validEmail(normalized) {
+		normalized := userinput.NormalizeEmail(*email)
+		if !userinput.ValidEmail(normalized) {
 			return User{}, apierror.WithParam(apierror.ErrInvalidRequest, "email")
 		}
 		nextEmail = &normalized
 	}
 
 	if bio != nil {
-		normalized := normalizeBio(*bio)
-		if !validBio(normalized) {
+		normalized := userinput.NormalizeBio(*bio)
+		if !userinput.ValidBio(normalized) {
 			return User{}, apierror.WithParam(apierror.ErrInvalidRequest, "bio")
 		}
 		nextBio = &normalized
@@ -521,7 +276,7 @@ func (s *Service) EnableTOTP(ctx context.Context, userID, code, password, curren
 	if err != nil {
 		return RecoveryCodesResponse{}, err
 	}
-	currentVersion := s.sessions.GetInt(ctx, guard.SessionAuthVersionKey)
+	currentVersion := s.sessions.AuthVersion(ctx)
 	if err := verifyPassword(found, password); err != nil {
 		return RecoveryCodesResponse{}, err
 	}
@@ -546,7 +301,7 @@ func (s *Service) EnableTOTP(ctx context.Context, userID, code, password, curren
 		return RecoveryCodesResponse{}, apierror.ErrTwoFactorInvalidCode
 	}
 
-	if err := s.revokeOtherSessions(userID, currentToken); err != nil {
+	if err := s.sessions.RevokeOtherSessions(ctx, userID, currentToken); err != nil {
 		return RecoveryCodesResponse{}, err
 	}
 
@@ -567,7 +322,7 @@ func (s *Service) EnableTOTP(ctx context.Context, userID, code, password, curren
 		return RecoveryCodesResponse{}, err
 	}
 	if newVersion == currentVersion+1 {
-		s.sessions.Put(ctx, guard.SessionAuthVersionKey, newVersion)
+		s.sessions.SetAuthVersion(ctx, newVersion)
 	}
 	return RecoveryCodesResponse{RecoveryCodes: codes}, nil
 }
@@ -584,7 +339,7 @@ func (s *Service) DisableTOTP(ctx context.Context, userID, password, currentToke
 		return err
 	}
 
-	if err := s.revokeOtherSessions(userID, currentToken); err != nil {
+	if err := s.sessions.RevokeOtherSessions(ctx, userID, currentToken); err != nil {
 		return err
 	}
 	return s.repo.disableTOTP(ctx, found.ID)
@@ -652,12 +407,12 @@ func issueRecoveryCodes() ([]string, []string, error) {
 	return codes, hashes, nil
 }
 
-func (s *Service) VerifySecondFactor(ctx context.Context, code string, meta SessionMeta) (User, error) {
+func (s *Service) VerifySecondFactor(ctx context.Context, code string, meta session.Meta) (User, error) {
 	if err := s.allowWindow(s.policies.VerifyIP, ipKey("verify", meta.IP)); err != nil {
 		return User{}, err
 	}
 
-	pendingUserID := s.sessions.GetString(ctx, pendingUserIDKey)
+	pendingUserID := s.sessions.PendingUserID(ctx)
 	if pendingUserID == "" {
 		return User{}, apierror.ErrUnauthorized
 	}
@@ -697,7 +452,7 @@ func (s *Service) VerifySecondFactor(ctx context.Context, code string, meta Sess
 	}
 	s.resetFailure(accountKey)
 
-	if err := s.establishSession(ctx, found.ID.String(), found.AuthVersion, meta); err != nil {
+	if err := s.sessions.Establish(ctx, found.ID.String(), found.AuthVersion, meta); err != nil {
 		return User{}, err
 	}
 
@@ -730,13 +485,13 @@ func (s *Service) matchTOTP(ctx context.Context, found *ent.User, code string) (
 }
 
 func (s *Service) failSecondFactor(ctx context.Context) error {
-	attempts := s.sessions.GetInt(ctx, pendingAttemptsKey) + 1
+	attempts := s.sessions.PendingAttempts(ctx) + 1
 	if attempts >= maxVerifyAttempts {
 		s.sessions.Destroy(ctx)
 		return apierror.ErrTwoFactorLocked
 	}
 
-	s.sessions.Put(ctx, pendingAttemptsKey, attempts)
+	s.sessions.SetPendingAttempts(ctx, attempts)
 	return apierror.ErrTwoFactorInvalidCode
 }
 
@@ -752,72 +507,9 @@ func (s *Service) passwordMinLength(ctx context.Context) (int, error) {
 			return 0, err
 		}
 	}
-	return effectivePasswordMinLength(requirementsEnabled, configured), nil
+	return userinput.EffectivePasswordMinLength(requirementsEnabled, configured), nil
 }
 
-func (s *Service) ensureRegistrationDomain(ctx context.Context, email string) error {
-	controlEnabled, err := s.settings.GetBool(ctx, "register", "email_domain_control_enabled")
-	if err != nil {
-		return err
-	}
-	if !controlEnabled {
-		return nil
-	}
-	raw, err := s.settings.GetString(ctx, "register", "allowed_email_domains")
-	if err != nil {
-		return err
-	}
-	allowed := settings.SplitListValue(raw)
-	if len(allowed) == 0 {
-		return nil
-	}
-	if emailDomainAllowed(email, allowed) {
-		return nil
-	}
-	return apierror.ErrEmailDomainNotAllowed
-}
-
-func (s *Service) verifyCaptcha(ctx context.Context, scope, token string, meta SessionMeta) error {
-	enabled, _ := s.settings.GetBool(ctx, "auth", "captcha_enabled")
-	if !enabled {
-		return nil
-	}
-
-	provider, _ := s.settings.GetString(ctx, "auth", "captcha_provider")
-	if provider != captchaProviderTurnstile {
-		return nil
-	}
-
-	secret, _ := s.settings.GetString(ctx, "auth", "turnstile_secret_key")
-	if secret == "" {
-		return nil
-	}
-
-	scopes, err := s.settings.GetString(ctx, "auth", "captcha_scopes")
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(settings.SplitListValue(scopes), scope) {
-		return nil
-	}
-
-	if token == "" {
-		return apierror.ErrCaptchaFailed
-	}
-	if s.captcha.Verify(ctx, secret, token, meta.IP) != captchaPassed {
-		return apierror.ErrCaptchaFailed
-	}
-
-	return nil
-}
-
-func (s *Service) VerifyCaptchaConfig(ctx context.Context, secret, token string, meta SessionMeta) error {
-	switch s.captcha.Verify(ctx, secret, token, meta.IP) {
-	case captchaPassed:
-		return nil
-	case captchaRejected:
-		return apierror.ErrCaptchaVerifyFailed
-	default:
-		return apierror.ErrServiceUnavailable
-	}
+func (s *Service) VerifyCaptchaConfig(ctx context.Context, secret, token string, meta session.Meta) error {
+	return s.captcha.VerifyConfig(ctx, secret, token, meta.IP)
 }

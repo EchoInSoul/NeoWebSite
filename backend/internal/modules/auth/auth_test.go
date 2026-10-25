@@ -23,7 +23,11 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/modules/access"
+	"website/backend/internal/modules/captcha"
+	"website/backend/internal/modules/login"
 	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/registration"
+	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
 )
 
@@ -61,6 +65,40 @@ func newTestAppWithRatePolicies(t *testing.T, db *database.Database, policies ra
 	return newTestAppWithSettings(t, db, settingsModule.Service, ratelimit.New(), policies)
 }
 
+func newTestAppWithVerifyPolicies(t *testing.T, db *database.Database, policies verifyPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+	t.Helper()
+
+	settingsModule, err := settings.New(db)
+	if err != nil {
+		t.Fatalf("settings.New: %v", err)
+	}
+
+	sm := scs.New()
+	sm.Lifetime = time.Hour
+
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	if err := engine.SetTrustedProxies(nil); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+	api := engine.Group("/api/v1")
+
+	sessionService := session.New(settingsModule.Service, sm)
+	captchaService := captcha.NewService(settingsModule.Service, nil)
+	service := newService(db, sessionService, testTOTPKey, settingsModule.Service, ratelimit.New(), policies, captchaService)
+	loginService := login.New(db, sessionService, ratelimit.New(), captchaService)
+	registrationService := registration.New(db, settingsModule.Service, ratelimit.New(), &fakeMailer{configured: true}, captchaService)
+	module := &Module{Service: service, controller: newController(service, loginService, registrationService)}
+	module.Register(api)
+	accessModule := access.New(db)
+	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))
+	module.RegisterProtected(protected)
+
+	ts := httptest.NewServer(sm.LoadAndSave(engine))
+	t.Cleanup(ts.Close)
+	return ts, sm, settingsModule.Service
+}
+
 func newTestAppWithSettings(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
 
@@ -83,7 +121,7 @@ func newTestAppWithMailer(t *testing.T, db *database.Database, mailer mail.Maile
 	return newTestAppWithSettingsAndMailer(t, db, settingsModule.Service, ratelimit.New(), disabledRateLimitPolicies(), mailer)
 }
 
-func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captchaVerifier, mailer mail.Mailer) (*httptest.Server, *scs.SessionManager, *settings.Service) {
+func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settingsService *settings.Service, limiter *ratelimit.Limiter, policies rateLimitPolicies, verifier captcha.Verifier, mailer mail.Mailer) (*httptest.Server, *scs.SessionManager, *settings.Service) {
 	t.Helper()
 
 	sm := scs.New()
@@ -96,8 +134,19 @@ func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settings
 	}
 	api := engine.Group("/api/v1")
 
-	service := newService(db, sm, testTOTPKey, settingsService, limiter, policies, verifier, mailer)
-	module := &Module{Service: service, controller: newController(service)}
+	sessionService := session.New(settingsService, sm)
+	captchaService := captcha.NewService(settingsService, verifier)
+	service := newService(db, sessionService, testTOTPKey, settingsService, limiter, defaultVerifyPolicies(), captchaService)
+	loginService := login.NewWithPolicies(db, sessionService, limiter, login.Policies{
+		IdentifierFailure: policies.LoginIdentifier,
+		IPWindow:          policies.LoginIP,
+	}, captchaService)
+	registrationService := registration.NewWithPolicies(db, settingsService, limiter, registration.Policies{
+		EmailWindow:             policies.RegisterEmail,
+		IPWindow:                policies.RegisterIP,
+		EmailVerificationWindow: policies.EmailVerificationIP,
+	}, mailer, captchaService)
+	module := &Module{Service: service, controller: newController(service, loginService, registrationService)}
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))

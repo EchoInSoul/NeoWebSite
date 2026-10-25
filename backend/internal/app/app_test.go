@@ -93,7 +93,7 @@ func newClient(t *testing.T) *http.Client {
 	return &http.Client{Jar: jar}
 }
 
-func login(t *testing.T, client *http.Client, base, identifier, password string) *http.Response {
+func postLogin(t *testing.T, client *http.Client, base, identifier, password string) *http.Response {
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]string{"identifier": identifier, "password": password})
@@ -107,10 +107,10 @@ func login(t *testing.T, client *http.Client, base, identifier, password string)
 	return resp
 }
 
-func loginWithLogout(t *testing.T, client *http.Client, ts *httptest.Server, identifier, password string) {
+func postLoginWithLogout(t *testing.T, client *http.Client, ts *httptest.Server, identifier, password string) {
 	t.Helper()
 
-	resp := login(t, client, ts.URL, identifier, password)
+	resp := postLogin(t, client, ts.URL, identifier, password)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", resp.StatusCode)
@@ -143,7 +143,7 @@ func TestAuthFlowEndToEnd(t *testing.T) {
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
-	resp := login(t, client, ts.URL, u.Email, password)
+	resp := postLogin(t, client, ts.URL, u.Email, password)
 	cookie := sessionCookie(resp)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -209,7 +209,7 @@ func TestMeRevokesSessionWhenUserDeleted(t *testing.T) {
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
-	resp := login(t, client, ts.URL, u.Email, password)
+	resp := postLogin(t, client, ts.URL, u.Email, password)
 	resp.Body.Close()
 
 	if err := db.Client.User.DeleteOneID(uuid.MustParse(u.ID)).Exec(context.Background()); err != nil {
@@ -239,7 +239,7 @@ func TestProductionCookieIsSecure(t *testing.T) {
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
-	resp := login(t, client, ts.URL, u.Email, password)
+	resp := postLogin(t, client, ts.URL, u.Email, password)
 	cookie := sessionCookie(resp)
 	resp.Body.Close()
 	if cookie == nil {
@@ -290,7 +290,7 @@ func TestSessionCookieMaxAgeMatchesLifetime(t *testing.T) {
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
-	resp := login(t, client, ts.URL, u.Email, password)
+	resp := postLogin(t, client, ts.URL, u.Email, password)
 	cookie := sessionCookie(resp)
 	resp.Body.Close()
 	if cookie == nil {
@@ -682,7 +682,7 @@ func TestUpdateProfileEndToEnd(t *testing.T) {
 	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
-	loginWithLogout(t, client, ts, u.Email, password)
+	postLoginWithLogout(t, client, ts, u.Email, password)
 
 	blockerTag := fmt.Sprintf("%d", time.Now().UnixNano())
 	blocker, err := db.Client.User.Create().
@@ -830,7 +830,7 @@ func TestUpdateProfileBio(t *testing.T) {
 	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
-	loginWithLogout(t, client, ts, u.Email, password)
+	postLoginWithLogout(t, client, ts, u.Email, password)
 
 	endpoint := ts.URL + "/api/v1/users/me"
 
@@ -894,7 +894,7 @@ func TestUpdateProfileRejectedWriteLeavesBothFieldsUnchanged(t *testing.T) {
 	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
-	loginWithLogout(t, client, ts, u.Email, password)
+	postLoginWithLogout(t, client, ts, u.Email, password)
 
 	tag := fmt.Sprintf("%d", time.Now().UnixNano())
 	blocker, err := db.Client.User.Create().
@@ -951,9 +951,9 @@ func TestUpdateProfileConcurrentSameNickname(t *testing.T) {
 	second, secondPassword := createTestUser(t, db)
 
 	firstClient := newClient(t)
-	loginWithLogout(t, firstClient, ts, first.Email, firstPassword)
+	postLoginWithLogout(t, firstClient, ts, first.Email, firstPassword)
 	secondClient := newClient(t)
-	loginWithLogout(t, secondClient, ts, second.Email, secondPassword)
+	postLoginWithLogout(t, secondClient, ts, second.Email, secondPassword)
 
 	tag := fmt.Sprintf("%d", time.Now().UnixNano())
 	endpoint := ts.URL + "/api/v1/users/me"
@@ -1002,7 +1002,7 @@ func TestUpdateProfileConstraintBackstopReturnsAlreadyTaken(t *testing.T) {
 	ts, db := newTestServer(t, config.EnvironmentDevelopment)
 	u, password := createTestUser(t, db)
 	client := newClient(t)
-	loginWithLogout(t, client, ts, u.Email, password)
+	postLoginWithLogout(t, client, ts, u.Email, password)
 
 	installNicknameCollisionTrigger(t, db)
 
@@ -1049,7 +1049,7 @@ func TestChangePasswordToleratesBadSessionRows(t *testing.T) {
 	u, password := createTestUser(t, db)
 	client := newClient(t)
 
-	loginResp := login(t, client, ts.URL, u.Email, password)
+	loginResp := postLogin(t, client, ts.URL, u.Email, password)
 	loginResp.Body.Close()
 	if loginResp.StatusCode != http.StatusOK {
 		t.Fatalf("login status = %d, want 200", loginResp.StatusCode)
@@ -1281,7 +1281,7 @@ func TestRegistrationControlEndToEnd(t *testing.T) {
 	})
 
 	ownerClient := newClient(t)
-	loginResp := login(t, ownerClient, ts.URL, owner.Email, ownerPassword)
+	loginResp := postLogin(t, ownerClient, ts.URL, owner.Email, ownerPassword)
 	if loginResp.StatusCode != http.StatusOK {
 		loginResp.Body.Close()
 		t.Fatalf("owner login status = %d, want 200", loginResp.StatusCode)
@@ -1351,7 +1351,7 @@ func TestMailSettingsEndToEnd(t *testing.T) {
 	t.Cleanup(func() { _ = resetMail() })
 
 	ownerClient := newClient(t)
-	loginResp := login(t, ownerClient, ts.URL, owner.Email, ownerPassword)
+	loginResp := postLogin(t, ownerClient, ts.URL, owner.Email, ownerPassword)
 	if loginResp.StatusCode != http.StatusOK {
 		loginResp.Body.Close()
 		t.Fatalf("owner login status = %d, want 200", loginResp.StatusCode)
@@ -1449,7 +1449,7 @@ func TestAccessEndToEnd(t *testing.T) {
 	}
 
 	plainClient := newClient(t)
-	plainLogin := login(t, plainClient, ts.URL, plainUser.Email, plainPassword)
+	plainLogin := postLogin(t, plainClient, ts.URL, plainUser.Email, plainPassword)
 	plainLogin.Body.Close()
 
 	plainAdmin, err := plainClient.Get(ts.URL + "/api/v1/admin/users")
@@ -1478,7 +1478,7 @@ func TestAccessEndToEnd(t *testing.T) {
 	}
 
 	ownerClient := newClient(t)
-	ownerLogin := login(t, ownerClient, ts.URL, ownerUser.Email, ownerPassword)
+	ownerLogin := postLogin(t, ownerClient, ts.URL, ownerUser.Email, ownerPassword)
 	ownerLogin.Body.Close()
 
 	ownerAdmin, err := ownerClient.Get(ts.URL + "/api/v1/admin/users")
@@ -1573,7 +1573,7 @@ func TestMailMessagesEndpointEndToEnd(t *testing.T) {
 	ownerUser, ownerPassword := createGroupUser(t, db, rbac.GroupIDOwner)
 
 	plainClient := newClient(t)
-	plainLogin := login(t, plainClient, ts.URL, plainUser.Email, plainPassword)
+	plainLogin := postLogin(t, plainClient, ts.URL, plainUser.Email, plainPassword)
 	plainLogin.Body.Close()
 
 	plain := postMessage(plainClient)
@@ -1589,7 +1589,7 @@ func TestMailMessagesEndpointEndToEnd(t *testing.T) {
 	}
 
 	ownerClient := newClient(t)
-	ownerLogin := login(t, ownerClient, ts.URL, ownerUser.Email, ownerPassword)
+	ownerLogin := postLogin(t, ownerClient, ts.URL, ownerUser.Email, ownerPassword)
 	ownerLogin.Body.Close()
 
 	createResp, err := ownerClient.Post(ts.URL+"/api/v1/admin/groups", "application/json", bytes.NewReader(groupPayload))

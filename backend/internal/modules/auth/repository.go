@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 
 	"website/backend/internal/database"
@@ -16,13 +15,7 @@ import (
 	"website/backend/internal/database/ent/user"
 )
 
-var (
-	errUserNotFound         = errors.New("auth: user not found")
-	errPendingNotFound      = errors.New("auth: pending registration not found")
-	errPendingEmailTaken    = errors.New("auth: pending email taken")
-	errPendingNicknameTaken = errors.New("auth: pending nickname taken")
-	errPendingConflict      = errors.New("auth: pending registration conflict")
-)
+var errUserNotFound = errors.New("auth: user not found")
 
 type repository struct {
 	client *ent.Client
@@ -80,152 +73,6 @@ func (r *repository) createUser(ctx context.Context, email, nickname, passwordHa
 		SetEmailVerificationStatus(emailVerificationStatus).
 		Save(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return created, nil
-}
-
-func (r *repository) replacePendingRegistration(ctx context.Context, in pendingRegistrationInput) (pendingRegistrationRecord, error) {
-	tx, err := r.client.Tx(ctx)
-	if err != nil {
-		return pendingRegistrationRecord{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.PendingRegistration.Delete().
-		Where(pendingregistration.ExpiresAtLT(time.Now())).
-		Exec(ctx); err != nil {
-		return pendingRegistrationRecord{}, err
-	}
-
-	if err := tx.PendingRegistration.Create().
-		SetEmail(in.Email).
-		SetNickname(in.Nickname).
-		SetPasswordHash(in.PasswordHash).
-		SetTokenHash(in.TokenHash).
-		SetExpiresAt(in.ExpiresAt).
-		OnConflict(sql.ConflictColumns("email")).
-		Update(func(u *ent.PendingRegistrationUpsert) {
-			u.SetNickname(in.Nickname)
-			u.SetPasswordHash(in.PasswordHash)
-			u.SetTokenHash(in.TokenHash)
-			u.SetExpiresAt(in.ExpiresAt)
-		}).
-		Exec(ctx); err != nil {
-		return pendingRegistrationRecord{}, err
-	}
-
-	row, err := tx.PendingRegistration.Query().
-		Where(pendingregistration.EmailEQ(in.Email)).
-		Only(ctx)
-	if err != nil {
-		return pendingRegistrationRecord{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return pendingRegistrationRecord{}, err
-	}
-	return pendingRegistrationRecord{ID: row.ID, TokenHash: row.TokenHash}, nil
-}
-
-func (r *repository) deletePendingRegistration(ctx context.Context, id uuid.UUID, tokenHash string) (int, error) {
-	return r.client.PendingRegistration.Delete().
-		Where(pendingregistration.IDEQ(id), pendingregistration.TokenHashEQ(tokenHash)).
-		Exec(ctx)
-}
-
-func (r *repository) findPendingRegistrationByEmail(ctx context.Context, email string) (*ent.PendingRegistration, error) {
-	row, err := r.client.PendingRegistration.Query().
-		Where(pendingregistration.EmailEQ(email)).
-		Only(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, errPendingNotFound
-		}
-		return nil, err
-	}
-	return row, nil
-}
-
-func (r *repository) verifyPendingRegistration(ctx context.Context, tokenHash string) (*ent.User, error) {
-	row, err := r.client.PendingRegistration.Query().
-		Where(pendingregistration.TokenHashEQ(tokenHash)).
-		Only(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, errPendingNotFound
-		}
-		return nil, err
-	}
-	if !row.ExpiresAt.After(time.Now()) {
-		if _, err := r.client.PendingRegistration.Delete().
-			Where(pendingregistration.IDEQ(row.ID), pendingregistration.TokenHashEQ(tokenHash)).
-			Exec(ctx); err != nil {
-			return nil, err
-		}
-		return nil, errPendingNotFound
-	}
-
-	tx, err := r.client.Tx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.User.Query().Where(user.EmailEQ(row.Email)).Only(ctx); err == nil {
-		if _, delErr := tx.PendingRegistration.Delete().
-			Where(pendingregistration.IDEQ(row.ID), pendingregistration.TokenHashEQ(tokenHash)).
-			Exec(ctx); delErr != nil {
-			return nil, delErr
-		}
-		if commitErr := tx.Commit(); commitErr != nil {
-			return nil, commitErr
-		}
-		return nil, errPendingEmailTaken
-	} else if !ent.IsNotFound(err) {
-		return nil, err
-	}
-
-	if _, err := tx.User.Query().Where(user.NicknameEQ(row.Nickname)).Only(ctx); err == nil {
-		if _, delErr := tx.PendingRegistration.Delete().
-			Where(pendingregistration.IDEQ(row.ID), pendingregistration.TokenHashEQ(tokenHash)).
-			Exec(ctx); delErr != nil {
-			return nil, delErr
-		}
-		if commitErr := tx.Commit(); commitErr != nil {
-			return nil, commitErr
-		}
-		return nil, errPendingNicknameTaken
-	} else if !ent.IsNotFound(err) {
-		return nil, err
-	}
-
-	deleted, err := tx.PendingRegistration.Delete().
-		Where(
-			pendingregistration.IDEQ(row.ID),
-			pendingregistration.TokenHashEQ(tokenHash),
-			pendingregistration.ExpiresAtGT(time.Now()),
-		).
-		Exec(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if deleted != 1 {
-		return nil, errPendingNotFound
-	}
-
-	created, err := tx.User.Create().
-		SetEmail(row.Email).
-		SetNickname(row.Nickname).
-		SetPasswordHash(row.PasswordHash).
-		SetEmailVerificationStatus(emailVerificationVerified).
-		Save(ctx)
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			return nil, errPendingConflict
-		}
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {

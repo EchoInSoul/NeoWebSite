@@ -11,6 +11,7 @@ import (
 
 	"website/backend/internal/common/rbac"
 	"website/backend/internal/database"
+	"website/backend/internal/modules/captcha"
 )
 
 type captchaVerifyError struct {
@@ -18,7 +19,7 @@ type captchaVerifyError struct {
 	Param *string `json:"param"`
 }
 
-func loginCaptchaVerifyUser(t *testing.T, db *database.Database, verifier captchaVerifier, groupID uuid.UUID) (*httptest.Server, *http.Client) {
+func loginCaptchaVerifyUser(t *testing.T, db *database.Database, verifier captcha.Verifier, groupID uuid.UUID) (*httptest.Server, *http.Client) {
 	t.Helper()
 
 	ts, svc := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
@@ -54,7 +55,7 @@ func decodeCaptchaVerifyError(t *testing.T, resp *http.Response) captchaVerifyEr
 
 func TestVerifyCaptchaConfigPasses(t *testing.T) {
 	db := testDB(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaPassed}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Passed}
 	ts, client := loginCaptchaVerifyUser(t, db, verifier, rbac.GroupIDOwner)
 
 	resp := postJSON(t, client, ts.URL+"/api/v1/admin/captcha/verifications", CaptchaVerificationRequest{SecretKey: "the-secret", Token: "the-token"})
@@ -84,7 +85,7 @@ func TestVerifyCaptchaConfigPasses(t *testing.T) {
 
 func TestVerifyCaptchaConfigMapsRejection(t *testing.T) {
 	db := testDB(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaRejected}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Rejected}
 	ts, client := loginCaptchaVerifyUser(t, db, verifier, rbac.GroupIDOwner)
 
 	resp := postJSON(t, client, ts.URL+"/api/v1/admin/captcha/verifications", CaptchaVerificationRequest{SecretKey: "wrong-secret", Token: "the-token"})
@@ -102,7 +103,7 @@ func TestVerifyCaptchaConfigMapsRejection(t *testing.T) {
 
 func TestVerifyCaptchaConfigMapsUnavailable(t *testing.T) {
 	db := testDB(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaUnavailable}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Unavailable}
 	ts, client := loginCaptchaVerifyUser(t, db, verifier, rbac.GroupIDOwner)
 
 	resp := postJSON(t, client, ts.URL+"/api/v1/admin/captcha/verifications", CaptchaVerificationRequest{SecretKey: "the-secret", Token: "the-token"})
@@ -117,7 +118,7 @@ func TestVerifyCaptchaConfigMapsUnavailable(t *testing.T) {
 
 func TestVerifyCaptchaConfigRequiresKeys(t *testing.T) {
 	db := testDB(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaPassed}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Passed}
 	ts, client := loginCaptchaVerifyUser(t, db, verifier, rbac.GroupIDOwner)
 
 	cases := []CaptchaVerificationRequest{
@@ -142,7 +143,7 @@ func TestVerifyCaptchaConfigRequiresKeys(t *testing.T) {
 
 func TestVerifyCaptchaConfigRequiresJSONRequest(t *testing.T) {
 	db := testDB(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaPassed}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Passed}
 	ts, client := loginCaptchaVerifyUser(t, db, verifier, rbac.GroupIDOwner)
 
 	payload := `{"secret_key":"the-secret","token":"the-token"}`
@@ -167,7 +168,7 @@ func TestVerifyCaptchaConfigRequiresJSONRequest(t *testing.T) {
 
 func TestVerifyCaptchaConfigForbiddenForPlainUser(t *testing.T) {
 	db := testDB(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaPassed}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Passed}
 	ts, client := loginCaptchaVerifyUser(t, db, verifier, rbac.GroupIDUser)
 
 	resp := postJSON(t, client, ts.URL+"/api/v1/admin/captcha/verifications", CaptchaVerificationRequest{SecretKey: "the-secret", Token: "the-token"})
@@ -184,7 +185,7 @@ func TestVerifyCaptchaConfigForbiddenForPlainUser(t *testing.T) {
 
 func TestVerifyCaptchaConfigRequiresAuth(t *testing.T) {
 	db := testDB(t)
-	verifier := &fakeCaptchaVerifier{outcome: captchaPassed}
+	verifier := &fakeCaptchaVerifier{outcome: captcha.Passed}
 	ts, _ := newCaptchaTestApp(t, db, verifier, disabledRateLimitPolicies())
 
 	resp := postJSON(t, &http.Client{}, ts.URL+"/api/v1/admin/captcha/verifications", CaptchaVerificationRequest{SecretKey: "the-secret", Token: "the-token"})

@@ -7,14 +7,15 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"website/backend/internal/common/userinput"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
 )
 
-const maxPasswordBytes = 72
+const emailVerificationNotRequired = "not_required"
 
 func CreateAdminUser(ctx context.Context, db *database.Database, email, nickname, password string) (User, error) {
-	if len(password) > maxPasswordBytes {
+	if len(password) > userinput.PasswordMaxBytes {
 		return User{}, errors.New("auth: password must be at most 72 bytes")
 	}
 	if password == "" {

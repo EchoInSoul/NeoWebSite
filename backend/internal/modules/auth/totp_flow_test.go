@@ -19,6 +19,8 @@ import (
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
 	"website/backend/internal/database/ent/recoverycode"
+	"website/backend/internal/modules/captcha"
+	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
 )
 
@@ -1096,7 +1098,7 @@ func TestTwoFactorSetupConcurrentCallsShareSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("settings.New: %v", err)
 	}
-	svc := newService(db, scs.New(), testTOTPKey, settingsModule.Service, ratelimit.New(), disabledRateLimitPolicies(), nil, &fakeMailer{configured: true})
+	svc := newService(db, session.New(settingsModule.Service, scs.New()), testTOTPKey, settingsModule.Service, ratelimit.New(), verifyPolicies{}, captcha.NewService(settingsModule.Service, nil))
 
 	results := make([]TwoFactorSetupResponse, 8)
 	errs := make([]error, 8)
