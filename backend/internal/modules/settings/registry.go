@@ -36,7 +36,7 @@ var builtinRegistry = []Group{
 	},
 	{
 		Name:       "auth",
-		ValidateOn: []string{"password_min_length", "session_max_age_days", "session_max_age_enabled", "captcha_scopes"},
+		ValidateOn: []string{"password_min_length", "session_max_age_days", "session_max_age_enabled"},
 		Validate:   validateAuthGroup,
 		Items: []Definition{
 			{Name: "password_requirements_enabled", Type: FieldTypeBool, Default: false},
@@ -46,6 +46,13 @@ var builtinRegistry = []Group{
 			{Name: "session_max_age_days", Type: FieldTypeNumber, Default: int64(7)},
 			{Name: "totp_enabled", Type: FieldTypeBool, Default: true, Public: true},
 			{Name: "password_reset_enabled", Type: FieldTypeBool, Default: false},
+		},
+	},
+	{
+		Name:       "captcha",
+		ValidateOn: []string{"captcha_scopes"},
+		Validate:   validateCaptchaGroup,
+		Items: []Definition{
 			{Name: "captcha_enabled", Type: FieldTypeBool, Default: false, Public: true},
 			{Name: "captcha_provider", Type: FieldTypeString, Default: "none", Public: true},
 			{Name: "captcha_scopes", Type: FieldTypeString, Default: "login,register", Public: true},
@@ -182,6 +189,10 @@ func validateAuthGroup(values map[string]any, touched map[string]bool) error {
 		}
 	}
 
+	return nil
+}
+
+func validateCaptchaGroup(values map[string]any, touched map[string]bool) error {
 	if touched["captcha_scopes"] {
 		raw, ok := values["captcha_scopes"].(string)
 		if !ok {

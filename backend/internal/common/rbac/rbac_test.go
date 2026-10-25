@@ -15,6 +15,8 @@ func TestCatalogMatchesFixedValues(t *testing.T) {
 		{Key: PermissionSettingsEdit, Name: "管理设置"},
 		{Key: PermissionRegisterView, Name: "查看用户注册"},
 		{Key: PermissionRegisterEdit, Name: "管理用户注册"},
+		{Key: PermissionCaptchaView, Name: "查看人机验证"},
+		{Key: PermissionCaptchaEdit, Name: "管理人机验证"},
 		{Key: PermissionGroupsView, Name: "查看用户组"},
 		{Key: PermissionGroupsEdit, Name: "管理用户组"},
 	}
@@ -25,6 +27,8 @@ func TestCatalogMatchesFixedValues(t *testing.T) {
 		PermissionUsersEdit != "system.users.edit" ||
 		PermissionRegisterView != "system.register.view" ||
 		PermissionRegisterEdit != "system.register.edit" ||
+		PermissionCaptchaView != "system.captcha.view" ||
+		PermissionCaptchaEdit != "system.captcha.edit" ||
 		PermissionGroupsView != "system.groups.view" ||
 		PermissionGroupsEdit != "system.groups.edit" ||
 		PermissionSettingsView != "system.settings.view" ||

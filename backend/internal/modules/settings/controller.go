@@ -22,16 +22,18 @@ func newController(service *Service) *controller {
 }
 
 func (c *controller) registerProtected(r *gin.RouterGroup) {
-	r.GET("/admin/settings/:group", requireGroupPermission(rbac.PermissionSettingsView, rbac.PermissionRegisterView), c.getGroup)
-	r.PATCH("/admin/settings/:group", requireGroupPermission(rbac.PermissionSettingsEdit, rbac.PermissionRegisterEdit), c.patchGroup)
+	r.GET("/admin/settings/:group", requireGroupPermission(rbac.PermissionSettingsView, rbac.PermissionRegisterView, rbac.PermissionCaptchaView), c.getGroup)
+	r.PATCH("/admin/settings/:group", requireGroupPermission(rbac.PermissionSettingsEdit, rbac.PermissionRegisterEdit, rbac.PermissionCaptchaEdit), c.patchGroup)
 }
 
-func requireGroupPermission(settingsPermission, registerPermission string) gin.HandlerFunc {
+func requireGroupPermission(settingsPermission, registerPermission, captchaPermission string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		permission := settingsPermission
 		switch ctx.Param("group") {
 		case "register", "auth":
 			permission = registerPermission
+		case "captcha":
+			permission = captchaPermission
 		}
 		guard.RequirePermission(permission)(ctx)
 	}

@@ -108,8 +108,8 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "email_verification_enabled", typ: FieldTypeBool, def: false},
 	})
 
-	if len(reg.groups["auth"]) != 12 {
-		t.Fatalf("auth items = %d, want 12", len(reg.groups["auth"]))
+	if len(reg.groups["auth"]) != 7 {
+		t.Fatalf("auth items = %d, want 7", len(reg.groups["auth"]))
 	}
 	assertDefinitions(t, reg.groups["auth"], []wantItem{
 		{name: "password_requirements_enabled", typ: FieldTypeBool, def: false},
@@ -119,6 +119,12 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "session_max_age_days", typ: FieldTypeNumber, def: int64(7)},
 		{name: "totp_enabled", typ: FieldTypeBool, def: true, public: true},
 		{name: "password_reset_enabled", typ: FieldTypeBool, def: false},
+	})
+
+	if len(reg.groups["captcha"]) != 5 {
+		t.Fatalf("captcha items = %d, want 5", len(reg.groups["captcha"]))
+	}
+	assertDefinitions(t, reg.groups["captcha"], []wantItem{
 		{name: "captcha_enabled", typ: FieldTypeBool, def: false, public: true},
 		{name: "captcha_provider", typ: FieldTypeString, def: "none", public: true},
 		{name: "captcha_scopes", typ: FieldTypeString, def: "login,register", public: true},
@@ -161,11 +167,11 @@ func TestBuiltinPublicAllowlist(t *testing.T) {
 	}
 	sort.Strings(public)
 	want := []string{
-		"auth.captcha_enabled",
-		"auth.captcha_provider",
-		"auth.captcha_scopes",
 		"auth.totp_enabled",
-		"auth.turnstile_site_key",
+		"captcha.captcha_enabled",
+		"captcha.captcha_provider",
+		"captcha.captcha_scopes",
+		"captcha.turnstile_site_key",
 		"register.enabled",
 		"site.block_search_engines",
 		"site.description",
@@ -307,7 +313,7 @@ func TestValidateAuthGroup(t *testing.T) {
 	}
 }
 
-func TestValidateAuthCaptchaScopes(t *testing.T) {
+func TestValidateCaptchaScopes(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		value   string
@@ -323,11 +329,8 @@ func TestValidateAuthCaptchaScopes(t *testing.T) {
 		{"untouched invalid value", "", false, false},
 	} {
 		touched := map[string]bool{"captcha_scopes": tc.touched}
-		err := validateAuthGroup(map[string]any{
-			"password_min_length":     int64(8),
-			"session_max_age_enabled": false,
-			"session_max_age_days":    int64(7),
-			"captcha_scopes":          tc.value,
+		err := validateCaptchaGroup(map[string]any{
+			"captcha_scopes": tc.value,
 		}, touched)
 		if (err != nil) != tc.wantErr {
 			t.Fatalf("%s: err = %v, wantErr = %v", tc.name, err, tc.wantErr)

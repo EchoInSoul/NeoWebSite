@@ -305,6 +305,36 @@ func TestSettingsGetUnknownGroup(t *testing.T) {
 	}
 }
 
+func TestSettingsPatchCaptchaGroupPermission(t *testing.T) {
+	db := testDB(t)
+	resetBuiltin(t, db, "auth", "captcha")
+	ts := newSettingsTestApp(t, db)
+
+	captchaGroupID := createGroupWithPermissions(t, db, "cap", []string{rbac.PermissionCaptchaView, rbac.PermissionCaptchaEdit})
+	registerGroupID := createGroupWithPermissions(t, db, "reg", []string{rbac.PermissionRegisterView, rbac.PermissionRegisterEdit})
+	captchaUser := seedClient(t, ts, createUserInGroup(t, db, captchaGroupID))
+	registerUser := seedClient(t, ts, createUserInGroup(t, db, registerGroupID))
+
+	ok := doJSON(t, captchaUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"captcha_scopes": "register"})
+	expectStatus(t, ok, http.StatusOK)
+	_, values := decodeGroup(t, ok)
+	if values["captcha_scopes"] != "register" {
+		t.Fatalf("captcha_scopes = %v, want register", values["captcha_scopes"])
+	}
+
+	denied := doJSON(t, registerUser, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"captcha_scopes": "login"})
+	expectStatus(t, denied, http.StatusForbidden)
+	if code := decodeErrorCode(t, denied); code != "forbidden" {
+		t.Fatalf("captcha as register user: code = %q, want forbidden", code)
+	}
+
+	resp := doJSON(t, captchaUser, http.MethodGet, ts.URL+"/api/v1/admin/settings/auth", nil)
+	expectStatus(t, resp, http.StatusForbidden)
+	if code := decodeErrorCode(t, resp); code != "forbidden" {
+		t.Fatalf("auth as captcha user: code = %q, want forbidden", code)
+	}
+}
+
 func TestSettingsGetRequiresAuth(t *testing.T) {
 	db := testDB(t)
 	ts := newSettingsTestApp(t, db)
@@ -401,8 +431,8 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 	expectStatus(t, resp, http.StatusOK)
 
 	items := decodePublicItems(t, resp)
-	if len(items) != 3 {
-		t.Fatalf("public items = %v, want the site, register and auth groups", items)
+	if len(items) != 4 {
+		t.Fatalf("public items = %v, want the site, register, auth and captcha groups", items)
 	}
 	if items[0]["group"] != "site" {
 		t.Fatalf("group = %v, want site first in registry order", items[0]["group"])
@@ -433,17 +463,27 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 		t.Fatalf("group = %v, want auth", items[2]["group"])
 	}
 	authValues, ok := items[2]["values"].(map[string]any)
-	if !ok || len(authValues) != 5 {
-		t.Fatalf("public auth values = %v, want totp_enabled plus the four captcha keys", items[2]["values"])
+	if !ok || len(authValues) != 1 {
+		t.Fatalf("public auth values = %v, want only totp_enabled", items[2]["values"])
 	}
 	if authValues["totp_enabled"] != true {
 		t.Fatalf("public auth.totp_enabled = %v, want true", authValues["totp_enabled"])
 	}
-	if authValues["captcha_enabled"] != false || authValues["captcha_provider"] != "none" || authValues["turnstile_site_key"] != "" {
-		t.Fatalf("public auth captcha values = %v, want the disabled defaults", authValues)
+	if items[3]["group"] != "captcha" {
+		t.Fatalf("group = %v, want captcha", items[3]["group"])
 	}
-	if authValues["captcha_scopes"] != "login,register" {
-		t.Fatalf("public auth.captcha_scopes = %v, want the default scopes", authValues["captcha_scopes"])
+	captchaValues, ok := items[3]["values"].(map[string]any)
+	if !ok || len(captchaValues) != 4 {
+		t.Fatalf("public captcha values = %v, want the four public keys without the secret", items[3]["values"])
+	}
+	if captchaValues["captcha_enabled"] != false || captchaValues["captcha_provider"] != "none" || captchaValues["turnstile_site_key"] != "" {
+		t.Fatalf("public captcha values = %v, want the disabled defaults", captchaValues)
+	}
+	if captchaValues["captcha_scopes"] != "login,register" {
+		t.Fatalf("public captcha.captcha_scopes = %v, want the default scopes", captchaValues["captcha_scopes"])
+	}
+	if _, leaked := captchaValues["turnstile_secret_key"]; leaked {
+		t.Fatalf("public captcha values leaked turnstile_secret_key: %v", captchaValues)
 	}
 }
 
@@ -472,8 +512,8 @@ func TestSettingsPatchSiteReadsBackPublicly(t *testing.T) {
 	public := doJSON(t, &http.Client{}, http.MethodGet, ts.URL+"/api/v1/public/settings", nil)
 	expectStatus(t, public, http.StatusOK)
 	items := decodePublicItems(t, public)
-	if len(items) != 3 || items[0]["group"] != "site" {
-		t.Fatalf("public items = %v, want site first then register and auth", items)
+	if len(items) != 4 || items[0]["group"] != "site" {
+		t.Fatalf("public items = %v, want site first then register, auth and captcha", items)
 	}
 	siteValues, ok := items[0]["values"].(map[string]any)
 	if !ok || siteValues["title"] != "我的博客" || siteValues["block_search_engines"] != true {
@@ -563,8 +603,8 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	if group != "auth" {
 		t.Fatalf("group = %q, want auth", group)
 	}
-	if len(values) != 12 {
-		t.Fatalf("auth values = %v, want the twelve defaults", values)
+	if len(values) != 7 {
+		t.Fatalf("auth values = %v, want the seven defaults", values)
 	}
 	if values["session_max_age_days"] != float64(7) {
 		t.Fatalf("auth.session_max_age_days = %v, want 7", values["session_max_age_days"])
@@ -572,17 +612,27 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	if values["password_min_length"] != float64(8) {
 		t.Fatalf("auth.password_min_length = %v, want 8", values["password_min_length"])
 	}
+	if values["totp_enabled"] != true {
+		t.Fatalf("auth.totp_enabled = %v, want true", values["totp_enabled"])
+	}
+
+	captcha := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/settings/captcha", nil)
+	expectStatus(t, captcha, http.StatusOK)
+	group, values = decodeGroup(t, captcha)
+	if group != "captcha" {
+		t.Fatalf("group = %q, want captcha", group)
+	}
+	if len(values) != 5 {
+		t.Fatalf("captcha values = %v, want the five defaults", values)
+	}
 	if values["captcha_provider"] != "none" {
-		t.Fatalf("auth.captcha_provider = %v, want none", values["captcha_provider"])
+		t.Fatalf("captcha.captcha_provider = %v, want none", values["captcha_provider"])
 	}
 	if values["captcha_scopes"] != "login,register" {
-		t.Fatalf("auth.captcha_scopes = %v, want login,register", values["captcha_scopes"])
+		t.Fatalf("captcha.captcha_scopes = %v, want login,register", values["captcha_scopes"])
 	}
 	if values["turnstile_site_key"] != "" || values["turnstile_secret_key"] != "" {
 		t.Fatalf("turnstile keys = %v / %v, want empty", values["turnstile_site_key"], values["turnstile_secret_key"])
-	}
-	if values["totp_enabled"] != true {
-		t.Fatalf("auth.totp_enabled = %v, want true", values["totp_enabled"])
 	}
 
 	patch := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"session_max_age_days": 14})
@@ -605,11 +655,11 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 
 func TestSettingsPatchTurnstileKeysRoundtrip(t *testing.T) {
 	db := testDB(t)
-	resetBuiltin(t, db, "auth")
+	resetBuiltin(t, db, "captcha")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
-	patch := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{
+	patch := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{
 		"captcha_enabled":      true,
 		"captcha_provider":     "turnstile",
 		"turnstile_site_key":   "0x4AAAAAAAsite",
@@ -617,7 +667,7 @@ func TestSettingsPatchTurnstileKeysRoundtrip(t *testing.T) {
 	})
 	expectStatus(t, patch, http.StatusOK)
 
-	after := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/settings/auth", nil)
+	after := doJSON(t, owner, http.MethodGet, ts.URL+"/api/v1/admin/settings/captcha", nil)
 	expectStatus(t, after, http.StatusOK)
 	_, values := decodeGroup(t, after)
 	if values["captcha_enabled"] != true || values["captcha_provider"] != "turnstile" {
@@ -847,13 +897,13 @@ func TestSettingsPatchAuthSessionMaxAgeRange(t *testing.T) {
 	}
 }
 
-func TestSettingsPatchAuthCaptchaScopes(t *testing.T) {
+func TestSettingsPatchCaptchaScopes(t *testing.T) {
 	db := testDB(t)
-	resetBuiltin(t, db, "auth")
+	resetBuiltin(t, db, "captcha")
 	ts := newSettingsTestApp(t, db)
 	owner := seedClient(t, ts, createUserInGroup(t, db, rbac.GroupIDOwner))
 
-	invalid := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"captcha_scopes": "login,password_reset"})
+	invalid := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"captcha_scopes": "login,password_reset"})
 	expectStatus(t, invalid, http.StatusConflict)
 	body := decodeError(t, invalid)
 	if body["code"] != "setting_conflict" || body["param"] != "captcha_scopes" {
@@ -861,7 +911,7 @@ func TestSettingsPatchAuthCaptchaScopes(t *testing.T) {
 	}
 
 	for _, scopes := range []string{"", "register"} {
-		ok := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/auth", map[string]any{"captcha_scopes": scopes})
+		ok := doJSON(t, owner, http.MethodPatch, ts.URL+"/api/v1/admin/settings/captcha", map[string]any{"captcha_scopes": scopes})
 		expectStatus(t, ok, http.StatusOK)
 		_, values := decodeGroup(t, ok)
 		if values["captcha_scopes"] != scopes {
