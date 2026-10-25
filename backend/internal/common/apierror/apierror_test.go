@@ -37,6 +37,8 @@ func TestRegistryMatchesSpec(t *testing.T) {
 		{"unauthorized", ErrUnauthorized, TypeAuthentication, "unauthorized", http.StatusUnauthorized, nil},
 		{"rate_limited", ErrRateLimit, TypeRateLimit, "rate_limited", http.StatusTooManyRequests, nil},
 		{"forbidden", ErrForbidden, TypePermission, "forbidden", http.StatusForbidden, nil},
+		{"captcha_disabled", ErrCaptchaDisabled, TypePermission, "captcha_disabled", http.StatusForbidden, nil},
+		{"captcha_rejected", ErrCaptchaRejected, TypeInvalidRequest, "captcha_failed", http.StatusBadRequest, nil},
 		{"grant_forbidden", ErrGrantForbidden, TypePermission, "grant_forbidden", http.StatusForbidden, nil},
 		{"owner_protected", ErrOwnerProtected, TypePermission, "owner_protected", http.StatusForbidden, nil},
 		{"cannot_modify_self", ErrCannotModifySelf, TypePermission, "cannot_modify_self", http.StatusForbidden, nil},
@@ -311,7 +313,7 @@ func TestAbortRateLimitedSetsRetryAfter(t *testing.T) {
 func TestRegistryIntegrity(t *testing.T) {
 	all := []*Error{
 		ErrInvalidRequest, ErrWeakPassword, ErrPasswordUnchanged, ErrInvalidPermission, ErrEmailDomainNotAllowed,
-		ErrCaptchaFailed, ErrCaptchaVerifyFailed,
+		ErrCaptchaFailed, ErrCaptchaVerifyFailed, ErrCaptchaDisabled,
 		ErrMethodNotAllowed,
 		ErrInvalidCredentials, ErrUnauthorized, ErrRateLimit, ErrTwoFactorRequired, ErrTwoFactorInvalidCode,
 		ErrTwoFactorLocked, ErrForbidden, ErrGrantForbidden,
@@ -321,11 +323,11 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrMailUnavailable, ErrEmailVerificationInvalid,
 		ErrEmailNotVerified, ErrNotImplemented, ErrServiceUnavailable, ErrInternal,
 	}
-	if len(all) != 39 {
-		t.Fatalf("sentinel count = %d, want 39", len(all))
+	if len(all) != 40 {
+		t.Fatalf("sentinel count = %d, want 40", len(all))
 	}
-	if len(statusByCode) != 39 {
-		t.Fatalf("statusByCode entries = %d, want 39", len(statusByCode))
+	if len(statusByCode) != 40 {
+		t.Fatalf("statusByCode entries = %d, want 40", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,

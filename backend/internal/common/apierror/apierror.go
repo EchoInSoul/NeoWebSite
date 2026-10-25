@@ -44,6 +44,8 @@ var (
 	ErrInvalidPermission        = &Error{Type: TypeInvalidRequest, Code: "invalid_permission"}
 	ErrEmailDomainNotAllowed    = &Error{Type: TypeInvalidRequest, Code: "email_domain_not_allowed", Param: strPtr("email")}
 	ErrCaptchaFailed            = &Error{Type: TypeInvalidRequest, Code: "captcha_failed", Param: strPtr("captcha_token")}
+	ErrCaptchaRejected          = &Error{Type: TypeInvalidRequest, Code: "captcha_failed"}
+	ErrCaptchaDisabled          = &Error{Type: TypePermission, Code: "captcha_disabled"}
 	ErrCaptchaVerifyFailed      = &Error{Type: TypeInvalidRequest, Code: "captcha_verification_failed"}
 	ErrEmailVerificationInvalid = &Error{Type: TypeInvalidRequest, Code: "email_verification_invalid", Param: strPtr("token")}
 	ErrMethodNotAllowed         = &Error{Type: TypeInvalidRequest, Code: "method_not_allowed"}
@@ -86,6 +88,7 @@ var statusByCode = map[string]int{
 	"invalid_permission":          http.StatusBadRequest,
 	"email_domain_not_allowed":    http.StatusBadRequest,
 	"captcha_failed":              http.StatusBadRequest,
+	"captcha_disabled":            http.StatusForbidden,
 	"captcha_verification_failed": http.StatusBadRequest,
 	"email_verification_invalid":  http.StatusBadRequest,
 	"method_not_allowed":          http.StatusMethodNotAllowed,
