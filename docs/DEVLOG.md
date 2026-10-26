@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-10-26 · 找回密码（邮件一次性链接）后端
+
+**范围**：后端 `internal/common/apierror/apierror.go`（两个哨兵与状态映射）、新增 `internal/database/ent/schema/password_reset.go` 与迁移 `20261026150001_password_resets.sql`（含 `atlas.sum`）、新增能力模块 `internal/modules/passwordreset/{service,repository,token,ratelimit,email}.go` 及其五个测试文件、`internal/modules/mail/{controller.go,templates/password_reset.html,templates/password_reset.txt,controller_test.go}`、`internal/modules/auth/{controller.go,dto.go,module.go,repository.go,auth_test.go,password_reset_flow_test.go}`、`internal/modules/settings/{registry.go,registry_test.go,controller_test.go}`、`internal/app/app.go`、`backend/README.md`、API 规范 §3 与 §7.3；另加本条目。设计 `docs/superpowers/specs/2026-10-26-neoblog-password-reset-design.md`、计划 `docs/superpowers/plans/2026-10-26-neoblog-password-reset.md`（两份均仍未入库）。
+
+**动机**：`auth.password_reset_enabled` 从 0.15 那轮起就是纯数据（后台有开关、后端零实现）。本轮按已批准的 spec 让它第一次真正生效：申请 → 邮件链接 → 确认页设新密码 → 全部旧会话作废。
+
+**决策**：
+- **未知邮箱也回 202、不发信、不写记录**，但限流照常计数——这是 spec §2 D3 授权的「不披露」，不是兜底；`TestRequestUnknownEmailStillCountsRateLimit` 与 `TestPasswordResetRequestRateLimitHTTP` 把它钉住，否则 429 本身会反过来泄露存在性。
+- **邮件整体不可用在查账号之前判定**（SMTP 未配 / `site.url` 缺失或非法 → 503），账号存在但渲染或投递失败则先按 `id` + `token_hash` 删掉本次记录再 503；补偿删除不能按 `user_id`，否则会把并发重申请写入的新行删掉（`TestDeleteResetRequiresTokenHash`）。
+- **令牌 32 字节 base64url、库里只存 SHA-256 指纹、30 分钟、一次性**；一账号最多一行，重复申请 `ON CONFLICT (user_id)` 覆盖旧指纹（旧链接立即作废）；认领与删除都同时带 `id` + `token_hash`，两个并发确认恰一个成功（`TestConfirmConcurrent`）。
+- **弱密码与「与当前密码相同」判在认领之前**，令牌不消耗、改好就能重试（`TestConfirmWeakPasswordKeepsToken`、`TestConfirmSamePasswordKeepsToken`）。
+- **成功不签发会话、响应无 `Set-Cookie`**，改为在同一事务把 `users.auth_version` +1，靠既有守卫把全部设备踢下线；2FA 的 secret / 启用时间 / 恢复码原样保留（`TestConfirmKeepsTwoFactor`）。
+- **站级开关关闭时已发出的令牌不物理删除**，重新打开后未过期的仍可用（`TestPasswordResetConfirmDisabledHTTP` 断库里仍有 1 行）。
+- **正常改密与改邮箱在同一事务清掉该账号的重置记录**（`POST /users/me/password`、`PATCH /users/me` 带 `email`；只改昵称 / 简介不清），否则用户改完凭据后泄露的链接仍然有效。
+- **`password_reset_enabled` 标 `Public: true`**，公开聚合端点多下发这一个布尔，供前端决定是否显示入口。
+- **内置 `password_reset` 模板从「验证码」改成「链接」**，占位符 `{{resetUrl}}`、默认主题「密码重置」；数据里仍带一个空 `code`，让库里历史自定义正文的 `{{code}}` 渲染为空而不是 `<no value>`。
+- **本轮不接人机验证、不做重发按钮、不发「密码已修改」通知、不做审计表、不提版本号**（spec §11 非目标）。
+- **`user_id` 的唯一性写在 `index.Fields("user_id").Unique()` 而不是字段上的 `.Unique()`**：实施时实测——`user.go` 那边是复数边 `passwordResets`（O2M），ent 会**静默忽略**字段级 `.Unique()`，Atlas 生成的迁移里根本没有唯一索引，`ON CONFLICT (user_id)` 会在运行时报「没有匹配的唯一约束」。补成唯一索引后由 `TestPasswordResetIndexShape` 与 `TestPasswordResetRejectsSecondRowPerUser` 一起钉住。
+- **前端整段被用户砍掉**（原计划 Task 10-12：登录页「忘记密码？」入口、`/reset-password` 与 `/reset-password/confirm` 两个页面、`auth.reset.*` 文案、邮件设置页占位符）。后端这轮做完即自洽：两个端点可用、邮件里的链接指向一个**当前还不存在的**前端路径。
+
+**验证**：新增 41 个 `passwordreset` 测试（表形状 6、令牌 2、仓库 7、申请 15、确认 11）+ 15 个 auth flow HTTP 测试（含开关 403、503 前置、旧会话 401、响应无 cookie、两条限流 429）+ 2 个 mail 模板测试并改写 1 个既有断言；`apierror` 哨兵计数 40 → 42；`settings` 公开白名单加 `auth.password_reset_enabled` 并改公开响应断言。全量 `scripts/test.sh ./...` = 22 个 `ok`、0 `FAIL`、退出码 0；`scripts/check.sh` 通过；`atlas migrate validate` 通过；迁移已 apply 到 `neoblog` 与 `neoblog_test` 两个库。**未做**：真实收信、浏览器点按与运行期验收（交用户）。
+
+**已知缺口**：
+- 前端没有入口也没有两个页面，公开布尔暂无消费者；重置链接指向 `/reset-password/confirm?token=...`，在当前前端上是 404。
+- 「待二段」会话无法精确吊销（spec §2 D9）：重置密码后，只过了第一段密码、还没走二段的会话仍能用二因子完成登录。
+- 申请与确认都还没有人机验证；限流计数在单实例进程内，重启清零。
+- 库里既有的 `password_reset_subject` / `password_reset_body` 自定义正文若写死了 `{{code}}`，现在渲染出来是空串——需要管理员自己去改成 `{{resetUrl}}`（内置模板已改）。
+
+**提交状态**：**未提交**，改动全部留在工作区待用户检查（按计划的全局约束「绝不提交」执行）。
+
+---
+
 ## 2026-10-26 · 后端 500/panic 可诊断（最小版）
 
 **范围**：`internal/app/app.go` 的 `recoveryHandler` 不再丢弃 panic 值；`internal/common/apierror` 的 `Write` / `Abort` / `WriteHTTP` 三个出口统一记 5xx 日志；`captcha/builtin/service.go` 的 `captcha_mode` 读取失败改为双 `%w` 包裹以保留根因。零新依赖、零新路由、零响应契约变化（不加 request id、不改访问日志格式）。

@@ -127,6 +127,8 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 27 | `POST /api/v1/users/me/2fa/recovery-codes/email` | `backend/internal/modules/auth/controller.go:42`（2026-10-23 新增，守卫内；**预留桩**：邮件发送恢复码方案未落地，当前固定 501 `not_implemented`，不读请求体、不发信、不写库） |
 | 28 | `POST /api/v1/users/email-verifications` | `backend/internal/modules/auth/controller.go:28`（v1.7 新增，公开；body `{"token":"..."}`，消费一次性链接令牌并创建状态 `verified` 的用户、**不下发会话**；`users/email-verifications` 是 `/users` 下的从属资源集合；令牌不存在/过期/已用 400 `email_verification_invalid`，验证时邮箱/用户名被占 409 `email_taken` / `nickname_taken`，并发竞态 409 `already_taken`） |
 | 29 | `GET /api/v1/admin/mail/status` | `backend/internal/modules/mail/controller.go:43`（v1.7 新增，`system.register.view`；返回 `{"smtp_configured":bool,"site_url_configured":bool}` 两个布尔，供「用户注册」设置页判断「邮箱所有权认证」开关的前置条件；不泄露 SMTP 细节或私钥） |
+| 30 | `POST /api/v1/users/password-resets` | `backend/internal/modules/auth/controller.go`（2026-10-26 新增，公开；body `{"email":"..."}`，找回密码申请，**存在与否一律 202 `{}`**（不存在不发信、不写记录，限流照常计数）；站级 `auth.password_reset_enabled` 关闭 403 `password_reset_disabled`，邮件前置条件不满足 503 `mail_unavailable`；实现委托 `internal/modules/passwordreset`，路由是本模块薄壳） |
+| 31 | `POST /api/v1/users/password-resets/confirmations` | `backend/internal/modules/auth/controller.go`（2026-10-26 新增，公开；body `{"token","new_password"}`，找回密码确认，**子动作用复数资源 + 过去分词**，与 #28 的 `email-verifications` 同构；令牌只走请求体不进 URL；200 `{}` 不下发会话、响应无 `Set-Cookie`；令牌失效 400 `password_reset_invalid`、新密码不合格 400 `weak_password` / 与当前相同 400 `password_unchanged`、开关关闭 403 `password_reset_disabled`；成功在同一事务 `auth_version` +1 吊销全部旧会话） |
 
 正例（新端点命名，资源复数 + 子动作）：
 
@@ -397,7 +399,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 
 ### 7.3 code 词汇表（收编现有 token；此后只增不改义）
 
-19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；0.12.0 起新增 `registration_closed`（注册开关关闭，见设置 spec 与本轮 spec）；0.20.3 起新增 `email_domain_not_allowed`（注册邮箱域名白名单拒绝，400 / `invalid_request_error`，param 默认 `email`）与 `setting_conflict`（设置写前组合校验不满足，409 / `conflict_error`，param 由设置端点覆盖为判定项名）；0.21.0 起新增 `two_factor_disabled`（站级 `auth/totp_enabled` 关闭时调用 2FA setup / enable，403 / `permission_error`）；0.21.2 起新增 `rate_limited`（登录 / 注册 / 2FA verify 限流，429 / `rate_limit_error`；响应带 `Retry-After` 秒数）；2026-10-23 起新增 `not_implemented`（预留接口桩，501 / `server_error`，当前只用于 2FA 恢复码邮件发送）；v1.7（2026-10-25）起新增 `mail_unavailable`（503）、`email_verification_invalid`（400，param `token`）、`email_not_verified`（403）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`，设置端点 `PATCH` 的项名与类型错误覆盖为出错项名：
+19 个现有 token 全量收编（来源：`backend/internal/modules/auth/service.go:15-24`、`backend/internal/modules/access/service.go:18-29`、guard 的 3 个字面量 token），另新增 `current_password_mismatch`（由 `invalid_credentials` 拆分而来，§14 决策 3），并将 `preset_group_locked` 由 403 / `permission_error` 改判为 409 / `conflict_error`（§14 决策 5）；0.9.0 起新增 `mail_delivery_failed`（管理端发信自检，走注册表登记）；0.10.0 起新增两步验证 6 个 token（`two_factor_*`：三个 401 / `authentication_error` + 三个 409 / `conflict_error`）；0.11.0 起新增 `method_not_allowed`（方法不匹配，405 改判见 §4 规则 2）；0.12.0 起新增 `registration_closed`（注册开关关闭，见设置 spec 与本轮 spec）；0.20.3 起新增 `email_domain_not_allowed`（注册邮箱域名白名单拒绝，400 / `invalid_request_error`，param 默认 `email`）与 `setting_conflict`（设置写前组合校验不满足，409 / `conflict_error`，param 由设置端点覆盖为判定项名）；0.21.0 起新增 `two_factor_disabled`（站级 `auth/totp_enabled` 关闭时调用 2FA setup / enable，403 / `permission_error`）；0.21.2 起新增 `rate_limited`（登录 / 注册 / 2FA verify 限流，429 / `rate_limit_error`；响应带 `Retry-After` 秒数）；2026-10-23 起新增 `not_implemented`（预留接口桩，501 / `server_error`，当前只用于 2FA 恢复码邮件发送）；v1.7（2026-10-25）起新增 `mail_unavailable`（503）、`email_verification_invalid`（400，param `token`）、`email_not_verified`（403）；2026-10-26 起新增 `password_reset_disabled`（403 / `permission_error`，站级找回密码开关关闭）与 `password_reset_invalid`（400 / `invalid_request_error`，param `token`，重置令牌失效）；`param` 列为注册表默认值，端点可覆盖，如 `weak_password` 在注册时指 `password`、改密时指 `new_password`，设置端点 `PATCH` 的项名与类型错误覆盖为出错项名：
 
 | code | HTTP | type | 默认 param | 场景 | 建议默认 message（注册表基线，可润色） |
 | --- | --- | --- | --- | --- | --- |
@@ -432,9 +434,11 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `two_factor_not_setup` | 409 | `conflict_error` | null | 没有 secret 就 enable / disable | 尚未生成两步验证密钥 |
 | `two_factor_not_enabled` | 409 | `conflict_error` | null | 未启用就再生成恢复码 | 两步验证尚未启用 |
 | `mail_delivery_failed` | 500 | `server_error` | null | SMTP 投递失败（管理端发信自检；不回传对端应答细节，0.9.0 新增） | 邮件发送失败 |
-| `mail_unavailable` | 503 | `server_error` | null | 注册邮箱验证前置条件不满足：SMTP 未配齐 / `site.url` 缺失或非法 / 发信失败 / 禁止日志降级（v1.7 新增） | 邮件服务不可用，请稍后再试 |
+| `mail_unavailable` | 503 | `server_error` | null | 邮件类业务的前置条件不满足：SMTP 未配齐 / `site.url` 缺失或非法 / 发信失败 / 禁止日志降级（v1.7 新增；2026-10-26 起注册邮箱验证与找回密码共用） | 邮件服务不可用，请稍后再试 |
 | `email_verification_invalid` | 400 | `invalid_request_error` | `token` | 邮箱验证令牌不存在 / 已过期 / 已消费（v1.7 新增） | 验证链接无效或已过期 |
 | `email_not_verified` | 403 | `permission_error` | null | 登录时命中未过期待验证注册且密码正确（v1.7 新增；不建会话、不记失败） | 账户尚未验证 |
+| `password_reset_disabled` | 403 | `permission_error` | null | 站级找回密码开关（设置项 `auth.password_reset_enabled`）关闭时调用申请或确认两个端点（2026-10-26 新增；已发出的令牌不物理删除） | 当前未开放密码重置 |
+| `password_reset_invalid` | 400 | `invalid_request_error` | `token` | 重置令牌不存在 / 已过期 / 已消费 / 已被新的申请覆盖（2026-10-26 新增；与 `email_verification_invalid` 同形，不把「过期」与「不存在」区分开，避免探测） | 链接无效或已过期 |
 | `internal_error` | 500 | `server_error` | null | 一切未知错误兜底 | 服务器内部错误 |
 | `not_implemented` | 501 | `server_error` | null | 预留接口尚未实现（2026-10-23 新增；当前只用于 2FA 恢复码邮件发送，不读请求体、不发信、不写库） | 该功能尚未开放 |
 
