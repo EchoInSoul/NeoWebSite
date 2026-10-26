@@ -142,6 +142,37 @@ func postJSONStatus(client *http.Client, endpoint string, body any) (int, error)
 	return resp.StatusCode, nil
 }
 
+func postJSONStatusAndBody(client *http.Client, endpoint string, body any) (int, []byte, error) {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return 0, nil, err
+	}
+	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, err
+	}
+	return resp.StatusCode, raw, nil
+}
+
+func errorCodeOf(t *testing.T, raw []byte) string {
+	t.Helper()
+
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("decode error envelope: %v (body = %q)", err, string(raw))
+	}
+	return envelope.Error.Code
+}
+
 func TestRegisterCreatesPendingInsteadOfUser(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
@@ -660,13 +691,14 @@ func TestVerifyEmailRegistrationConcurrent(t *testing.T) {
 	token := extractToken(t, mailer.sent()[0].Body.Text)
 
 	statuses := make([]int, 2)
+	bodies := make([][]byte, 2)
 	errs := make([]error, 2)
 	var wg sync.WaitGroup
 	for i := range statuses {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			statuses[i], errs[i] = postJSONStatus(testClient(t), ts.URL+"/api/v1/users/email-verifications",
+			statuses[i], bodies[i], errs[i] = postJSONStatusAndBody(testClient(t), ts.URL+"/api/v1/users/email-verifications",
 				map[string]string{"token": token})
 		}(i)
 	}
@@ -676,16 +708,40 @@ func TestVerifyEmailRegistrationConcurrent(t *testing.T) {
 			t.Fatalf("request %d: %v", i, errs[i])
 		}
 	}
-	if !((statuses[0] == http.StatusCreated && statuses[1] == http.StatusBadRequest) ||
-		(statuses[0] == http.StatusBadRequest && statuses[1] == http.StatusCreated)) {
-		t.Fatalf("statuses = %v, want one 201 and one 400", statuses)
+
+	created := 0
+	loser := -1
+	for i := range statuses {
+		if statuses[i] == http.StatusCreated {
+			created++
+			continue
+		}
+		loser = i
 	}
+	if created != 1 || loser < 0 {
+		t.Fatalf("statuses = %v, want exactly one 201", statuses)
+	}
+
+	switch statuses[loser] {
+	case http.StatusBadRequest, http.StatusConflict:
+	default:
+		t.Fatalf("loser status = %d, want 400 or 409", statuses[loser])
+	}
+	switch code := errorCodeOf(t, bodies[loser]); code {
+	case "email_verification_invalid", "email_taken", "nickname_taken", "already_taken":
+	default:
+		t.Fatalf("loser code = %q, want one of the codes README documents for this endpoint", code)
+	}
+
 	count, err := db.Client.User.Query().Where(user.EmailEQ(email)).Count(context.Background())
 	if err != nil {
 		t.Fatalf("count users: %v", err)
 	}
 	if count != 1 {
 		t.Fatalf("users = %d, want 1", count)
+	}
+	if pending := pendingCount(t, db, email); pending != 0 {
+		t.Fatalf("pending rows = %d, want 0 after the token was consumed", pending)
 	}
 }
 

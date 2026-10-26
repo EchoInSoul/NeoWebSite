@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-10-26 · 注册验证并发用例对齐 README 契约
+
+**范围**：仅测试文件 `backend/internal/modules/registration/register_verification_test.go`。`TestVerifyEmailRegistrationConcurrent` 的断言从「一个 201 + 一个 400」改成契约允许的结果集：恰一个 201，输家为 400 `email_verification_invalid` 或 409 `email_taken` / `nickname_taken` / `already_taken`；补两条真不变量——`users` 恰 1 行、该邮箱的 `pending_registrations` 清零。同文件新增局部助手 `postJSONStatusAndBody`（把响应体带回主 goroutine 再解错误码，避免在 goroutine 里调 `t.Fatalf`）与 `errorCodeOf`。生产代码、接口契约、版本号零改动（纯测试，不进位）。
+
+**动机**：全量 `scripts/test.sh` 偶发红：`statuses = [201 409], want one 201 and one 400`。查证后结论是实现没错、断言过窄——`verifyPendingRegistration` 在进事务**之前**查 pending 行，两个并发请求都读得到同一条；输家若在自己能看到赢家用戶已提交的那刻走到邮箱占用分支，返回 `errPendingEmailTaken` → 409；若在此之前走到条件删除、`deleted != 1`，返回 `errPendingNotFound` → 400。READ COMMITTED 下两种交错都合法，README 的端点条目也同时写着这两种结局。`uniqueTag` 是 `pid + UnixNano`，邮箱每次全新，先排除了「测试库历史脏数据」这条解释。
+
+**已知缺口**：
+- 同文件的 `TestRegisterVerificationConcurrentSameEmail`（断两个 202）属同一类「钉死单一交错结果」的写法，本轮按点名范围未动。
+- 409 交错无法强制复现：本用例的放宽是由实现分支 + README 条目 + 顺序用例 `TestVerifyPendingEmailTaken` 三方佐证，不是实测抓到过那次 409。
+
+**验证**：目标用例 `-count=20` 全绿；`./internal/modules/registration -count=3` 全绿；全量 `scripts/test.sh` 为 21 个 `ok`、0 `FAIL`、退出码 0；`gofmt -l` 无输出，`scripts/check.sh`（gofmt / apierror 导入守卫 / vet / build / diff）通过。
+
+**未提交。**
+
+---
+
 ## 2026-10-26 · 全站表单显式 `method="post"`
 
 **范围**：仅前端 8 个 `<form>`——`app/login/signin-form.tsx`、`app/register/signup-form.tsx`、控制台五个设置页（`captcha` / `info/site` / `login/login-control` / `mail` / `register`）与 `app/console/uc/profile/profile-form.tsx`，各补 `method="post"`（超过 80 列的按 prettier 折成多行）。后端、接口契约、文案、样式零改动。
