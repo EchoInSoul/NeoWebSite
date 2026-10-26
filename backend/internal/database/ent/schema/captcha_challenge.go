@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"time"
 
 	"entgo.io/ent"
@@ -17,8 +18,8 @@ func (CaptchaChallenge) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).Default(func() uuid.UUID { return uuid.Must(uuid.NewV7()) }),
 		field.String("scope").MaxLen(16).NotEmpty(),
-		field.Int("answer_x"),
-		field.Int("answer_y"),
+		field.JSON("answer_dots", json.RawMessage{}),
+		field.String("prompt_text").Default(""),
 		field.Int("status").Default(0),
 		field.String("token_hash").MaxLen(64).Optional().Nillable().Unique(),
 		field.Time("created_at").Default(time.Now).Immutable(),

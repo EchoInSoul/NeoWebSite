@@ -3,6 +3,8 @@
 package ent
 
 import (
+	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"strings"
 	"time"
@@ -20,10 +22,10 @@ type CaptchaChallenge struct {
 	ID uuid.UUID `json:"id,omitempty"`
 	// Scope holds the value of the "scope" field.
 	Scope string `json:"scope,omitempty"`
-	// AnswerX holds the value of the "answer_x" field.
-	AnswerX int `json:"answer_x,omitempty"`
-	// AnswerY holds the value of the "answer_y" field.
-	AnswerY int `json:"answer_y,omitempty"`
+	// AnswerDots holds the value of the "answer_dots" field.
+	AnswerDots jsontext.Value `json:"answer_dots,omitempty"`
+	// PromptText holds the value of the "prompt_text" field.
+	PromptText string `json:"prompt_text,omitempty"`
 	// Status holds the value of the "status" field.
 	Status int `json:"status,omitempty"`
 	// TokenHash holds the value of the "token_hash" field.
@@ -40,9 +42,11 @@ func (*CaptchaChallenge) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case captchachallenge.FieldAnswerX, captchachallenge.FieldAnswerY, captchachallenge.FieldStatus:
+		case captchachallenge.FieldAnswerDots:
+			values[i] = new([]byte)
+		case captchachallenge.FieldStatus:
 			values[i] = new(sql.NullInt64)
-		case captchachallenge.FieldScope, captchachallenge.FieldTokenHash:
+		case captchachallenge.FieldScope, captchachallenge.FieldPromptText, captchachallenge.FieldTokenHash:
 			values[i] = new(sql.NullString)
 		case captchachallenge.FieldCreatedAt, captchachallenge.FieldExpiresAt:
 			values[i] = new(sql.NullTime)
@@ -75,17 +79,19 @@ func (_m *CaptchaChallenge) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Scope = value.String
 			}
-		case captchachallenge.FieldAnswerX:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field answer_x", values[i])
-			} else if value.Valid {
-				_m.AnswerX = int(value.Int64)
+		case captchachallenge.FieldAnswerDots:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field answer_dots", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.AnswerDots); err != nil {
+					return fmt.Errorf("unmarshal field answer_dots: %w", err)
+				}
 			}
-		case captchachallenge.FieldAnswerY:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field answer_y", values[i])
+		case captchachallenge.FieldPromptText:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field prompt_text", values[i])
 			} else if value.Valid {
-				_m.AnswerY = int(value.Int64)
+				_m.PromptText = value.String
 			}
 		case captchachallenge.FieldStatus:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -151,11 +157,11 @@ func (_m *CaptchaChallenge) String() string {
 	builder.WriteString("scope=")
 	builder.WriteString(_m.Scope)
 	builder.WriteString(", ")
-	builder.WriteString("answer_x=")
-	builder.WriteString(fmt.Sprintf("%v", _m.AnswerX))
+	builder.WriteString("answer_dots=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AnswerDots))
 	builder.WriteString(", ")
-	builder.WriteString("answer_y=")
-	builder.WriteString(fmt.Sprintf("%v", _m.AnswerY))
+	builder.WriteString("prompt_text=")
+	builder.WriteString(_m.PromptText)
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Status))

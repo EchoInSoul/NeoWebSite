@@ -42,6 +42,10 @@ func init() {
 			return nil
 		}
 	}()
+	// captchachallengeDescPromptText is the schema descriptor for prompt_text field.
+	captchachallengeDescPromptText := captchachallengeFields[3].Descriptor()
+	// captchachallenge.DefaultPromptText holds the default value on creation for the prompt_text field.
+	captchachallenge.DefaultPromptText = captchachallengeDescPromptText.Default.(string)
 	// captchachallengeDescStatus is the schema descriptor for status field.
 	captchachallengeDescStatus := captchachallengeFields[4].Descriptor()
 	// captchachallenge.DefaultStatus holds the default value on creation for the status field.

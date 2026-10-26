@@ -48,23 +48,22 @@ const (
 // CaptchaChallengeMutation represents an operation that mutates the CaptchaChallenge nodes in the graph.
 type CaptchaChallengeMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *uuid.UUID
-	scope         *string
-	answer_x      *int
-	addanswer_x   *int
-	answer_y      *int
-	addanswer_y   *int
-	status        *int
-	addstatus     *int
-	token_hash    *string
-	created_at    *time.Time
-	expires_at    *time.Time
-	clearedFields map[string]struct{}
-	done          bool
-	oldValue      func(context.Context) (*CaptchaChallenge, error)
-	predicates    []predicate.CaptchaChallenge
+	op                Op
+	typ               string
+	id                *uuid.UUID
+	scope             *string
+	answer_dots       *jsontext.Value
+	appendanswer_dots jsontext.Value
+	prompt_text       *string
+	status            *int
+	addstatus         *int
+	token_hash        *string
+	created_at        *time.Time
+	expires_at        *time.Time
+	clearedFields     map[string]struct{}
+	done              bool
+	oldValue          func(context.Context) (*CaptchaChallenge, error)
+	predicates        []predicate.CaptchaChallenge
 }
 
 var _ ent.Mutation = (*CaptchaChallengeMutation)(nil)
@@ -207,116 +206,91 @@ func (m *CaptchaChallengeMutation) ResetScope() {
 	m.scope = nil
 }
 
-// SetAnswerX sets the "answer_x" field.
-func (m *CaptchaChallengeMutation) SetAnswerX(i int) {
-	m.answer_x = &i
-	m.addanswer_x = nil
+// SetAnswerDots sets the "answer_dots" field.
+func (m *CaptchaChallengeMutation) SetAnswerDots(j jsontext.Value) {
+	m.answer_dots = &j
+	m.appendanswer_dots = nil
 }
 
-// AnswerX returns the value of the "answer_x" field in the mutation.
-func (m *CaptchaChallengeMutation) AnswerX() (r int, exists bool) {
-	v := m.answer_x
+// AnswerDots returns the value of the "answer_dots" field in the mutation.
+func (m *CaptchaChallengeMutation) AnswerDots() (r jsontext.Value, exists bool) {
+	v := m.answer_dots
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldAnswerX returns the old "answer_x" field's value of the CaptchaChallenge entity.
+// OldAnswerDots returns the old "answer_dots" field's value of the CaptchaChallenge entity.
 // If the CaptchaChallenge object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *CaptchaChallengeMutation) OldAnswerX(ctx context.Context) (v int, err error) {
+func (m *CaptchaChallengeMutation) OldAnswerDots(ctx context.Context) (v jsontext.Value, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldAnswerX is only allowed on UpdateOne operations")
+		return v, errors.New("OldAnswerDots is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldAnswerX requires an ID field in the mutation")
+		return v, errors.New("OldAnswerDots requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldAnswerX: %w", err)
+		return v, fmt.Errorf("querying old value for OldAnswerDots: %w", err)
 	}
-	return oldValue.AnswerX, nil
+	return oldValue.AnswerDots, nil
 }
 
-// AddAnswerX adds i to the "answer_x" field.
-func (m *CaptchaChallengeMutation) AddAnswerX(i int) {
-	if m.addanswer_x != nil {
-		*m.addanswer_x += i
-	} else {
-		m.addanswer_x = &i
-	}
+// AppendAnswerDots adds j to the "answer_dots" field.
+func (m *CaptchaChallengeMutation) AppendAnswerDots(j jsontext.Value) {
+	m.appendanswer_dots = append(m.appendanswer_dots, j...)
 }
 
-// AddedAnswerX returns the value that was added to the "answer_x" field in this mutation.
-func (m *CaptchaChallengeMutation) AddedAnswerX() (r int, exists bool) {
-	v := m.addanswer_x
+// AppendedAnswerDots returns the list of values that were appended to the "answer_dots" field in this mutation.
+func (m *CaptchaChallengeMutation) AppendedAnswerDots() (jsontext.Value, bool) {
+	if len(m.appendanswer_dots) == 0 {
+		return nil, false
+	}
+	return m.appendanswer_dots, true
+}
+
+// ResetAnswerDots resets all changes to the "answer_dots" field.
+func (m *CaptchaChallengeMutation) ResetAnswerDots() {
+	m.answer_dots = nil
+	m.appendanswer_dots = nil
+}
+
+// SetPromptText sets the "prompt_text" field.
+func (m *CaptchaChallengeMutation) SetPromptText(s string) {
+	m.prompt_text = &s
+}
+
+// PromptText returns the value of the "prompt_text" field in the mutation.
+func (m *CaptchaChallengeMutation) PromptText() (r string, exists bool) {
+	v := m.prompt_text
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// ResetAnswerX resets all changes to the "answer_x" field.
-func (m *CaptchaChallengeMutation) ResetAnswerX() {
-	m.answer_x = nil
-	m.addanswer_x = nil
-}
-
-// SetAnswerY sets the "answer_y" field.
-func (m *CaptchaChallengeMutation) SetAnswerY(i int) {
-	m.answer_y = &i
-	m.addanswer_y = nil
-}
-
-// AnswerY returns the value of the "answer_y" field in the mutation.
-func (m *CaptchaChallengeMutation) AnswerY() (r int, exists bool) {
-	v := m.answer_y
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldAnswerY returns the old "answer_y" field's value of the CaptchaChallenge entity.
+// OldPromptText returns the old "prompt_text" field's value of the CaptchaChallenge entity.
 // If the CaptchaChallenge object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *CaptchaChallengeMutation) OldAnswerY(ctx context.Context) (v int, err error) {
+func (m *CaptchaChallengeMutation) OldPromptText(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldAnswerY is only allowed on UpdateOne operations")
+		return v, errors.New("OldPromptText is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldAnswerY requires an ID field in the mutation")
+		return v, errors.New("OldPromptText requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldAnswerY: %w", err)
+		return v, fmt.Errorf("querying old value for OldPromptText: %w", err)
 	}
-	return oldValue.AnswerY, nil
+	return oldValue.PromptText, nil
 }
 
-// AddAnswerY adds i to the "answer_y" field.
-func (m *CaptchaChallengeMutation) AddAnswerY(i int) {
-	if m.addanswer_y != nil {
-		*m.addanswer_y += i
-	} else {
-		m.addanswer_y = &i
-	}
-}
-
-// AddedAnswerY returns the value that was added to the "answer_y" field in this mutation.
-func (m *CaptchaChallengeMutation) AddedAnswerY() (r int, exists bool) {
-	v := m.addanswer_y
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetAnswerY resets all changes to the "answer_y" field.
-func (m *CaptchaChallengeMutation) ResetAnswerY() {
-	m.answer_y = nil
-	m.addanswer_y = nil
+// ResetPromptText resets all changes to the "prompt_text" field.
+func (m *CaptchaChallengeMutation) ResetPromptText() {
+	m.prompt_text = nil
 }
 
 // SetStatus sets the "status" field.
@@ -534,11 +508,11 @@ func (m *CaptchaChallengeMutation) Fields() []string {
 	if m.scope != nil {
 		fields = append(fields, captchachallenge.FieldScope)
 	}
-	if m.answer_x != nil {
-		fields = append(fields, captchachallenge.FieldAnswerX)
+	if m.answer_dots != nil {
+		fields = append(fields, captchachallenge.FieldAnswerDots)
 	}
-	if m.answer_y != nil {
-		fields = append(fields, captchachallenge.FieldAnswerY)
+	if m.prompt_text != nil {
+		fields = append(fields, captchachallenge.FieldPromptText)
 	}
 	if m.status != nil {
 		fields = append(fields, captchachallenge.FieldStatus)
@@ -562,10 +536,10 @@ func (m *CaptchaChallengeMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case captchachallenge.FieldScope:
 		return m.Scope()
-	case captchachallenge.FieldAnswerX:
-		return m.AnswerX()
-	case captchachallenge.FieldAnswerY:
-		return m.AnswerY()
+	case captchachallenge.FieldAnswerDots:
+		return m.AnswerDots()
+	case captchachallenge.FieldPromptText:
+		return m.PromptText()
 	case captchachallenge.FieldStatus:
 		return m.Status()
 	case captchachallenge.FieldTokenHash:
@@ -585,10 +559,10 @@ func (m *CaptchaChallengeMutation) OldField(ctx context.Context, name string) (e
 	switch name {
 	case captchachallenge.FieldScope:
 		return m.OldScope(ctx)
-	case captchachallenge.FieldAnswerX:
-		return m.OldAnswerX(ctx)
-	case captchachallenge.FieldAnswerY:
-		return m.OldAnswerY(ctx)
+	case captchachallenge.FieldAnswerDots:
+		return m.OldAnswerDots(ctx)
+	case captchachallenge.FieldPromptText:
+		return m.OldPromptText(ctx)
 	case captchachallenge.FieldStatus:
 		return m.OldStatus(ctx)
 	case captchachallenge.FieldTokenHash:
@@ -613,19 +587,19 @@ func (m *CaptchaChallengeMutation) SetField(name string, value ent.Value) error 
 		}
 		m.SetScope(v)
 		return nil
-	case captchachallenge.FieldAnswerX:
-		v, ok := value.(int)
+	case captchachallenge.FieldAnswerDots:
+		v, ok := value.(jsontext.Value)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetAnswerX(v)
+		m.SetAnswerDots(v)
 		return nil
-	case captchachallenge.FieldAnswerY:
-		v, ok := value.(int)
+	case captchachallenge.FieldPromptText:
+		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetAnswerY(v)
+		m.SetPromptText(v)
 		return nil
 	case captchachallenge.FieldStatus:
 		v, ok := value.(int)
@@ -663,12 +637,6 @@ func (m *CaptchaChallengeMutation) SetField(name string, value ent.Value) error 
 // this mutation.
 func (m *CaptchaChallengeMutation) AddedFields() []string {
 	var fields []string
-	if m.addanswer_x != nil {
-		fields = append(fields, captchachallenge.FieldAnswerX)
-	}
-	if m.addanswer_y != nil {
-		fields = append(fields, captchachallenge.FieldAnswerY)
-	}
 	if m.addstatus != nil {
 		fields = append(fields, captchachallenge.FieldStatus)
 	}
@@ -680,10 +648,6 @@ func (m *CaptchaChallengeMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *CaptchaChallengeMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
-	case captchachallenge.FieldAnswerX:
-		return m.AddedAnswerX()
-	case captchachallenge.FieldAnswerY:
-		return m.AddedAnswerY()
 	case captchachallenge.FieldStatus:
 		return m.AddedStatus()
 	}
@@ -695,20 +659,6 @@ func (m *CaptchaChallengeMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *CaptchaChallengeMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case captchachallenge.FieldAnswerX:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddAnswerX(v)
-		return nil
-	case captchachallenge.FieldAnswerY:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddAnswerY(v)
-		return nil
 	case captchachallenge.FieldStatus:
 		v, ok := value.(int)
 		if !ok {
@@ -755,11 +705,11 @@ func (m *CaptchaChallengeMutation) ResetField(name string) error {
 	case captchachallenge.FieldScope:
 		m.ResetScope()
 		return nil
-	case captchachallenge.FieldAnswerX:
-		m.ResetAnswerX()
+	case captchachallenge.FieldAnswerDots:
+		m.ResetAnswerDots()
 		return nil
-	case captchachallenge.FieldAnswerY:
-		m.ResetAnswerY()
+	case captchachallenge.FieldPromptText:
+		m.ResetPromptText()
 		return nil
 	case captchachallenge.FieldStatus:
 		m.ResetStatus()

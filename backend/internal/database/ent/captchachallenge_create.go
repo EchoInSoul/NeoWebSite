@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"time"
@@ -30,15 +31,23 @@ func (_c *CaptchaChallengeCreate) SetScope(v string) *CaptchaChallengeCreate {
 	return _c
 }
 
-// SetAnswerX sets the "answer_x" field.
-func (_c *CaptchaChallengeCreate) SetAnswerX(v int) *CaptchaChallengeCreate {
-	_c.mutation.SetAnswerX(v)
+// SetAnswerDots sets the "answer_dots" field.
+func (_c *CaptchaChallengeCreate) SetAnswerDots(v jsontext.Value) *CaptchaChallengeCreate {
+	_c.mutation.SetAnswerDots(v)
 	return _c
 }
 
-// SetAnswerY sets the "answer_y" field.
-func (_c *CaptchaChallengeCreate) SetAnswerY(v int) *CaptchaChallengeCreate {
-	_c.mutation.SetAnswerY(v)
+// SetPromptText sets the "prompt_text" field.
+func (_c *CaptchaChallengeCreate) SetPromptText(v string) *CaptchaChallengeCreate {
+	_c.mutation.SetPromptText(v)
+	return _c
+}
+
+// SetNillablePromptText sets the "prompt_text" field if the given value is not nil.
+func (_c *CaptchaChallengeCreate) SetNillablePromptText(v *string) *CaptchaChallengeCreate {
+	if v != nil {
+		_c.SetPromptText(*v)
+	}
 	return _c
 }
 
@@ -139,6 +148,10 @@ func (_c *CaptchaChallengeCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *CaptchaChallengeCreate) defaults() {
+	if _, ok := _c.mutation.PromptText(); !ok {
+		v := captchachallenge.DefaultPromptText
+		_c.mutation.SetPromptText(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := captchachallenge.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -163,11 +176,11 @@ func (_c *CaptchaChallengeCreate) check() error {
 			return &ValidationError{Name: "scope", err: fmt.Errorf(`ent: validator failed for field "CaptchaChallenge.scope": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.AnswerX(); !ok {
-		return &ValidationError{Name: "answer_x", err: errors.New(`ent: missing required field "CaptchaChallenge.answer_x"`)}
+	if _, ok := _c.mutation.AnswerDots(); !ok {
+		return &ValidationError{Name: "answer_dots", err: errors.New(`ent: missing required field "CaptchaChallenge.answer_dots"`)}
 	}
-	if _, ok := _c.mutation.AnswerY(); !ok {
-		return &ValidationError{Name: "answer_y", err: errors.New(`ent: missing required field "CaptchaChallenge.answer_y"`)}
+	if _, ok := _c.mutation.PromptText(); !ok {
+		return &ValidationError{Name: "prompt_text", err: errors.New(`ent: missing required field "CaptchaChallenge.prompt_text"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "CaptchaChallenge.status"`)}
@@ -223,13 +236,13 @@ func (_c *CaptchaChallengeCreate) createSpec() (*CaptchaChallenge, *sqlgraph.Cre
 		_spec.SetField(captchachallenge.FieldScope, field.TypeString, value)
 		_node.Scope = value
 	}
-	if value, ok := _c.mutation.AnswerX(); ok {
-		_spec.SetField(captchachallenge.FieldAnswerX, field.TypeInt, value)
-		_node.AnswerX = value
+	if value, ok := _c.mutation.AnswerDots(); ok {
+		_spec.SetField(captchachallenge.FieldAnswerDots, field.TypeJSON, value)
+		_node.AnswerDots = value
 	}
-	if value, ok := _c.mutation.AnswerY(); ok {
-		_spec.SetField(captchachallenge.FieldAnswerY, field.TypeInt, value)
-		_node.AnswerY = value
+	if value, ok := _c.mutation.PromptText(); ok {
+		_spec.SetField(captchachallenge.FieldPromptText, field.TypeString, value)
+		_node.PromptText = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(captchachallenge.FieldStatus, field.TypeInt, value)
@@ -311,39 +324,27 @@ func (u *CaptchaChallengeUpsert) UpdateScope() *CaptchaChallengeUpsert {
 	return u
 }
 
-// SetAnswerX sets the "answer_x" field.
-func (u *CaptchaChallengeUpsert) SetAnswerX(v int) *CaptchaChallengeUpsert {
-	u.Set(captchachallenge.FieldAnswerX, v)
+// SetAnswerDots sets the "answer_dots" field.
+func (u *CaptchaChallengeUpsert) SetAnswerDots(v jsontext.Value) *CaptchaChallengeUpsert {
+	u.Set(captchachallenge.FieldAnswerDots, v)
 	return u
 }
 
-// UpdateAnswerX sets the "answer_x" field to the value that was provided on create.
-func (u *CaptchaChallengeUpsert) UpdateAnswerX() *CaptchaChallengeUpsert {
-	u.SetExcluded(captchachallenge.FieldAnswerX)
+// UpdateAnswerDots sets the "answer_dots" field to the value that was provided on create.
+func (u *CaptchaChallengeUpsert) UpdateAnswerDots() *CaptchaChallengeUpsert {
+	u.SetExcluded(captchachallenge.FieldAnswerDots)
 	return u
 }
 
-// AddAnswerX adds v to the "answer_x" field.
-func (u *CaptchaChallengeUpsert) AddAnswerX(v int) *CaptchaChallengeUpsert {
-	u.Add(captchachallenge.FieldAnswerX, v)
+// SetPromptText sets the "prompt_text" field.
+func (u *CaptchaChallengeUpsert) SetPromptText(v string) *CaptchaChallengeUpsert {
+	u.Set(captchachallenge.FieldPromptText, v)
 	return u
 }
 
-// SetAnswerY sets the "answer_y" field.
-func (u *CaptchaChallengeUpsert) SetAnswerY(v int) *CaptchaChallengeUpsert {
-	u.Set(captchachallenge.FieldAnswerY, v)
-	return u
-}
-
-// UpdateAnswerY sets the "answer_y" field to the value that was provided on create.
-func (u *CaptchaChallengeUpsert) UpdateAnswerY() *CaptchaChallengeUpsert {
-	u.SetExcluded(captchachallenge.FieldAnswerY)
-	return u
-}
-
-// AddAnswerY adds v to the "answer_y" field.
-func (u *CaptchaChallengeUpsert) AddAnswerY(v int) *CaptchaChallengeUpsert {
-	u.Add(captchachallenge.FieldAnswerY, v)
+// UpdatePromptText sets the "prompt_text" field to the value that was provided on create.
+func (u *CaptchaChallengeUpsert) UpdatePromptText() *CaptchaChallengeUpsert {
+	u.SetExcluded(captchachallenge.FieldPromptText)
 	return u
 }
 
@@ -460,45 +461,31 @@ func (u *CaptchaChallengeUpsertOne) UpdateScope() *CaptchaChallengeUpsertOne {
 	})
 }
 
-// SetAnswerX sets the "answer_x" field.
-func (u *CaptchaChallengeUpsertOne) SetAnswerX(v int) *CaptchaChallengeUpsertOne {
+// SetAnswerDots sets the "answer_dots" field.
+func (u *CaptchaChallengeUpsertOne) SetAnswerDots(v jsontext.Value) *CaptchaChallengeUpsertOne {
 	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.SetAnswerX(v)
+		s.SetAnswerDots(v)
 	})
 }
 
-// AddAnswerX adds v to the "answer_x" field.
-func (u *CaptchaChallengeUpsertOne) AddAnswerX(v int) *CaptchaChallengeUpsertOne {
+// UpdateAnswerDots sets the "answer_dots" field to the value that was provided on create.
+func (u *CaptchaChallengeUpsertOne) UpdateAnswerDots() *CaptchaChallengeUpsertOne {
 	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.AddAnswerX(v)
+		s.UpdateAnswerDots()
 	})
 }
 
-// UpdateAnswerX sets the "answer_x" field to the value that was provided on create.
-func (u *CaptchaChallengeUpsertOne) UpdateAnswerX() *CaptchaChallengeUpsertOne {
+// SetPromptText sets the "prompt_text" field.
+func (u *CaptchaChallengeUpsertOne) SetPromptText(v string) *CaptchaChallengeUpsertOne {
 	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.UpdateAnswerX()
+		s.SetPromptText(v)
 	})
 }
 
-// SetAnswerY sets the "answer_y" field.
-func (u *CaptchaChallengeUpsertOne) SetAnswerY(v int) *CaptchaChallengeUpsertOne {
+// UpdatePromptText sets the "prompt_text" field to the value that was provided on create.
+func (u *CaptchaChallengeUpsertOne) UpdatePromptText() *CaptchaChallengeUpsertOne {
 	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.SetAnswerY(v)
-	})
-}
-
-// AddAnswerY adds v to the "answer_y" field.
-func (u *CaptchaChallengeUpsertOne) AddAnswerY(v int) *CaptchaChallengeUpsertOne {
-	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.AddAnswerY(v)
-	})
-}
-
-// UpdateAnswerY sets the "answer_y" field to the value that was provided on create.
-func (u *CaptchaChallengeUpsertOne) UpdateAnswerY() *CaptchaChallengeUpsertOne {
-	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.UpdateAnswerY()
+		s.UpdatePromptText()
 	})
 }
 
@@ -790,45 +777,31 @@ func (u *CaptchaChallengeUpsertBulk) UpdateScope() *CaptchaChallengeUpsertBulk {
 	})
 }
 
-// SetAnswerX sets the "answer_x" field.
-func (u *CaptchaChallengeUpsertBulk) SetAnswerX(v int) *CaptchaChallengeUpsertBulk {
+// SetAnswerDots sets the "answer_dots" field.
+func (u *CaptchaChallengeUpsertBulk) SetAnswerDots(v jsontext.Value) *CaptchaChallengeUpsertBulk {
 	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.SetAnswerX(v)
+		s.SetAnswerDots(v)
 	})
 }
 
-// AddAnswerX adds v to the "answer_x" field.
-func (u *CaptchaChallengeUpsertBulk) AddAnswerX(v int) *CaptchaChallengeUpsertBulk {
+// UpdateAnswerDots sets the "answer_dots" field to the value that was provided on create.
+func (u *CaptchaChallengeUpsertBulk) UpdateAnswerDots() *CaptchaChallengeUpsertBulk {
 	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.AddAnswerX(v)
+		s.UpdateAnswerDots()
 	})
 }
 
-// UpdateAnswerX sets the "answer_x" field to the value that was provided on create.
-func (u *CaptchaChallengeUpsertBulk) UpdateAnswerX() *CaptchaChallengeUpsertBulk {
+// SetPromptText sets the "prompt_text" field.
+func (u *CaptchaChallengeUpsertBulk) SetPromptText(v string) *CaptchaChallengeUpsertBulk {
 	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.UpdateAnswerX()
+		s.SetPromptText(v)
 	})
 }
 
-// SetAnswerY sets the "answer_y" field.
-func (u *CaptchaChallengeUpsertBulk) SetAnswerY(v int) *CaptchaChallengeUpsertBulk {
+// UpdatePromptText sets the "prompt_text" field to the value that was provided on create.
+func (u *CaptchaChallengeUpsertBulk) UpdatePromptText() *CaptchaChallengeUpsertBulk {
 	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.SetAnswerY(v)
-	})
-}
-
-// AddAnswerY adds v to the "answer_y" field.
-func (u *CaptchaChallengeUpsertBulk) AddAnswerY(v int) *CaptchaChallengeUpsertBulk {
-	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.AddAnswerY(v)
-	})
-}
-
-// UpdateAnswerY sets the "answer_y" field to the value that was provided on create.
-func (u *CaptchaChallengeUpsertBulk) UpdateAnswerY() *CaptchaChallengeUpsertBulk {
-	return u.Update(func(s *CaptchaChallengeUpsert) {
-		s.UpdateAnswerY()
+		s.UpdatePromptText()
 	})
 }
 

@@ -16,10 +16,10 @@ const (
 	FieldID = "id"
 	// FieldScope holds the string denoting the scope field in the database.
 	FieldScope = "scope"
-	// FieldAnswerX holds the string denoting the answer_x field in the database.
-	FieldAnswerX = "answer_x"
-	// FieldAnswerY holds the string denoting the answer_y field in the database.
-	FieldAnswerY = "answer_y"
+	// FieldAnswerDots holds the string denoting the answer_dots field in the database.
+	FieldAnswerDots = "answer_dots"
+	// FieldPromptText holds the string denoting the prompt_text field in the database.
+	FieldPromptText = "prompt_text"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldTokenHash holds the string denoting the token_hash field in the database.
@@ -36,8 +36,8 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldScope,
-	FieldAnswerX,
-	FieldAnswerY,
+	FieldAnswerDots,
+	FieldPromptText,
 	FieldStatus,
 	FieldTokenHash,
 	FieldCreatedAt,
@@ -57,6 +57,8 @@ func ValidColumn(column string) bool {
 var (
 	// ScopeValidator is a validator for the "scope" field. It is called by the builders before save.
 	ScopeValidator func(string) error
+	// DefaultPromptText holds the default value on creation for the "prompt_text" field.
+	DefaultPromptText string
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus int
 	// TokenHashValidator is a validator for the "token_hash" field. It is called by the builders before save.
@@ -80,14 +82,9 @@ func ByScope(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldScope, opts...).ToFunc()
 }
 
-// ByAnswerX orders the results by the answer_x field.
-func ByAnswerX(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAnswerX, opts...).ToFunc()
-}
-
-// ByAnswerY orders the results by the answer_y field.
-func ByAnswerY(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldAnswerY, opts...).ToFunc()
+// ByPromptText orders the results by the prompt_text field.
+func ByPromptText(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPromptText, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

@@ -60,14 +60,9 @@ func Scope(v string) predicate.CaptchaChallenge {
 	return predicate.CaptchaChallenge(sql.FieldEQ(FieldScope, v))
 }
 
-// AnswerX applies equality check predicate on the "answer_x" field. It's identical to AnswerXEQ.
-func AnswerX(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldEQ(FieldAnswerX, v))
-}
-
-// AnswerY applies equality check predicate on the "answer_y" field. It's identical to AnswerYEQ.
-func AnswerY(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldEQ(FieldAnswerY, v))
+// PromptText applies equality check predicate on the "prompt_text" field. It's identical to PromptTextEQ.
+func PromptText(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldEQ(FieldPromptText, v))
 }
 
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
@@ -155,84 +150,69 @@ func ScopeContainsFold(v string) predicate.CaptchaChallenge {
 	return predicate.CaptchaChallenge(sql.FieldContainsFold(FieldScope, v))
 }
 
-// AnswerXEQ applies the EQ predicate on the "answer_x" field.
-func AnswerXEQ(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldEQ(FieldAnswerX, v))
+// PromptTextEQ applies the EQ predicate on the "prompt_text" field.
+func PromptTextEQ(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldEQ(FieldPromptText, v))
 }
 
-// AnswerXNEQ applies the NEQ predicate on the "answer_x" field.
-func AnswerXNEQ(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldNEQ(FieldAnswerX, v))
+// PromptTextNEQ applies the NEQ predicate on the "prompt_text" field.
+func PromptTextNEQ(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldNEQ(FieldPromptText, v))
 }
 
-// AnswerXIn applies the In predicate on the "answer_x" field.
-func AnswerXIn(vs ...int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldIn(FieldAnswerX, vs...))
+// PromptTextIn applies the In predicate on the "prompt_text" field.
+func PromptTextIn(vs ...string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldIn(FieldPromptText, vs...))
 }
 
-// AnswerXNotIn applies the NotIn predicate on the "answer_x" field.
-func AnswerXNotIn(vs ...int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldNotIn(FieldAnswerX, vs...))
+// PromptTextNotIn applies the NotIn predicate on the "prompt_text" field.
+func PromptTextNotIn(vs ...string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldNotIn(FieldPromptText, vs...))
 }
 
-// AnswerXGT applies the GT predicate on the "answer_x" field.
-func AnswerXGT(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldGT(FieldAnswerX, v))
+// PromptTextGT applies the GT predicate on the "prompt_text" field.
+func PromptTextGT(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldGT(FieldPromptText, v))
 }
 
-// AnswerXGTE applies the GTE predicate on the "answer_x" field.
-func AnswerXGTE(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldGTE(FieldAnswerX, v))
+// PromptTextGTE applies the GTE predicate on the "prompt_text" field.
+func PromptTextGTE(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldGTE(FieldPromptText, v))
 }
 
-// AnswerXLT applies the LT predicate on the "answer_x" field.
-func AnswerXLT(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldLT(FieldAnswerX, v))
+// PromptTextLT applies the LT predicate on the "prompt_text" field.
+func PromptTextLT(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldLT(FieldPromptText, v))
 }
 
-// AnswerXLTE applies the LTE predicate on the "answer_x" field.
-func AnswerXLTE(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldLTE(FieldAnswerX, v))
+// PromptTextLTE applies the LTE predicate on the "prompt_text" field.
+func PromptTextLTE(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldLTE(FieldPromptText, v))
 }
 
-// AnswerYEQ applies the EQ predicate on the "answer_y" field.
-func AnswerYEQ(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldEQ(FieldAnswerY, v))
+// PromptTextContains applies the Contains predicate on the "prompt_text" field.
+func PromptTextContains(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldContains(FieldPromptText, v))
 }
 
-// AnswerYNEQ applies the NEQ predicate on the "answer_y" field.
-func AnswerYNEQ(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldNEQ(FieldAnswerY, v))
+// PromptTextHasPrefix applies the HasPrefix predicate on the "prompt_text" field.
+func PromptTextHasPrefix(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldHasPrefix(FieldPromptText, v))
 }
 
-// AnswerYIn applies the In predicate on the "answer_y" field.
-func AnswerYIn(vs ...int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldIn(FieldAnswerY, vs...))
+// PromptTextHasSuffix applies the HasSuffix predicate on the "prompt_text" field.
+func PromptTextHasSuffix(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldHasSuffix(FieldPromptText, v))
 }
 
-// AnswerYNotIn applies the NotIn predicate on the "answer_y" field.
-func AnswerYNotIn(vs ...int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldNotIn(FieldAnswerY, vs...))
+// PromptTextEqualFold applies the EqualFold predicate on the "prompt_text" field.
+func PromptTextEqualFold(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldEqualFold(FieldPromptText, v))
 }
 
-// AnswerYGT applies the GT predicate on the "answer_y" field.
-func AnswerYGT(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldGT(FieldAnswerY, v))
-}
-
-// AnswerYGTE applies the GTE predicate on the "answer_y" field.
-func AnswerYGTE(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldGTE(FieldAnswerY, v))
-}
-
-// AnswerYLT applies the LT predicate on the "answer_y" field.
-func AnswerYLT(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldLT(FieldAnswerY, v))
-}
-
-// AnswerYLTE applies the LTE predicate on the "answer_y" field.
-func AnswerYLTE(v int) predicate.CaptchaChallenge {
-	return predicate.CaptchaChallenge(sql.FieldLTE(FieldAnswerY, v))
+// PromptTextContainsFold applies the ContainsFold predicate on the "prompt_text" field.
+func PromptTextContainsFold(v string) predicate.CaptchaChallenge {
+	return predicate.CaptchaChallenge(sql.FieldContainsFold(FieldPromptText, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

@@ -12,8 +12,8 @@ var (
 	CaptchaChallengesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "scope", Type: field.TypeString, Size: 16},
-		{Name: "answer_x", Type: field.TypeInt},
-		{Name: "answer_y", Type: field.TypeInt},
+		{Name: "answer_dots", Type: field.TypeJSON},
+		{Name: "prompt_text", Type: field.TypeString, Default: ""},
 		{Name: "status", Type: field.TypeInt, Default: 0},
 		{Name: "token_hash", Type: field.TypeString, Unique: true, Nullable: true, Size: 64},
 		{Name: "created_at", Type: field.TypeTime},

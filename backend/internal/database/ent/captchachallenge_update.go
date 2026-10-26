@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 )
 
@@ -42,45 +44,29 @@ func (_u *CaptchaChallengeUpdate) SetNillableScope(v *string) *CaptchaChallengeU
 	return _u
 }
 
-// SetAnswerX sets the "answer_x" field.
-func (_u *CaptchaChallengeUpdate) SetAnswerX(v int) *CaptchaChallengeUpdate {
-	_u.mutation.ResetAnswerX()
-	_u.mutation.SetAnswerX(v)
+// SetAnswerDots sets the "answer_dots" field.
+func (_u *CaptchaChallengeUpdate) SetAnswerDots(v jsontext.Value) *CaptchaChallengeUpdate {
+	_u.mutation.SetAnswerDots(v)
 	return _u
 }
 
-// SetNillableAnswerX sets the "answer_x" field if the given value is not nil.
-func (_u *CaptchaChallengeUpdate) SetNillableAnswerX(v *int) *CaptchaChallengeUpdate {
+// AppendAnswerDots appends value to the "answer_dots" field.
+func (_u *CaptchaChallengeUpdate) AppendAnswerDots(v jsontext.Value) *CaptchaChallengeUpdate {
+	_u.mutation.AppendAnswerDots(v)
+	return _u
+}
+
+// SetPromptText sets the "prompt_text" field.
+func (_u *CaptchaChallengeUpdate) SetPromptText(v string) *CaptchaChallengeUpdate {
+	_u.mutation.SetPromptText(v)
+	return _u
+}
+
+// SetNillablePromptText sets the "prompt_text" field if the given value is not nil.
+func (_u *CaptchaChallengeUpdate) SetNillablePromptText(v *string) *CaptchaChallengeUpdate {
 	if v != nil {
-		_u.SetAnswerX(*v)
+		_u.SetPromptText(*v)
 	}
-	return _u
-}
-
-// AddAnswerX adds value to the "answer_x" field.
-func (_u *CaptchaChallengeUpdate) AddAnswerX(v int) *CaptchaChallengeUpdate {
-	_u.mutation.AddAnswerX(v)
-	return _u
-}
-
-// SetAnswerY sets the "answer_y" field.
-func (_u *CaptchaChallengeUpdate) SetAnswerY(v int) *CaptchaChallengeUpdate {
-	_u.mutation.ResetAnswerY()
-	_u.mutation.SetAnswerY(v)
-	return _u
-}
-
-// SetNillableAnswerY sets the "answer_y" field if the given value is not nil.
-func (_u *CaptchaChallengeUpdate) SetNillableAnswerY(v *int) *CaptchaChallengeUpdate {
-	if v != nil {
-		_u.SetAnswerY(*v)
-	}
-	return _u
-}
-
-// AddAnswerY adds value to the "answer_y" field.
-func (_u *CaptchaChallengeUpdate) AddAnswerY(v int) *CaptchaChallengeUpdate {
-	_u.mutation.AddAnswerY(v)
 	return _u
 }
 
@@ -201,17 +187,16 @@ func (_u *CaptchaChallengeUpdate) sqlSave(ctx context.Context) (_node int, err e
 	if value, ok := _u.mutation.Scope(); ok {
 		_spec.SetField(captchachallenge.FieldScope, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.AnswerX(); ok {
-		_spec.SetField(captchachallenge.FieldAnswerX, field.TypeInt, value)
+	if value, ok := _u.mutation.AnswerDots(); ok {
+		_spec.SetField(captchachallenge.FieldAnswerDots, field.TypeJSON, value)
 	}
-	if value, ok := _u.mutation.AddedAnswerX(); ok {
-		_spec.AddField(captchachallenge.FieldAnswerX, field.TypeInt, value)
+	if value, ok := _u.mutation.AppendedAnswerDots(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, captchachallenge.FieldAnswerDots, value)
+		})
 	}
-	if value, ok := _u.mutation.AnswerY(); ok {
-		_spec.SetField(captchachallenge.FieldAnswerY, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedAnswerY(); ok {
-		_spec.AddField(captchachallenge.FieldAnswerY, field.TypeInt, value)
+	if value, ok := _u.mutation.PromptText(); ok {
+		_spec.SetField(captchachallenge.FieldPromptText, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(captchachallenge.FieldStatus, field.TypeInt, value)
@@ -262,45 +247,29 @@ func (_u *CaptchaChallengeUpdateOne) SetNillableScope(v *string) *CaptchaChallen
 	return _u
 }
 
-// SetAnswerX sets the "answer_x" field.
-func (_u *CaptchaChallengeUpdateOne) SetAnswerX(v int) *CaptchaChallengeUpdateOne {
-	_u.mutation.ResetAnswerX()
-	_u.mutation.SetAnswerX(v)
+// SetAnswerDots sets the "answer_dots" field.
+func (_u *CaptchaChallengeUpdateOne) SetAnswerDots(v jsontext.Value) *CaptchaChallengeUpdateOne {
+	_u.mutation.SetAnswerDots(v)
 	return _u
 }
 
-// SetNillableAnswerX sets the "answer_x" field if the given value is not nil.
-func (_u *CaptchaChallengeUpdateOne) SetNillableAnswerX(v *int) *CaptchaChallengeUpdateOne {
+// AppendAnswerDots appends value to the "answer_dots" field.
+func (_u *CaptchaChallengeUpdateOne) AppendAnswerDots(v jsontext.Value) *CaptchaChallengeUpdateOne {
+	_u.mutation.AppendAnswerDots(v)
+	return _u
+}
+
+// SetPromptText sets the "prompt_text" field.
+func (_u *CaptchaChallengeUpdateOne) SetPromptText(v string) *CaptchaChallengeUpdateOne {
+	_u.mutation.SetPromptText(v)
+	return _u
+}
+
+// SetNillablePromptText sets the "prompt_text" field if the given value is not nil.
+func (_u *CaptchaChallengeUpdateOne) SetNillablePromptText(v *string) *CaptchaChallengeUpdateOne {
 	if v != nil {
-		_u.SetAnswerX(*v)
+		_u.SetPromptText(*v)
 	}
-	return _u
-}
-
-// AddAnswerX adds value to the "answer_x" field.
-func (_u *CaptchaChallengeUpdateOne) AddAnswerX(v int) *CaptchaChallengeUpdateOne {
-	_u.mutation.AddAnswerX(v)
-	return _u
-}
-
-// SetAnswerY sets the "answer_y" field.
-func (_u *CaptchaChallengeUpdateOne) SetAnswerY(v int) *CaptchaChallengeUpdateOne {
-	_u.mutation.ResetAnswerY()
-	_u.mutation.SetAnswerY(v)
-	return _u
-}
-
-// SetNillableAnswerY sets the "answer_y" field if the given value is not nil.
-func (_u *CaptchaChallengeUpdateOne) SetNillableAnswerY(v *int) *CaptchaChallengeUpdateOne {
-	if v != nil {
-		_u.SetAnswerY(*v)
-	}
-	return _u
-}
-
-// AddAnswerY adds value to the "answer_y" field.
-func (_u *CaptchaChallengeUpdateOne) AddAnswerY(v int) *CaptchaChallengeUpdateOne {
-	_u.mutation.AddAnswerY(v)
 	return _u
 }
 
@@ -451,17 +420,16 @@ func (_u *CaptchaChallengeUpdateOne) sqlSave(ctx context.Context) (_node *Captch
 	if value, ok := _u.mutation.Scope(); ok {
 		_spec.SetField(captchachallenge.FieldScope, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.AnswerX(); ok {
-		_spec.SetField(captchachallenge.FieldAnswerX, field.TypeInt, value)
+	if value, ok := _u.mutation.AnswerDots(); ok {
+		_spec.SetField(captchachallenge.FieldAnswerDots, field.TypeJSON, value)
 	}
-	if value, ok := _u.mutation.AddedAnswerX(); ok {
-		_spec.AddField(captchachallenge.FieldAnswerX, field.TypeInt, value)
+	if value, ok := _u.mutation.AppendedAnswerDots(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, captchachallenge.FieldAnswerDots, value)
+		})
 	}
-	if value, ok := _u.mutation.AnswerY(); ok {
-		_spec.SetField(captchachallenge.FieldAnswerY, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedAnswerY(); ok {
-		_spec.AddField(captchachallenge.FieldAnswerY, field.TypeInt, value)
+	if value, ok := _u.mutation.PromptText(); ok {
+		_spec.SetField(captchachallenge.FieldPromptText, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(captchachallenge.FieldStatus, field.TypeInt, value)
