@@ -1,12 +1,18 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+
+	"website/backend/internal/database"
+	pwreset "website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/modules/settings"
 )
 
@@ -416,5 +422,121 @@ func TestPasswordResetConfirmRateLimitHTTP(t *testing.T) {
 	resp.Body.Close()
 	if retryAfter := resp.Header.Get("Retry-After"); retryAfter == "" {
 		t.Fatal("Retry-After header missing on 429")
+	}
+}
+
+func patchJSON(t *testing.T, client *http.Client, endpoint string, body any) *http.Response {
+	t.Helper()
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req, err := http.NewRequest(http.MethodPatch, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("patch %s: %v", endpoint, err)
+	}
+	return resp
+}
+
+func seedPasswordReset(t *testing.T, db *database.Database, userID uuid.UUID, hash string) {
+	t.Helper()
+
+	if _, err := db.Client.PasswordReset.Create().
+		SetUserID(userID).
+		SetTokenHash(hash).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		Save(context.Background()); err != nil {
+		t.Fatalf("seed reset row: %v", err)
+	}
+}
+
+func passwordResetCount(t *testing.T, db *database.Database, userID uuid.UUID) int {
+	t.Helper()
+
+	count, err := db.Client.PasswordReset.Query().Where(pwreset.UserIDEQ(userID)).Count(context.Background())
+	if err != nil {
+		t.Fatalf("count resets: %v", err)
+	}
+	return count
+}
+
+func TestChangePasswordDeletesResetToken(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	mailer := &fakeMailer{configured: true}
+	ts, _, settingsService := newTestAppWithMailer(t, db, mailer)
+	enableReset(t, settingsService)
+	setResetSite(t, settingsService)
+
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	client := loginAs(t, ts.URL, u.Email, password)
+	seedPasswordReset(t, db, id, "token-"+tag)
+
+	resp := postJSON(t, client, ts.URL+"/api/v1/users/me/password", PasswordChangeRequest{
+		CurrentPassword: password, NewPassword: "new-pass-123",
+	})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("change password status = %d, want 200", resp.StatusCode)
+	}
+	if count := passwordResetCount(t, db, id); count != 0 {
+		t.Fatalf("reset rows after a normal password change = %d, want 0", count)
+	}
+}
+
+func TestUpdateProfileEmailDeletesResetToken(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	mailer := &fakeMailer{configured: true}
+	ts, _, settingsService := newTestAppWithMailer(t, db, mailer)
+	enableReset(t, settingsService)
+	setResetSite(t, settingsService)
+
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	client := loginAs(t, ts.URL, u.Email, password)
+	seedPasswordReset(t, db, id, "email-"+tag)
+
+	newEmail := "moved-" + tag + "@example.com"
+	resp := patchJSON(t, client, ts.URL+"/api/v1/users/me", map[string]any{"email": newEmail})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body := decodeErrorBody(t, resp)
+		t.Fatalf("patch email status = %d, want 200 (body = %v)", resp.StatusCode, body)
+	}
+	if count := passwordResetCount(t, db, id); count != 0 {
+		t.Fatalf("reset rows after an email change = %d, want 0", count)
+	}
+}
+
+func TestUpdateProfileWithoutEmailKeepsResetToken(t *testing.T) {
+	db := testDB(t)
+	tag := uniqueTag(t)
+	mailer := &fakeMailer{configured: true}
+	ts, _, settingsService := newTestAppWithMailer(t, db, mailer)
+	enableReset(t, settingsService)
+	setResetSite(t, settingsService)
+
+	u, password := createTestUser(t, db, tag)
+	id := uuid.MustParse(u.ID)
+	client := loginAs(t, ts.URL, u.Email, password)
+	seedPasswordReset(t, db, id, "bio-"+tag)
+
+	bio := "hello"
+	resp := patchJSON(t, client, ts.URL+"/api/v1/users/me", map[string]any{"bio": bio})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body := decodeErrorBody(t, resp)
+		t.Fatalf("patch bio status = %d, want 200 (body = %v)", resp.StatusCode, body)
+	}
+	if count := passwordResetCount(t, db, id); count != 1 {
+		t.Fatalf("reset rows after a bio-only profile update = %d, want 1", count)
 	}
 }

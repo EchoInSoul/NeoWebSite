@@ -9,6 +9,7 @@ import (
 
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
+	pwreset "website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/user"
 )
@@ -84,7 +85,14 @@ func (r *repository) updatePasswordHash(ctx context.Context, id string, password
 	if err != nil {
 		return nil, errUserNotFound
 	}
-	updated, err := r.client.User.UpdateOneID(parsed).
+
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	updated, err := tx.User.UpdateOneID(parsed).
 		SetPasswordHash(passwordHash).
 		AddAuthVersion(1).
 		Save(ctx)
@@ -92,6 +100,12 @@ func (r *repository) updatePasswordHash(ctx context.Context, id string, password
 		if ent.IsNotFound(err) {
 			return nil, errUserNotFound
 		}
+		return nil, err
+	}
+	if _, err := tx.PasswordReset.Delete().Where(pwreset.UserIDEQ(parsed)).Exec(ctx); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return updated, nil
@@ -103,7 +117,13 @@ func (r *repository) updateProfile(ctx context.Context, id string, nickname, ema
 		return nil, errUserNotFound
 	}
 
-	update := r.client.User.UpdateOneID(parsed)
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	update := tx.User.UpdateOneID(parsed)
 	if nickname != nil {
 		update = update.SetNickname(*nickname)
 	}
@@ -123,6 +143,14 @@ func (r *repository) updateProfile(ctx context.Context, id string, nickname, ema
 		if ent.IsNotFound(err) {
 			return nil, errUserNotFound
 		}
+		return nil, err
+	}
+	if email != nil {
+		if _, err := tx.PasswordReset.Delete().Where(pwreset.UserIDEQ(parsed)).Exec(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return updated, nil
