@@ -4,6 +4,52 @@
 
 ---
 
+## 2026-10-26 · 登录 / 注册接入自研点选形态
+
+**范围**：仅前端。`lib/captcha-challenge.ts` 把出题响应改为判别联合（`SlideCaptchaChallenge` / `ClickCaptchaChallenge`，按字段有效值区分）并新增点选交卷 `solveClickCaptchaChallenge`；`components/auth/builtin-captcha.tsx` 拆成父级容器（出题 / 重试 / 失败卡 / 弹窗摆动）+ 内部滑块组件；新增 `components/auth/click-captcha.tsx`（点选形态）；中英文案各两条；`backend/README.md` 删掉「前端只接滑块、切 click 会拦死」的过时说明并补记点选响应的零值 `tile_*`。后端、迁移、`public-settings`、登录 / 注册表单零改动。
+
+**动机**：上一轮管理端已能选「图像验证码」，但前台只有滑块组件，切过去会把登录 / 注册拦死；本轮把点选形态接到同一个验证弹窗。
+
+**决策**：
+- **按出题响应的有效值分派，不读前端缓存的 `captcha_mode`**：后端 DTO 的点选响应里仍会带 `tile_image`（空串）与 `tile_*`（0），所以判别看有效值——`tile_image` 非空且 `tile_width/height` 为正才是滑块，`prompt_image` / `prompt_text` 非空且 `expected_clicks` 为正才是点选；两种都成立或都不成立按坏响应抛错。这样公开设置 60 秒缓存不会造成「组件形态与题目形态错配」。**初版按「字段是否存在」判别，点选题被误判成坏响应、弹窗空白，已改为有效值判别。**
+- **出题 / 重试 / 失败卡上提到父级**：父组件按 `challenge.id` 作 key 渲染滑块或点选子组件；子组件只管自己的交互与交卷。答错仍是「弹窗摆动 + 800ms 后换新题」，与滑块既有语义一致。
+- **点选交卷时机固定**：每点一次打一个带序号的标记，第 `expected_clicks`（后端恒为 3）次点击后立即一次性交卷；中途不提交、不提供撤销。顺序错即判负，由后端裁定。
+- **弹窗尺寸与滑块一致**：沿用同一个 `DialogContent`（`sm:max-w-[340px]` / `p-5` / `gap-3`）；主图同样按后端 `master_width / master_height`（当前 300×220）预留宽高比；点选的提示行 `h-10` 与滑块滑轨 `h-10` 等高，弹窗总高度不变。
+- **坐标换算**：点击位置按 `masterWidth / 渲染宽度` 换算回主图像素后四舍五入，容差仍只由后端决定。
+
+**已知缺口**：
+- 点选没有「撤销上一次点击」：点错只能等三次点满判负后换题。
+- 点选交互只支持指针，无键盘 / 读屏路径（滑块同样没有）。
+- 管理端自检接口的 builtin 形态仍未做（仍只服务 Turnstile）。
+- 运行期观感与真实点击流程需在 dev server + 打开的测试后端上人工验收。
+
+**验证**：`npx tsc --noEmit` 通过；改动文件 `eslint` 0 error（4 条 `@next/next/no-img-element` warning，与滑块既有的 `<img>` 数据 URL 用法同类）；`prettier --check` 与 `git diff --check` 通过。另在本地 dev server + 打开的后端上实测：点选弹窗正常显示（对话框 340×348，与滑块同外壳、同 300×220 画布比例，提示行与滑轨同为 40px）；同一位置连点三次 → 判负后 800ms 自动换新题；按库中 `answer_dots` 顺序点击 → 出现「验证成功，用时 0.6s」与序号标记，1618ms 后弹窗关闭并提交登录（测试账号在库中不存在，登录结果本身未验证）。初版「字段存在即判别」导致点选响应被判成坏数据、弹窗空白问题已按有效值判别修复。
+
+**未提交。**
+
+---
+
+## 2026-10-26 · 控制台人机验证新增「验证方式」选择器
+
+**范围**：仅前端控制台。`/console/settings/captcha` 在「验证服务」选为「自研人机验证」时展开一行「验证方式」下拉（滑块验证 / 图像验证码），读写 `captcha.captcha_mode`；`lib/captcha-settings.ts` 的解析 / 脏检查 / PATCH 补该键，保存 hook 加 `setCaptchaMode`，中英文案各三条。登录 / 注册页、`public-settings`、点选组件与后端零改动。
+
+**动机**：点选形态后端已入库但管理端没有入口；用户要求先补选择器，登录 / 注册接线留到后续轮次。
+
+**决策**：
+- **选择器只在「自研人机验证」下出现**：`captcha_mode` 只对 `builtin` 有意义，Turnstile / 不启用时隐藏该行。
+- **未知值照原样显示**：与「验证服务」同套路，读到的值不在 `slide` / `click` 里就把它作为一项显示出来，不静默改成滑块。
+- **无条件回写**：`captcha_mode` 与 `captcha_provider` 一样每次保存都带上；只认 `slide` / `click` 的校验在后端。
+
+**已知缺口**：
+- 前端仍只有滑块组件，**选「图像验证码」保存后登录 / 注册会被拦死**，直到点选组件接上；本轮按用户口径不碰登录 / 注册。
+- 管理端自检接口的 builtin 形态（仍只服务 Turnstile）。
+
+**验证**：`npx tsc --noEmit`、改动文件 `eslint` 与 `prettier --check` 通过。
+
+**未提交。**
+
+---
+
 ## 2026-10-26 · 自研人机验证新增「点选文字」形态
 
 **范围**：仅后端。`captcha/builtin` 拆出两个生成器（`generator.go` 滑块、`click_generator.go` 点选，后者用 `imagesv2` 背景 + `fzshenksjw` 字体 + 库内置 15 字库，`WithRangeVerifyLen(3,3)` 固定取 3 个字）；新增设置项 `captcha.captcha_mode`（文字、默认 `slide`、`Public`、只认 `slide` / `click`，写其它值 409 `setting_conflict`）+ seed 迁移；挑战表答案列统一为 `answer_dots`（jsonb）+ 新增 `prompt_text`，删除 `answer_x` / `answer_y`；`Service.Challenge` 按 `captcha_mode` 分派出题，`Service.Solve` 改收 `[]Point` 并按题目 `answer_dots` 的 dots 长度路由判分（1 = 滑块，3 = 点选）；交卷端点接受两种请求形状（`{"x","y"}` / `{"clicks":[3 个]}`）并做形状校验；文档同步。前端零改动、零新依赖、零新错误码。**未提交**（用户口径：绝不主动提交）。
