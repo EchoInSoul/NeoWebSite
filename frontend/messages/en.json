@@ -377,7 +377,6 @@
       "requiredConfirmPassword": "Enter the new password again",
       "mismatch": "Passwords do not match",
       "invalidToken": "This link is invalid or expired",
-      "goRequest": "Request a new link",
       "weakPassword": "Password does not meet the site requirements",
       "passwordUnchanged": "New password must differ from the current one",
       "disabled": "Password reset is disabled",

@@ -25,10 +25,8 @@ export function usePasswordResetConfirm(token: string) {
   const [isPending, setIsPending] = useState(false);
   const [retryUntil, setRetryUntil] = useState(0);
   const [retryRemaining, setRetryRemaining] = useState(0);
-  const [tokenRejected, setTokenRejected] = useState(false);
 
   const missingToken = token === "";
-  const invalidToken = missingToken || tokenRejected;
 
   useEffect(() => {
     if (missingToken) {
@@ -65,7 +63,11 @@ export function usePasswordResetConfirm(token: string) {
   }
 
   async function submit() {
-    if (retryRemaining > 0 || invalidToken) {
+    if (retryRemaining > 0) {
+      return;
+    }
+    if (missingToken) {
+      toast.error(t("invalidToken"));
       return;
     }
 
@@ -107,7 +109,6 @@ export function usePasswordResetConfirm(token: string) {
 
       if (error instanceof ApiError) {
         if (error.code === "password_reset_invalid") {
-          setTokenRejected(true);
           toast.error(t("invalidToken"));
           return;
         }
@@ -148,7 +149,6 @@ export function usePasswordResetConfirm(token: string) {
     serviceDown,
     retryRemaining,
     retryLabel,
-    invalidToken,
     changeField,
     submit,
   };

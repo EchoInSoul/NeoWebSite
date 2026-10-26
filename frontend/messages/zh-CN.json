@@ -377,7 +377,6 @@
       "requiredConfirmPassword": "请再次输入新密码",
       "mismatch": "两次输入的密码不一致",
       "invalidToken": "链接无效或已过期",
-      "goRequest": "重新申请",
       "weakPassword": "密码不符合站点要求",
       "passwordUnchanged": "新密码不能与当前密码相同",
       "disabled": "密码重置已关闭",
