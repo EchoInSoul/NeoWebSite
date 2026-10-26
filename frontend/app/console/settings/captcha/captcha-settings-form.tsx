@@ -110,7 +110,12 @@ export function CaptchaSettingsForm({
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+    <form
+      className="flex flex-col gap-4"
+      method="post"
+      onSubmit={handleSubmit}
+      noValidate
+    >
       <ConsoleSettingsGroup title={t("captchaGroup")}>
         <ConsoleSettingsRow
           control={

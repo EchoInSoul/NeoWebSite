@@ -102,7 +102,12 @@ export function RegisterSettingsForm({
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+    <form
+      className="flex flex-col gap-4"
+      method="post"
+      onSubmit={handleSubmit}
+      noValidate
+    >
       {values.emailVerificationEnabled && !canEnable ? (
         <p className="rounded-md border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
           {t("emailVerificationWarning")}

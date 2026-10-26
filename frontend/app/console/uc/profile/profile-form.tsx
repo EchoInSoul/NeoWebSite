@@ -100,7 +100,7 @@ export function ProfileForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form method="post" onSubmit={handleSubmit} noValidate>
       <div className="flex flex-col gap-5">
         <ConsoleSettingsGroup title={t("profile")}>
           <ConsoleSettingsRow

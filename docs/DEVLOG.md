@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-26 · 全站表单显式 `method="post"`
+
+**范围**：仅前端 8 个 `<form>`——`app/login/signin-form.tsx`、`app/register/signup-form.tsx`、控制台五个设置页（`captcha` / `info/site` / `login/login-control` / `mail` / `register`）与 `app/console/uc/profile/profile-form.tsx`，各补 `method="post"`（超过 80 列的按 prettier 折成多行）。后端、接口契约、文案、样式零改动。
+
+**动机**：HTML 表单缺省提交方法是 GET。这些表单都靠 `onSubmit` + `preventDefault` 走 fetch，但只要提交发生在 React 处理器挂上之前（hydration 之前、脚本报错、禁用 JS），浏览器就按原生 GET 提交，用户名与口令直接进地址栏、进浏览历史、进 `Referer`。实测复现：在 `/login` 用 `HTMLFormElement.prototype.submit()`（绕过 submit 事件，等价于处理器未挂载）提交 → 地址栏变成 `/login?identifier=leak-probe-user&password=LeakProbe123%21`（假凭据，仅本地）。这是 10-22 审查就记下、一直未落地的账。
+
+**决策**：
+- **只补 `method`，不加 `action`、不做重定向兜底**：目标行为是「不跑 JS 就提交不了」，不是把原生表单提交变成一个可用的后端流程；补上 `method="post"` 后原生提交退化为对同一路由的 POST，敏感值不再进 URL。
+- **8 个全补，不是只补含口令的 4 个**：口径统一。控制台设置页同样会把 SMTP 密码、Turnstile 私钥写进 URL，没有理由留 GET。
+
+**已知缺口**：控制台那 6 个表单只做了属性改动，未逐个浏览器实测（dev 库无管理员凭据）；`/login` 与 `/register` 是实测过的。
+
+**验证**：`npx tsc --noEmit` 通过；8 个文件 `eslint` 0 problem、`prettier --check` 通过；脚本遍历全仓 `<form>`，缺 `method="post"` 的已为零。浏览器实测（dev server，同样用绕过 submit 事件的原生提交）：`/login` 与 `/register` 的表单 `method` 均为 post、Navigation Timing 的 `responseStatus` 为 200、`location.search` 为空、页面重新渲染且字段清空——即不跑 JS 的提交不再把凭据写进地址栏。
+
+**提交状态**：随本条目一并入库；**尚未推送**（GitHub 连接被掐，`development` 领先 `origin/development`）。
+
+---
+
 ## 2026-10-26 · 人机验证只接受主指针与主键
 
 **范围**：仅前端两个组件。`components/auth/click-captcha.tsx` 的 `handlePointerDown`、`components/auth/builtin-captcha.tsx` 内部滑块的 `beginDrag` / `moveDrag` / `endDrag` 各加一道指针过滤：按下事件要求 `event.isPrimary` 且 `event.button === 0` 才计入，移动与抬起只要求 `isPrimary`（`pointermove` 的 `button` 在按住左键时不可靠，不能拿来判）。后端、契约、文案零改动。
@@ -18,7 +36,7 @@
 
 **验证**：`npx tsc --noEmit` 通过；两个改动文件 `eslint` 0 error（4 条既有 `<img>` warning）；`prettier --check` 通过。浏览器实测（dev server + 后端在跑，点选题）：对同一张图依次派发自键 `button=2`、次指针 `isPrimary=false`、中键 `button=1` 三种 `pointerdown` → 标记数 0、`/solutions` 请求 0；随后正常左键三击 → 标记数 1、2、3，恰好一次交卷请求返回 400，弹窗出现「人机验证未通过」红标且 `getAnimations()` 抓到摆动动画，约 800ms 后红标消失、换新题、此后 1.2 秒内不再自动交卷。这同时补上了上一条记录里欠测的真答错分支。
 
-**未提交。**
+**提交状态**：已入库 `daa2f68`；尚未推送。
 
 ---
 
@@ -42,7 +60,7 @@
 
 **验证**：`npx tsc --noEmit` 通过；四个改动文件 `eslint` 0 error（4 条既有 `@next/next/no-img-element` warning，与滑块旧用法同类）；`prettier --check` 通过。浏览器实测（dev server + 后端在跑，走前端 `/api` 代理，注入 `/solutions` 返回 503）：只弹「服务暂时不可用，请稍后重试」toast，弹窗内**没有**「人机验证未通过」红标、不摆动，改落到「重新加载」卡；卡高 272px（`minHeight` 生效）、弹窗高度维持 348px 不跳；带调用栈的 fetch 日志证明交卷 503 之后 7.5 秒内没有再发出题请求（日志里只有预取那一次 POST `/captcha/challenges`），即故障后**没有自动换题**。
 
-**未提交。**
+**提交状态**：已入库 `71de7c6`；尚未推送。
 
 ---
 

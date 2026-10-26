@@ -69,6 +69,7 @@ export function SigninForm({ captcha }: { captcha: CaptchaConfig | null }) {
     <form
       ref={formRef}
       className="flex flex-col gap-5"
+      method="post"
       onSubmit={handleSubmit}
       noValidate
     >
