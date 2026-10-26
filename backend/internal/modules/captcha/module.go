@@ -43,5 +43,6 @@ func (m *Module) Register(r *gin.RouterGroup) {
 }
 
 func (m *Module) RegisterProtected(r *gin.RouterGroup) {
+	m.builtinController.RegisterProtected(r)
 	m.turnstileController.RegisterProtected(r)
 }

@@ -27,6 +27,8 @@ const (
 	modeSlide = "slide"
 	modeClick = "click"
 
+	scopeTest = "test"
+
 	clickDots = 3
 )
 
@@ -139,6 +141,18 @@ func (s *Service) Challenge(ctx context.Context, scope, ip string) (ChallengeRes
 		return ChallengeResponse{}, fmt.Errorf("captcha: read captcha_mode: %w (%w)", err, apierror.ErrServiceUnavailable)
 	}
 
+	return s.issue(ctx, scope, mode)
+}
+
+func (s *Service) TestChallenge(ctx context.Context, mode string) (ChallengeResponse, error) {
+	if mode != modeSlide && mode != modeClick {
+		return ChallengeResponse{}, apierror.WithParam(apierror.ErrInvalidRequest, "mode")
+	}
+
+	return s.issue(ctx, scopeTest, mode)
+}
+
+func (s *Service) issue(ctx context.Context, scope, mode string) (ChallengeResponse, error) {
 	now := time.Now()
 	if err := s.repo.deleteExpired(ctx, now); err != nil {
 		return ChallengeResponse{}, err

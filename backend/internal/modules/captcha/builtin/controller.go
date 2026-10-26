@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	"website/backend/internal/common/apierror"
+	"website/backend/internal/common/guard"
+	"website/backend/internal/common/rbac"
 )
 
 type Controller struct {
@@ -23,6 +25,31 @@ func NewController(service *Service) *Controller {
 func (c *Controller) Register(r *gin.RouterGroup) {
 	r.POST("/captcha/challenges", c.createChallenge)
 	r.POST("/captcha/challenges/:id/solutions", c.solveChallenge)
+}
+
+func (c *Controller) RegisterProtected(r *gin.RouterGroup) {
+	r.POST("/admin/captcha/challenges", guard.RequirePermission(rbac.PermissionCaptchaEdit), c.createTestChallenge)
+}
+
+func (c *Controller) createTestChallenge(ctx *gin.Context) {
+	if !requireJSONRequest(ctx) {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	var req TestChallengeRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	response, err := c.service.TestChallenge(ctx.Request.Context(), req.Mode)
+	if err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, response)
 }
 
 func (c *Controller) createChallenge(ctx *gin.Context) {

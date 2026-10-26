@@ -10,6 +10,10 @@ type CreateChallengeRequest struct {
 	Scope string `json:"scope"`
 }
 
+type TestChallengeRequest struct {
+	Mode string `json:"mode"`
+}
+
 type SolveChallengeRequest struct {
 	X      *int         `json:"x"`
 	Y      *int         `json:"y"`

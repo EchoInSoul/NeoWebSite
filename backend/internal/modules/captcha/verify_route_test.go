@@ -22,11 +22,13 @@ import (
 	"github.com/google/uuid"
 
 	"website/backend/internal/common/guard"
+	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/common/rbac"
 	"website/backend/internal/config"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
 	"website/backend/internal/modules/access"
+	"website/backend/internal/modules/captcha/builtin"
 	"website/backend/internal/modules/captcha/turnstile"
 	"website/backend/internal/modules/settings"
 )
@@ -98,10 +100,16 @@ func newCaptchaRouteTestApp(t *testing.T, db *database.Database, verifier *fakeV
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.LoadIdentity(accessModule.Service, sm))
 	captchaService := NewService(settingsModule.Service, verifier)
+	builtinService, err := builtin.New(db, settingsModule.Service, ratelimit.New())
+	if err != nil {
+		t.Fatalf("builtin.New: %v", err)
+	}
 	module := &Module{
 		Service:             captchaService,
+		builtinController:   builtin.NewController(builtinService),
 		turnstileController: turnstile.NewController(turnstile.NewService(settingsModule.Service, verifier)),
 	}
+	module.Register(api)
 	module.RegisterProtected(protected)
 
 	ts := httptest.NewServer(sm.LoadAndSave(engine))
