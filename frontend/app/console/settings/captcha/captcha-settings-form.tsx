@@ -6,6 +6,7 @@ import {
   Fingerprint,
   Globe,
   LockKeyhole,
+  MousePointerClick,
   ShieldCheck,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -29,6 +30,8 @@ import { useCaptchaSettingsSave } from "@/hooks/use-captcha-settings-save";
 import { useCaptchaVerify } from "@/hooks/use-captcha-verify";
 import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
 import {
+  CAPTCHA_MODE_CLICK,
+  CAPTCHA_MODE_SLIDE,
   CAPTCHA_PROVIDER_BUILTIN,
   CAPTCHA_PROVIDER_NONE,
   CAPTCHA_PROVIDER_TURNSTILE,
@@ -40,6 +43,8 @@ const KNOWN_CAPTCHA_PROVIDERS: string[] = [
   CAPTCHA_PROVIDER_BUILTIN,
   CAPTCHA_PROVIDER_TURNSTILE,
 ];
+
+const KNOWN_CAPTCHA_MODES: string[] = [CAPTCHA_MODE_SLIDE, CAPTCHA_MODE_CLICK];
 
 export function CaptchaSettingsForm({
   settings,
@@ -53,6 +58,7 @@ export function CaptchaSettingsForm({
     isSaving,
     setCaptchaEnabled,
     setCaptchaProvider,
+    setCaptchaMode,
     setTurnstileSiteKey,
     setTurnstileSecretKey,
     save,
@@ -73,6 +79,16 @@ export function CaptchaSettingsForm({
     ...(unknownCaptchaProvider === null
       ? {}
       : { [unknownCaptchaProvider]: unknownCaptchaProvider }),
+  };
+  const unknownCaptchaMode = KNOWN_CAPTCHA_MODES.includes(values.captchaMode)
+    ? null
+    : values.captchaMode;
+  const captchaModeItems = {
+    [CAPTCHA_MODE_SLIDE]: t("captchaModeSlide"),
+    [CAPTCHA_MODE_CLICK]: t("captchaModeClick"),
+    ...(unknownCaptchaMode === null
+      ? {}
+      : { [unknownCaptchaMode]: unknownCaptchaMode }),
   };
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -151,6 +167,45 @@ export function CaptchaSettingsForm({
                 icon={<ShieldCheck />}
                 label={t("captchaProvider")}
               />
+              {values.captchaProvider === CAPTCHA_PROVIDER_BUILTIN ? (
+                <ConsoleSettingsRow
+                  control={
+                    <Select
+                      items={captchaModeItems}
+                      value={values.captchaMode}
+                      onValueChange={(value) => {
+                        if (value !== null) {
+                          setCaptchaMode(value);
+                        }
+                      }}
+                      disabled={isSaving}
+                    >
+                      <SelectTrigger
+                        aria-label={t("captchaMode")}
+                        className="w-64"
+                        size="sm"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={CAPTCHA_MODE_SLIDE}>
+                          {t("captchaModeSlide")}
+                        </SelectItem>
+                        <SelectItem value={CAPTCHA_MODE_CLICK}>
+                          {t("captchaModeClick")}
+                        </SelectItem>
+                        {unknownCaptchaMode === null ? null : (
+                          <SelectItem value={unknownCaptchaMode}>
+                            {unknownCaptchaMode}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  }
+                  icon={<MousePointerClick />}
+                  label={t("captchaMode")}
+                />
+              ) : null}
               {values.captchaProvider === CAPTCHA_PROVIDER_TURNSTILE ? (
                 <>
                   <ConsoleSettingsRow
