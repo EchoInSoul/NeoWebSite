@@ -2,7 +2,9 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,9 +17,9 @@ import (
 var errChallengeNotFound = errors.New("captcha: challenge not found")
 
 type challengeRecord struct {
-	ID      uuid.UUID
-	AnswerX int
-	AnswerY int
+	ID         uuid.UUID
+	Dots       []AnswerDot
+	PromptText string
 }
 
 type repository struct {
@@ -28,11 +30,16 @@ func newRepository(db *database.Database) *repository {
 	return &repository{client: db.Client}
 }
 
-func (r *repository) create(ctx context.Context, scope string, answerX, answerY int, expiresAt time.Time) (uuid.UUID, error) {
+func (r *repository) create(ctx context.Context, scope, promptText string, dots []AnswerDot, expiresAt time.Time) (uuid.UUID, error) {
+	encoded, err := json.Marshal(AnswerDots{Dots: dots})
+	if err != nil {
+		return uuid.Nil, err
+	}
+
 	created, err := r.client.CaptchaChallenge.Create().
 		SetScope(scope).
-		SetAnswerX(answerX).
-		SetAnswerY(answerY).
+		SetAnswerDots(encoded).
+		SetPromptText(promptText).
 		SetStatus(statusPending).
 		SetExpiresAt(expiresAt).
 		Save(ctx)
@@ -56,7 +63,15 @@ func (r *repository) findPending(ctx context.Context, id uuid.UUID, now time.Tim
 	if err != nil {
 		return challengeRecord{}, err
 	}
-	return challengeRecord{ID: found.ID, AnswerX: found.AnswerX, AnswerY: found.AnswerY}, nil
+	dots, err := decodeAnswerDots(found.AnswerDots)
+	if err != nil {
+		return challengeRecord{}, err
+	}
+	return challengeRecord{
+		ID:         found.ID,
+		Dots:       dots,
+		PromptText: found.PromptText,
+	}, nil
 }
 
 func (r *repository) markSolved(ctx context.Context, id uuid.UUID, tokenHash string, now, expiresAt time.Time) (int, error) {
@@ -104,4 +119,12 @@ func (r *repository) deleteExpired(ctx context.Context, now time.Time) error {
 		Where(captchachallenge.ExpiresAtLT(now)).
 		Exec(ctx)
 	return err
+}
+
+func decodeAnswerDots(raw json.RawMessage) ([]AnswerDot, error) {
+	var payload AnswerDots
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, fmt.Errorf("captcha: decode answer dots: %w", err)
+	}
+	return payload.Dots, nil
 }

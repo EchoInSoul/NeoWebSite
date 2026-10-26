@@ -64,9 +64,9 @@ func (s *Service) Challenge(ctx context.Context, scope, ip string) (builtin.Chal
 	return s.builtin.Challenge(ctx, scope, ip)
 }
 
-func (s *Service) Solve(ctx context.Context, id uuid.UUID, x, y int) (builtin.SolveChallengeResponse, error) {
+func (s *Service) Solve(ctx context.Context, id uuid.UUID, clicks []builtin.Point) (builtin.SolveChallengeResponse, error) {
 	if s.builtin == nil {
 		return builtin.SolveChallengeResponse{}, apierror.ErrServiceUnavailable
 	}
-	return s.builtin.Solve(ctx, id, x, y)
+	return s.builtin.Solve(ctx, id, clicks)
 }

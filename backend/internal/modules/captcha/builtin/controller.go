@@ -63,16 +63,14 @@ func (c *Controller) solveChallenge(ctx *gin.Context) {
 		apierror.Write(ctx, apierror.ErrInvalidRequest)
 		return
 	}
-	if req.X == nil || *req.X < 0 {
-		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, "x"))
-		return
-	}
-	if req.Y == nil || *req.Y < 0 {
-		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, "y"))
+
+	clicks, err := req.clicks()
+	if err != nil {
+		apierror.Write(ctx, err)
 		return
 	}
 
-	response, err := c.service.Solve(ctx.Request.Context(), id, *req.X, *req.Y)
+	response, err := c.service.Solve(ctx.Request.Context(), id, clicks)
 	if err != nil {
 		apierror.Write(ctx, err)
 		return

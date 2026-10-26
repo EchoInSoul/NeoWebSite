@@ -49,10 +49,13 @@ var builtinRegistry = []Group{
 		},
 	},
 	{
-		Name: "captcha",
+		Name:       "captcha",
+		ValidateOn: []string{"captcha_mode"},
+		Validate:   validateCaptchaGroup,
 		Items: []Definition{
 			{Name: "captcha_enabled", Type: FieldTypeBool, Default: false, Public: true},
 			{Name: "captcha_provider", Type: FieldTypeString, Default: "none", Public: true},
+			{Name: "captcha_mode", Type: FieldTypeString, Default: "slide", Public: true},
 			{Name: "turnstile_site_key", Type: FieldTypeString, Default: "", Public: true},
 			{Name: "turnstile_secret_key", Type: FieldTypeString, Default: ""},
 		},
@@ -154,6 +157,8 @@ func checkDefault(item Definition) error {
 const (
 	CaptchaScopeLogin      = "login"
 	CaptchaScopeRegister   = "register"
+	captchaModeSlide       = "slide"
+	captchaModeClick       = "click"
 	passwordMinLengthFloor = 8
 	passwordMinLengthCap   = 64
 	sessionMaxAgeDaysFloor = 1
@@ -163,6 +168,21 @@ const (
 	smtpEncryptionSSL      = "ssl"
 	smtpEncryptionStartTLS = "starttls"
 )
+
+func validateCaptchaGroup(values map[string]any, touched map[string]bool) error {
+	if !touched["captcha_mode"] {
+		return nil
+	}
+
+	mode, ok := values["captcha_mode"].(string)
+	if !ok {
+		return fmt.Errorf("settings: captcha_mode is not a string")
+	}
+	if mode != captchaModeSlide && mode != captchaModeClick {
+		return &ItemError{Item: "captcha_mode", Err: apierror.ErrSettingConflict}
+	}
+	return nil
+}
 
 func validateAuthGroup(values map[string]any, touched map[string]bool) error {
 	if touched["password_min_length"] {

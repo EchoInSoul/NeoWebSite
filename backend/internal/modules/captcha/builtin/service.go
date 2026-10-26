@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/wenlng/go-captcha/v2/click"
 	"github.com/wenlng/go-captcha/v2/slide"
 
 	"website/backend/internal/common/apierror"
@@ -20,7 +21,14 @@ import (
 	"website/backend/internal/modules/settings"
 )
 
-const providerBuiltin = "builtin"
+const (
+	providerBuiltin = "builtin"
+
+	modeSlide = "slide"
+	modeClick = "click"
+
+	clickDots = 3
+)
 
 type Settings interface {
 	GetBool(ctx context.Context, group, name string) (bool, error)
@@ -47,10 +55,28 @@ func DefaultPolicies() Policies {
 	}
 }
 
+func (p Policies) validate(dots []AnswerDot, clicks []Point) bool {
+	if len(dots) != len(clicks) || len(dots) == 0 {
+		return false
+	}
+
+	if len(dots) == 1 {
+		return slide.Validate(clicks[0].X, clicks[0].Y, dots[0].X, dots[0].Y, p.AnswerPadding)
+	}
+
+	for i, dot := range dots {
+		if !click.Validate(clicks[i].X, clicks[i].Y, dot.X, dot.Y, dot.Width, dot.Height, p.AnswerPadding) {
+			return false
+		}
+	}
+	return true
+}
+
 type Service struct {
 	settings  Settings
 	repo      *repository
 	generator *generator
+	clickGen  *clickGenerator
 	limiter   *ratelimit.Limiter
 	policies  Policies
 }
@@ -64,14 +90,19 @@ func NewWithPolicies(db *database.Database, settingsService Settings, limiter *r
 	if err != nil {
 		return nil, err
 	}
-	return newService(settingsService, newRepository(db), generator, limiter, policies), nil
+	clickGen, err := newClickGenerator()
+	if err != nil {
+		return nil, err
+	}
+	return newService(settingsService, newRepository(db), generator, clickGen, limiter, policies), nil
 }
 
-func newService(settingsService Settings, repo *repository, generator *generator, limiter *ratelimit.Limiter, policies Policies) *Service {
+func newService(settingsService Settings, repo *repository, generator *generator, clickGen *clickGenerator, limiter *ratelimit.Limiter, policies Policies) *Service {
 	return &Service{
 		settings:  settingsService,
 		repo:      repo,
 		generator: generator,
+		clickGen:  clickGen,
 		limiter:   limiter,
 		policies:  policies,
 	}
@@ -103,9 +134,9 @@ func (s *Service) Challenge(ctx context.Context, scope, ip string) (ChallengeRes
 		return ChallengeResponse{}, apierror.ErrCaptchaDisabled
 	}
 
-	generated, err := s.generator.generate()
+	mode, err := s.settings.GetString(ctx, "captcha", "captcha_mode")
 	if err != nil {
-		return ChallengeResponse{}, err
+		return ChallengeResponse{}, apierror.ErrServiceUnavailable
 	}
 
 	now := time.Now()
@@ -114,7 +145,29 @@ func (s *Service) Challenge(ctx context.Context, scope, ip string) (ChallengeRes
 	}
 
 	expiresAt := now.Add(s.policies.ChallengeTTL)
-	id, err := s.repo.create(ctx, scope, generated.AnswerX, generated.AnswerY, expiresAt)
+
+	if mode == modeClick {
+		return s.clickChallenge(ctx, scope, now, expiresAt)
+	}
+	if mode != modeSlide {
+		return ChallengeResponse{}, apierror.ErrInternal
+	}
+
+	return s.slideChallenge(ctx, scope, now, expiresAt)
+}
+
+func (s *Service) slideChallenge(ctx context.Context, scope string, now, expiresAt time.Time) (ChallengeResponse, error) {
+	generated, err := s.generator.generate()
+	if err != nil {
+		return ChallengeResponse{}, err
+	}
+
+	id, err := s.repo.create(ctx, scope, "", []AnswerDot{{
+		X:      generated.AnswerX,
+		Y:      generated.AnswerY,
+		Width:  generated.TileWidth,
+		Height: generated.TileHeight,
+	}}, expiresAt)
 	if err != nil {
 		return ChallengeResponse{}, err
 	}
@@ -133,7 +186,30 @@ func (s *Service) Challenge(ctx context.Context, scope, ip string) (ChallengeRes
 	}, nil
 }
 
-func (s *Service) Solve(ctx context.Context, id uuid.UUID, x, y int) (SolveChallengeResponse, error) {
+func (s *Service) clickChallenge(ctx context.Context, scope string, now, expiresAt time.Time) (ChallengeResponse, error) {
+	generated, err := s.clickGen.generate()
+	if err != nil {
+		return ChallengeResponse{}, err
+	}
+
+	id, err := s.repo.create(ctx, scope, generated.PromptText, generated.Dots, expiresAt)
+	if err != nil {
+		return ChallengeResponse{}, err
+	}
+
+	return ChallengeResponse{
+		ID:             id,
+		MasterImage:    generated.MasterImage,
+		PromptImage:    generated.PromptImage,
+		PromptText:     generated.PromptText,
+		MasterWidth:    generated.MasterWidth,
+		MasterHeight:   generated.MasterHeight,
+		ExpectedClicks: clickDots,
+		ExpiresAt:      expiresAt.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) Solve(ctx context.Context, id uuid.UUID, clicks []Point) (SolveChallengeResponse, error) {
 	now := time.Now()
 	record, err := s.repo.findPending(ctx, id, now)
 	if errors.Is(err, errChallengeNotFound) {
@@ -143,7 +219,11 @@ func (s *Service) Solve(ctx context.Context, id uuid.UUID, x, y int) (SolveChall
 		return SolveChallengeResponse{}, err
 	}
 
-	if !slide.Validate(x, y, record.AnswerX, record.AnswerY, s.policies.AnswerPadding) {
+	if len(record.Dots) != len(clicks) {
+		return SolveChallengeResponse{}, apierror.WithParam(apierror.ErrInvalidRequest, "clicks")
+	}
+
+	if !s.policies.validate(record.Dots, clicks) {
 		if _, err := s.repo.markFailed(ctx, id, now); err != nil {
 			return SolveChallengeResponse{}, err
 		}
