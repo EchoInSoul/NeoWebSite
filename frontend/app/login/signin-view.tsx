@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { AuthFrame } from "@/components/auth/auth-frame";
+import { usePasswordResetNotice } from "@/hooks/use-password-reset-notice";
 import { useSignoutNotice } from "@/hooks/use-signout-notice";
 import { useSignupNotice } from "@/hooks/use-signup-notice";
 import type { CaptchaConfig } from "@/lib/public-settings";
@@ -11,15 +12,18 @@ import { SigninForm } from "./signin-form";
 
 export function SigninView({
   signupOpen,
+  passwordResetEnabled,
   captcha,
 }: {
   signupOpen: boolean;
+  passwordResetEnabled: boolean;
   captcha: CaptchaConfig | null;
 }) {
   const t = useTranslations("auth.signin");
 
   useSignupNotice();
   useSignoutNotice();
+  usePasswordResetNotice();
 
   return (
     <AuthFrame
@@ -39,7 +43,10 @@ export function SigninView({
     >
       <h1 className="text-xl font-semibold">{t("title")}</h1>
       <div className="mt-6">
-        <SigninForm captcha={captcha} />
+        <SigninForm
+          captcha={captcha}
+          passwordResetEnabled={passwordResetEnabled}
+        />
       </div>
     </AuthFrame>
   );

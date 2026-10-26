@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -18,7 +19,13 @@ import { useCaptchaGate } from "@/hooks/use-captcha-gate";
 import { useSigninForm } from "@/hooks/use-signin";
 import type { CaptchaConfig } from "@/lib/public-settings";
 
-export function SigninForm({ captcha }: { captcha: CaptchaConfig | null }) {
+export function SigninForm({
+  captcha,
+  passwordResetEnabled,
+}: {
+  captcha: CaptchaConfig | null;
+  passwordResetEnabled: boolean;
+}) {
   const t = useTranslations("auth.signin");
   const tCommon = useTranslations("common");
   const captchaGate = useCaptchaGate(captcha);
@@ -136,6 +143,17 @@ export function SigninForm({ captcha }: { captcha: CaptchaConfig | null }) {
               </InputGroupAddon>
             </InputGroup>
           </div>
+
+          {passwordResetEnabled ? (
+            <div className="flex justify-end">
+              <Link
+                href="/reset-password"
+                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {t("forgotPassword")}
+              </Link>
+            </div>
+          ) : null}
         </fieldset>
       )}
 

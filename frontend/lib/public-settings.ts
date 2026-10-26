@@ -61,6 +61,10 @@ export function isSignupOpen(settings: PublicSettings): boolean {
   return settings.register?.enabled !== false;
 }
 
+export function isPasswordResetEnabled(settings: PublicSettings): boolean {
+  return settings.auth?.password_reset_enabled === true;
+}
+
 export type CaptchaConfig =
   | { provider: "turnstile"; siteKey: string }
   | { provider: "builtin"; scope: CaptchaScope };

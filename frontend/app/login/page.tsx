@@ -6,6 +6,7 @@ import { getAuthenticatedUser } from "@/lib/auth-session";
 import {
   getCaptchaConfig,
   getPublicSettings,
+  isPasswordResetEnabled,
   isSignupOpen,
 } from "@/lib/public-settings";
 import { SigninView } from "./signin-view";
@@ -23,18 +24,31 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function SigninPage() {
   const settings = await getPublicSettings();
   const signupOpen = isSignupOpen(settings);
+  const passwordResetEnabled = isPasswordResetEnabled(settings);
   const captcha = getCaptchaConfig(settings, "login");
 
   let user;
   try {
     user = await getAuthenticatedUser();
   } catch {
-    return <SigninView signupOpen={signupOpen} captcha={captcha} />;
+    return (
+      <SigninView
+        signupOpen={signupOpen}
+        passwordResetEnabled={passwordResetEnabled}
+        captcha={captcha}
+      />
+    );
   }
 
   if (user) {
     redirect("/console");
   }
 
-  return <SigninView signupOpen={signupOpen} captcha={captcha} />;
+  return (
+    <SigninView
+      signupOpen={signupOpen}
+      passwordResetEnabled={passwordResetEnabled}
+      captcha={captcha}
+    />
+  );
 }
