@@ -55,7 +55,7 @@ export function ConsoleSidebarSection({
 
   const backLink =
     back.kind === "link" ? (
-      <Link href={back.href} onNavigate={back.onNavigate} />
+      <Link href={back.href} onNavigate={back.onNavigate} draggable={false} />
     ) : undefined;
   const onBackClick = back.kind === "button" ? back.onClick : undefined;
 
@@ -101,7 +101,7 @@ export function ConsoleSidebarSection({
                     pathname === item.href ||
                     pathname.startsWith(`${item.href}/`)
                   }
-                  render={<Link href={item.href} />}
+                  render={<Link href={item.href} draggable={false} />}
                   tooltip={item.label}
                   className="select-none"
                 >

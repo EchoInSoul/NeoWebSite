@@ -380,6 +380,7 @@ export function ConsoleSidebarNav({
                   <Link
                     ref={settingsEntryRef}
                     href={settingsEntryHref}
+                    draggable={false}
                     onNavigate={(event) => {
                       if (settingsEntryHref === pathname) {
                         event.preventDefault();
