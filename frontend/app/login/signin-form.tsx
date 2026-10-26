@@ -115,7 +115,17 @@ export function SigninForm({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor={passwordFieldId}>{t("password")}</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor={passwordFieldId}>{t("password")}</Label>
+              {passwordResetEnabled ? (
+                <Link
+                  href="/reset-password"
+                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  {t("forgotPassword")}
+                </Link>
+              ) : null}
+            </div>
             <InputGroup>
               <InputGroupInput
                 id={passwordFieldId}
@@ -143,17 +153,6 @@ export function SigninForm({
               </InputGroupAddon>
             </InputGroup>
           </div>
-
-          {passwordResetEnabled ? (
-            <div className="flex justify-end">
-              <Link
-                href="/reset-password"
-                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-              >
-                {t("forgotPassword")}
-              </Link>
-            </div>
-          ) : null}
         </fieldset>
       )}
 
