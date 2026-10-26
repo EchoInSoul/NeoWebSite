@@ -111,6 +111,9 @@ export function ClickCaptcha({
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (!event.isPrimary || event.button !== 0) {
+      return;
+    }
     if (phase !== "ready" || renderedWidth === 0 || lockedRef.current) {
       return;
     }

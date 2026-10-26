@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-26 · 人机验证只接受主指针与主键
+
+**范围**：仅前端两个组件。`components/auth/click-captcha.tsx` 的 `handlePointerDown`、`components/auth/builtin-captcha.tsx` 内部滑块的 `beginDrag` / `moveDrag` / `endDrag` 各加一道指针过滤：按下事件要求 `event.isPrimary` 且 `event.button === 0` 才计入，移动与抬起只要求 `isPrimary`（`pointermove` 的 `button` 在按住左键时不可靠，不能拿来判）。后端、契约、文案零改动。
+
+**动机**：代码审查发现点选把任何 `pointerdown` 都算一次点击——右键、中键、第二根手指都会落点，可能提前凑满三次并自动交卷，判负后换题；滑块的把手同理，右键按下就开始拖、第二根手指抬起会立即交卷。
+
+**决策**：
+- **只过滤输入来源，不改交互语义**：点选仍是「凑满 `expected_clicks` 立即交卷、无撤销」，滑块仍是抬起即交卷。
+- **`moveDrag` / `endDrag` 用 `isPrimary` 而不是记 `pointerId`**：触摸场景里第一个触点才是 primary，第二根手指的移动与抬起天然被挡；记 pointerId 需要多一个 ref，收益相同。
+
+**已知缺口**：400 `captcha_failed` 与 503 之外的交卷错误（如断网 `status === 0`）仍未单独实测。
+
+**验证**：`npx tsc --noEmit` 通过；两个改动文件 `eslint` 0 error（4 条既有 `<img>` warning）；`prettier --check` 通过。浏览器实测（dev server + 后端在跑，点选题）：对同一张图依次派发自键 `button=2`、次指针 `isPrimary=false`、中键 `button=1` 三种 `pointerdown` → 标记数 0、`/solutions` 请求 0；随后正常左键三击 → 标记数 1、2、3，恰好一次交卷请求返回 400，弹窗出现「人机验证未通过」红标且 `getAnimations()` 抓到摆动动画，约 800ms 后红标消失、换新题、此后 1.2 秒内不再自动交卷。这同时补上了上一条记录里欠测的真答错分支。
+
+**未提交。**
+
+---
+
 ## 2026-10-26 · 人机验证失败分级：服务故障不再冒充「答错」
 
 **范围**：仅前端四个文件。`lib/captcha-challenge.ts` 新增传输层判定 `isCaptchaRejected`；`components/auth/click-captcha.tsx` 与 `components/auth/builtin-captcha.tsx`（含内部滑块组件）把子组件的单一 `onFailed` 出口拆成 `onRejected` / `onServiceError`，由父级分流；`hooks/use-captcha-gate.ts` 的出题预取失败改为分级提示。后端、迁移、`backend/README.md`、中英文案键零改动（复用既有 `common.serviceUnavailable` 与 `auth.captchaLoadFailed`）。
@@ -18,7 +36,7 @@
 - **失败卡补最终高度**：卡原先只按 300×220 留宽高比，被复用为交卷失败态时会比正常态矮 52px（提示行 / 滑轨 `h-10` + 容器 `gap-3` 12px）；补 `minHeight: 220 + 40 + 12`，弹窗不再跳高。
 
 **已知缺口**：
-- 真答错（400 `captcha_failed`）分支本轮未在浏览器重测：探针把 dev 环境 5 次 / 10 分钟的出题额度用尽，后续出题实测返回 429 并停在失败卡（正是预期行为）。该分支代码只改了出口名与判定门，红标 + 摆动 + 800ms 换题逻辑沿用上一轮已实测的行为。
+- 真答错（400 `captcha_failed`）分支本轮未在浏览器重测：探针把 dev 环境 5 次 / 10 分钟的出题额度用尽，后续出题实测返回 429 并停在失败卡（正是预期行为）。该分支代码只改了出口名与判定门，红标 + 摆动 + 800ms 换题逻辑沿用上一轮已实测的行为。**（已补测：见上一条「只接受主指针与主键」的验证段——400 红标、摆动动画、800ms 换一次题均在浏览器实测到。）**
 - 断网（`ApiError.status === 0`）与 400 `invalid_request` 同走故障分支，未各自单独实测。
 - 点选形态仍无键盘 / 读屏路径（沿用上一轮记录）。
 

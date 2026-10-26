@@ -241,6 +241,9 @@ function SlideCaptcha({
     phase === "verifying" || phase === "success" || phase === "failed";
 
   function beginDrag(event: React.PointerEvent<HTMLDivElement>) {
+    if (!event.isPrimary || event.button !== 0) {
+      return;
+    }
     if (phase !== "ready" || renderedWidth === 0) {
       return;
     }
@@ -252,7 +255,7 @@ function SlideCaptcha({
   }
 
   function moveDrag(event: React.PointerEvent<HTMLDivElement>) {
-    if (phase !== "dragging") {
+    if (!event.isPrimary || phase !== "dragging") {
       return;
     }
     event.preventDefault();
@@ -309,7 +312,7 @@ function SlideCaptcha({
   }
 
   function endDrag(event: React.PointerEvent<HTMLDivElement>) {
-    if (phase !== "dragging") {
+    if (!event.isPrimary || phase !== "dragging") {
       return;
     }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
