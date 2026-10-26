@@ -198,11 +198,51 @@ func TestCreateMessageUsesBuiltinTemplateDefaults(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
-	if mailer.got.Subject != "密码重置验证码" {
+	if mailer.got.Subject != "密码重置" {
 		t.Fatalf("subject = %q, want default password reset subject", mailer.got.Subject)
 	}
-	if !strings.Contains(mailer.got.Body.HTML, "密码重置验证码") || !strings.Contains(mailer.got.Body.Text, "123456") {
-		t.Fatalf("body not rendered: html=%q text=%q", mailer.got.Body.HTML, mailer.got.Body.Text)
+	if !strings.Contains(mailer.got.Body.HTML, "https://example.com/reset-password/confirm?token=preview-token") {
+		t.Fatalf("html = %q, want reset link", mailer.got.Body.HTML)
+	}
+	if !strings.Contains(mailer.got.Body.Text, "https://example.com/reset-password/confirm?token=preview-token") {
+		t.Fatalf("text = %q, want reset link", mailer.got.Body.Text)
+	}
+	if strings.Contains(mailer.got.Body.Text, "123456") {
+		t.Fatalf("text = %q, still carries the preview code", mailer.got.Body.Text)
+	}
+}
+
+func TestComposePasswordResetRendersLink(t *testing.T) {
+	body, err := Render(TemplatePasswordReset, map[string]string{
+		"siteTitle": "My Blog", "siteUrl": "https://blog.example.com",
+		"username": "alice", "expiresMinutes": "30", "sentAt": "2026-10-26 12:00:00",
+		"resetUrl": "https://blog.example.com/reset-password/confirm?token=abc", "code": "",
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(body.Text, "https://blog.example.com/reset-password/confirm?token=abc") {
+		t.Fatalf("text = %q, want reset link", body.Text)
+	}
+	if !strings.Contains(body.HTML, "https://blog.example.com/reset-password/confirm?token=abc") {
+		t.Fatalf("html = %q, want reset link", body.HTML)
+	}
+	if strings.Contains(body.Text, "验证码") || strings.Contains(body.HTML, "验证码") {
+		t.Fatalf("body still mentions a code: text=%q html=%q", body.Text, body.HTML)
+	}
+}
+
+func TestPasswordResetCustomBodyKeepsEmptyCode(t *testing.T) {
+	settings := &controllerSettingsStub{groups: map[string]map[string]any{
+		"mail": {"password_reset_body": "<p>{{.code}}</p>"},
+	}}
+
+	_, body, err := Compose(context.Background(), settings, TemplatePasswordReset, map[string]string{"code": ""})
+	if err != nil {
+		t.Fatalf("Compose: %v", err)
+	}
+	if strings.Contains(body.HTML, "<no value>") {
+		t.Fatalf("html = %q, custom body broke on the empty code placeholder", body.HTML)
 	}
 }
 

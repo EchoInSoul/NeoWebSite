@@ -19,14 +19,15 @@ import (
 const (
 	selfCheckSubject      = "邮件配置自检"
 	TemplateSignupCode    = "signup_code"
+	TemplatePasswordReset = "password_reset"
 	exampleTemplate       = "example"
 	signupCodeTemplate    = TemplateSignupCode
-	passwordResetTemplate = "password_reset"
+	passwordResetTemplate = TemplatePasswordReset
 )
 
 var previewSubjects = map[string]string{
 	signupCodeTemplate:    "注册验证邮件",
-	passwordResetTemplate: "密码重置验证码",
+	passwordResetTemplate: "密码重置",
 }
 
 type controller struct {
@@ -177,6 +178,7 @@ func (c *controller) previewData(ctx context.Context, to string) (map[string]str
 		"username":       username,
 		"sentAt":         now,
 		"verifyUrl":      "https://example.com/register/verify?token=preview-token",
+		"resetUrl":       "https://example.com/reset-password/confirm?token=preview-token",
 	}, nil
 }
 
