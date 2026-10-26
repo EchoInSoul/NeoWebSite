@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-10-27 · 找回密码邮件改为异步投递
+
+**范围**：后端 `internal/modules/passwordreset/service.go` 的申请路径把 `SendSync` 换成 `Send`；`passwordreset` / `auth` 两套测试 fake 改为记录异步调用并断言不走同步；`backend/README.md`、API 规范、password-reset spec（新增 §14）同步。零迁移、零新依赖、零前端改动、零接口形状变化；注册验证与测试发信仍走 `SendSync`。
+
+**动机**：粗审发现申请接口的「一律 202」只统一了响应，没统一耗时——已注册邮箱要走写令牌 + 渲染 + 同步 SMTP，未知邮箱立即返回，计时即可枚举账号；SMTP 拒收时还会对真实账号 503、未知邮箱 202。`mail` 模块本来就有异步队列（32 格、临时错误最多 3 次重试、关机排空、失败记 ERROR），直接复用，不新造队列、不加表、不改 App 生命周期。
+
+**决策**：
+- **只挪投递**：`Request` 仍同步完成开关 / SMTP 配置 / `site.url` / 限流 / 查账号 / 写令牌 / 渲染，最后 `Send` 入队后立刻 202；入队失败（队列满 / 已关闭）仍按原补偿逻辑删令牌并 503。
+- **投递失败不回传**：入队成功后由 mail worker 投递，最终失败只记 ERROR；令牌不再因投递失败删除，按 30 分钟自然过期（原始令牌从未入库）。
+- **注册不动**：注册对已注册邮箱直接 409 `email_taken`，本来就可枚举；且验证邮件是注册必经步骤、没有重发入口，静默失败会把用户卡死，同步 503 是必要的反馈。
+
+**已知残留**：未知邮箱与已注册账号仍有毫秒级耗时差（写令牌 / 渲染 / 入队）；模板误配导致渲染失败时真实账号 503、未知邮箱 202；队列满 / 关机时同样；进程崩溃丢内存队列里的待发邮件（令牌仍在，可重新申请）；注册仍直接暴露邮箱存在性，全站枚举不变。
+
+**验证**：`TestRequestSendsLink` 增断言「只调 `Send`、不调 `SendSync`」；`TestRequestEnqueueFailureCompensates` 改为模拟入队失败（503 + 删令牌）；`TestRequestUnknownEmailNoSend` / `TestRequestComposeFailureCompensates` 增断言「一次都没发」。`internal/modules/passwordreset`、`internal/modules/auth`、`internal/app` 三包全绿；`go vet ./...` 干净、`scripts/check.sh` 通过；全量 `scripts/test.sh` 通过。**提交状态**：随本条目一并入库；尚未推送。
+
+---
+
 ## 2026-10-27 · 人机验证设置页：自研分支补「验证」自检
 
 **范围**：后端 `internal/modules/captcha/builtin/{service.go,controller.go,dto.go}`、`internal/modules/captcha/module.go`（挂受保护路由）、新增 `internal/modules/captcha/admin_challenge_route_test.go`、`internal/modules/captcha/verify_route_test.go`（测试脚手架改为同时装配 builtin）、`backend/README.md`；前端 `lib/public-settings.ts`（`PublicCaptchaConfig` / `CaptchaConfig` 拆分）、`lib/captcha-challenge.ts`（`requestAdminCaptchaChallenge`）、`components/auth/builtin-captcha.tsx`（`scope` 换成 `requestChallenge` 回调）、`components/auth/captcha-dialog.tsx`、`app/console/settings/captcha/captcha-settings-form.tsx`、`hooks/use-captcha-gate.ts`、`app/{login,register}/{signin,signup}-{view,form}.tsx`（类型改名）、`messages/{zh-CN,en}.json`（新增 `settings.captchaVerifyChallengeFailed`）；另加本条目。

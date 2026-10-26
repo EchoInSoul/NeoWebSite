@@ -18,6 +18,7 @@ type fakeMailer struct {
 	mu            sync.Mutex
 	configured    bool
 	configuredErr error
+	sendErr       error
 	sendSyncErr   error
 	messages      []mail.Message
 }
@@ -26,7 +27,13 @@ func (f *fakeMailer) Configured(context.Context) (bool, error) {
 	return f.configured, f.configuredErr
 }
 
-func (f *fakeMailer) Send(context.Context, mail.Message) error {
+func (f *fakeMailer) Send(_ context.Context, msg mail.Message) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.messages = append(f.messages, msg)
 	return nil
 }
 

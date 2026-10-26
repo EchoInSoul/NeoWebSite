@@ -74,7 +74,9 @@ type fakeMailer struct {
 	mu            sync.Mutex
 	configured    bool
 	configuredErr error
-	sendSyncErr   error
+	sendErr       error
+	sendCalls     int
+	sendSyncCalls int
 	messages      []mail.Message
 }
 
@@ -82,16 +84,28 @@ func (f *fakeMailer) Configured(context.Context) (bool, error) {
 	return f.configured, f.configuredErr
 }
 
-func (f *fakeMailer) Send(context.Context, mail.Message) error { return nil }
-
-func (f *fakeMailer) SendSync(_ context.Context, msg mail.Message) error {
+func (f *fakeMailer) Send(_ context.Context, msg mail.Message) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.sendSyncErr != nil {
-		return f.sendSyncErr
+	f.sendCalls++
+	if f.sendErr != nil {
+		return f.sendErr
 	}
 	f.messages = append(f.messages, msg)
 	return nil
+}
+
+func (f *fakeMailer) SendSync(context.Context, mail.Message) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sendSyncCalls++
+	return nil
+}
+
+func (f *fakeMailer) counts() (async, sync int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.sendCalls, f.sendSyncCalls
 }
 
 func (f *fakeMailer) sent() []mail.Message {

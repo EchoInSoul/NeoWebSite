@@ -99,7 +99,7 @@ func (s *Service) Request(ctx context.Context, email, ip string) error {
 		s.compensate(ctx, resetID, tokenHash)
 		return apierror.ErrMailUnavailable
 	}
-	if err := s.mailer.SendSync(ctx, mail.Message{
+	if err := s.mailer.Send(ctx, mail.Message{
 		To:          user.Email,
 		Subject:     subject,
 		Body:        body,

@@ -63,6 +63,11 @@ func TestRequestSendsLink(t *testing.T) {
 	if rows[0].ExpiresAt.Before(lower) || rows[0].ExpiresAt.After(upper) {
 		t.Fatalf("expires at = %v, want between %v and %v", rows[0].ExpiresAt, lower, upper)
 	}
+
+	asyncCalls, syncCalls := mailer.counts()
+	if asyncCalls != 1 || syncCalls != 0 {
+		t.Fatalf("mailer calls = %d async / %d sync, want 1 / 0", asyncCalls, syncCalls)
+	}
 }
 
 func TestRequestUnknownEmailNoSend(t *testing.T) {
@@ -79,6 +84,10 @@ func TestRequestUnknownEmailNoSend(t *testing.T) {
 	}
 	if messages := mailer.sent(); len(messages) != 0 {
 		t.Fatalf("sent messages = %d, want 0", len(messages))
+	}
+	asyncCalls, syncCalls := mailer.counts()
+	if asyncCalls != 0 || syncCalls != 0 {
+		t.Fatalf("mailer calls = %d async / %d sync, want 0 / 0", asyncCalls, syncCalls)
 	}
 
 	count, err := db.Client.PasswordReset.Query().Count(ctx)
@@ -216,11 +225,11 @@ func TestRequestSiteURLInvalid(t *testing.T) {
 	}
 }
 
-func TestRequestSendFailureCompensates(t *testing.T) {
+func TestRequestEnqueueFailureCompensates(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 	tag := uniqueTag(t)
-	mailer := &fakeMailer{configured: true, sendSyncErr: errors.New("smtp rejected")}
+	mailer := &fakeMailer{configured: true, sendErr: errors.New("mail queue full")}
 	service, settingsService := newResetService(t, db, mailer)
 	enablePasswordReset(t, settingsService)
 	setSite(t, settingsService, "My Blog", "https://blog.example.com")
@@ -267,6 +276,10 @@ func TestRequestComposeFailureCompensates(t *testing.T) {
 	}
 	if messages := mailer.sent(); len(messages) != 0 {
 		t.Fatalf("sent messages = %d, want 0", len(messages))
+	}
+	asyncCalls, syncCalls := mailer.counts()
+	if asyncCalls != 0 || syncCalls != 0 {
+		t.Fatalf("mailer calls = %d async / %d sync, want 0 / 0", asyncCalls, syncCalls)
 	}
 }
 

@@ -158,13 +158,14 @@ ent 写法对照 `pending_registration.go`：`field.UUID("id", uuid.UUID{}).Defa
 
 | 情况 | 状态 | 体 |
 | --- | --- | --- |
-| 邮箱存在，邮件发送成功 | 202 | `{}` |
+| 邮箱存在，已受理（异步投递） | 202 | `{}` |
 | 邮箱不存在 | 202 | `{}`（不发信、不建记录） |
 | 邮箱为空或格式非法 | 400 | `invalid_request`，`param="email"` |
 | 开关关闭 | 403 | `password_reset_disabled` |
 | 邮箱桶或 IP 桶超限 | 429 | `rate_limited` + `Retry-After` |
 | `Configured` 读取/解析失败、SMTP 未配置、`site` 组读取失败或 `site.url` 非法 | 503 | `mail_unavailable` |
-| 账号存在但渲染或发送失败 | 503 | `mail_unavailable`（令牌已补偿删除） |
+| 账号存在但模板渲染失败或入队失败 | 503 | `mail_unavailable`（令牌已补偿删除） |
+| 账号存在，已入队但后台投递失败 | 202 | 不反馈；后台最多重试 3 次并记 ERROR 日志，令牌按 30 分钟自然过期 |
 | 数据库错误、读 `auth.password_reset_enabled` 失败 | 500 | `internal_error` |
 
 处理顺序（固定）：
@@ -177,8 +178,8 @@ ent 写法对照 `pending_registration.go`：`field.UUID("id", uuid.UUID{}).Defa
 6. 按规范化邮箱查用户：查不到 → 直接返回（controller 回 202）；
 7. 生成令牌、在事务里清过期行并 upsert 本账号记录（`OnConflict` 按 `user_id` 覆盖 `token_hash` / `expires_at`）；
 8. 组装邮件数据并 `mail.Compose(ctx, settings, mail.TemplatePasswordReset, data)`；
-9. `mailer.SendSync`，消息带 `RequireSMTP: true`；
-10. 第 8/9 步失败 → 按本次记录的 `id` + `token_hash` 删除（不能按 `user_id` 删，否则会误删并发重申请的新记录）→ 503；成功 → 202 `{}`。
+9. `mailer.Send`（异步入队，消息带 `RequireSMTP: true`）；
+10. 第 8/9 步失败（渲染失败 / 入队失败）→ 按本次记录的 `id` + `token_hash` 删除（不能按 `user_id` 删，否则会误删并发重申请的新记录）→ 503；入队成功 → 202 `{}`。实际 SMTP 投递由 `mail` 模块的后台 worker 完成，失败不反馈请求方（见 §14）。
 
 `data` 字段：`siteTitle`、`siteUrl`、`username`（用户昵称）、`expiresMinutes`（`"30"`）、`sentAt`、`resetUrl`（`siteUrl + "/reset-password/confirm?token=" + url.QueryEscape(rawToken)`）、`code`（空串，兼容旧自定义正文）。收件人用库里存的 `user.Email`，不用请求里的原始写法。
 
@@ -465,6 +466,7 @@ ent 写法对照 `pending_registration.go`：`field.UUID("id", uuid.UUID{}).Defa
 - **申请入口没有验证码**：跨 IP 的定向邮件轰炸只受「每邮箱 3 次/小时」约束，攻击者换 IP 仍可继续；本轮已按用户裁定不接人机验证，接受这个风险。
 - **令牌在 URL query 里**：可能进入浏览器历史；确认页已设 `no-referrer`，与注册验证同口径。
 - **邮件发送与账号查询之间的极窄竞态**：查询后、写记录前用户恰好改邮箱，邮件仍发往旧地址；本次记录可能落在改邮箱清理之后而继续有效，直到过期。窗口极窄，不额外加锁。
+- **异步投递的残留**：见 §14——进程崩溃丢内存队列、毫秒级耗时差、模板误配 / 队列满时的极小错误路径差异，均为低风险取舍。
 
 ## 13. 实施顺序（交接给 writing-plans）
 
@@ -480,3 +482,17 @@ ent 写法对照 `pending_registration.go`：`field.UUID("id", uuid.UUID{}).Defa
 10. `scripts/check.sh` + 全量 `scripts/test.sh` + `tsc` / lint + `localhost` 手动验收。
 
 按项目规矩：不主动提交；spec 与代码改完都躺在工作区等用户检查。
+
+## 14. 2026-10-27 修订：找回密码邮件改为异步投递
+
+**动机**：申请接口原本「一律 202」以防枚举，但同步发送让已注册邮箱明显更慢（写令牌 + 渲染 + SMTP），计时即可区分；SMTP 拒收时还会对真实账号 503、未知邮箱 202。`mail` 模块已有异步队列（32 格、临时错误最多 3 次重试、关机排空、失败记 ERROR），无需新造。
+
+**改动**：`passwordreset.Service.Request` 的 `SendSync` 改为 `Send`；渲染与入队仍在请求内，资格判定（开关 / SMTP 配置 / `site.url` / 邮箱桶 / IP 桶）不变。入队失败（队列满 / 已关闭）按原补偿逻辑删令牌并 503；入队成功后由 mail worker 投递，失败只记日志、不回传请求方，令牌不再因投递失败删除（30 分钟自然过期）。注册验证与测试发信仍走 `SendSync` 单次。
+
+**残留（已知取舍）**：
+
+- 未知邮箱 vs 已注册账号仍有毫秒级耗时差（写令牌 / 渲染 / 入队），不追求恒定时间。
+- 模板误配导致渲染失败时，真实账号 503、未知邮箱 202（管理员用测试发信可发现）。
+- 队列满 / 关机时真实账号 503、未知邮箱 202（运营态，极罕见）。
+- 进程崩溃会丢内存队列里的待发邮件（令牌仍在，可重新申请）；正常关机由 `mailer.Close` 排空。
+- 注册接口仍直接返回 409 `email_taken`，全站枚举依旧成立——本修订只保证找回密码接口自己的 202 口径，不改变全站可枚举性。

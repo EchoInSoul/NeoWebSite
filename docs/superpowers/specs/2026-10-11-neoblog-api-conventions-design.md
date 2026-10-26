@@ -127,7 +127,7 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 27 | `POST /api/v1/users/me/2fa/recovery-codes/email` | `backend/internal/modules/auth/controller.go:42`（2026-10-23 新增，守卫内；**预留桩**：邮件发送恢复码方案未落地，当前固定 501 `not_implemented`，不读请求体、不发信、不写库） |
 | 28 | `POST /api/v1/users/email-verifications` | `backend/internal/modules/auth/controller.go:28`（v1.7 新增，公开；body `{"token":"..."}`，消费一次性链接令牌并创建状态 `verified` 的用户、**不下发会话**；`users/email-verifications` 是 `/users` 下的从属资源集合；令牌不存在/过期/已用 400 `email_verification_invalid`，验证时邮箱/用户名被占 409 `email_taken` / `nickname_taken`，并发竞态 409 `already_taken`） |
 | 29 | `GET /api/v1/admin/mail/status` | `backend/internal/modules/mail/controller.go:43`（v1.7 新增，`system.register.view`；返回 `{"smtp_configured":bool,"site_url_configured":bool}` 两个布尔，供「用户注册」设置页判断「邮箱所有权认证」开关的前置条件；不泄露 SMTP 细节或私钥） |
-| 30 | `POST /api/v1/users/password-resets` | `backend/internal/modules/auth/controller.go`（2026-10-26 新增，公开；body `{"email":"..."}`，找回密码申请，**存在与否一律 202 `{}`**（不存在不发信、不写记录，限流照常计数）；站级 `auth.password_reset_enabled` 关闭 403 `password_reset_disabled`，邮件前置条件不满足 503 `mail_unavailable`；实现委托 `internal/modules/passwordreset`，路由是本模块薄壳） |
+| 30 | `POST /api/v1/users/password-resets` | `backend/internal/modules/auth/controller.go`（2026-10-26 新增，公开；body `{"email":"..."}`，找回密码申请，**存在与否一律 202 `{}`**（不存在不发信、不写记录，限流照常计数）；站级 `auth.password_reset_enabled` 关闭 403 `password_reset_disabled`，邮件前置条件不满足或渲染 / 入队失败 503 `mail_unavailable`（投递走 mail 异步队列，最终失败只记日志）；实现委托 `internal/modules/passwordreset`，路由是本模块薄壳） |
 | 31 | `POST /api/v1/users/password-resets/confirmations` | `backend/internal/modules/auth/controller.go`（2026-10-26 新增，公开；body `{"token","new_password"}`，找回密码确认，**子动作用复数资源 + 过去分词**，与 #28 的 `email-verifications` 同构；令牌只走请求体不进 URL；200 `{}` 不下发会话、响应无 `Set-Cookie`；令牌失效 400 `password_reset_invalid`、新密码不合格 400 `weak_password` / 与当前相同 400 `password_unchanged`、开关关闭 403 `password_reset_disabled`；成功在同一事务 `auth_version` +1 吊销全部旧会话） |
 
 正例（新端点命名，资源复数 + 子动作）：
@@ -434,7 +434,7 @@ PATCH 指针可空字段（沿用 access 模块既有模式，引用为新端点
 | `two_factor_not_setup` | 409 | `conflict_error` | null | 没有 secret 就 enable / disable | 尚未生成两步验证密钥 |
 | `two_factor_not_enabled` | 409 | `conflict_error` | null | 未启用就再生成恢复码 | 两步验证尚未启用 |
 | `mail_delivery_failed` | 500 | `server_error` | null | SMTP 投递失败（管理端发信自检；不回传对端应答细节，0.9.0 新增） | 邮件发送失败 |
-| `mail_unavailable` | 503 | `server_error` | null | 邮件类业务的前置条件不满足：SMTP 未配齐 / `site.url` 缺失或非法 / 发信失败 / 禁止日志降级（v1.7 新增；2026-10-26 起注册邮箱验证与找回密码共用） | 邮件服务不可用，请稍后再试 |
+| `mail_unavailable` | 503 | `server_error` | null | 邮件类业务的前置条件不满足：SMTP 未配齐 / `site.url` 缺失或非法 / 同步发信失败（注册验证、测试发信）/ 找回密码渲染或入队失败 / 禁止日志降级（v1.7 新增；2026-10-26 起注册邮箱验证与找回密码共用；2026-10-27 起找回密码投递走异步队列，最终投递失败只记日志） | 邮件服务不可用，请稍后再试 |
 | `email_verification_invalid` | 400 | `invalid_request_error` | `token` | 邮箱验证令牌不存在 / 已过期 / 已消费（v1.7 新增） | 验证链接无效或已过期 |
 | `email_not_verified` | 403 | `permission_error` | null | 登录时命中未过期待验证注册且密码正确（v1.7 新增；不建会话、不记失败） | 账户尚未验证 |
 | `password_reset_disabled` | 403 | `permission_error` | null | 站级找回密码开关（设置项 `auth.password_reset_enabled`）关闭时调用申请或确认两个端点（2026-10-26 新增；已发出的令牌不物理删除） | 当前未开放密码重置 |
