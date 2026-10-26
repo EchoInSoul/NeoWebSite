@@ -6,6 +6,7 @@ import {
   Hash,
   KeyRound,
   Lock,
+  Mail,
   MailCheck,
   MailWarning,
   Power,
@@ -299,6 +300,20 @@ export function MailSettingsForm({
         />
       </ConsoleSettingsGroup>
       <ConsoleSettingsGroup title={t("mailTemplatesGroup")}>
+        <ConsoleSettingsRow
+          control={
+            <Switch
+              aria-label={t("mailCustomTemplates")}
+              checked={values.customTemplatesEnabled}
+              onCheckedChange={(checked) =>
+                update("customTemplatesEnabled", checked)
+              }
+              disabled={isSaving}
+            />
+          }
+          icon={<Mail />}
+          label={t("mailCustomTemplates")}
+        />
         {templateRows.map((template) => (
           <ConsoleSettingsRow
             key={template.key}

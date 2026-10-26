@@ -133,6 +133,14 @@ func Compose(ctx context.Context, settings Settings, templateName string, data m
 		return "", Body{}, fmt.Errorf("mail: read template settings: %w", err)
 	}
 
+	customEnabled, ok := values["custom_templates_enabled"].(bool)
+	if !ok {
+		return "", Body{}, fmt.Errorf("mail: setting mail.custom_templates_enabled is not a bool")
+	}
+	if !customEnabled {
+		return subject, body, nil
+	}
+
 	if custom, ok := values[templateName+"_subject"].(string); ok && strings.TrimSpace(custom) != "" {
 		subject = custom
 	}

@@ -148,8 +148,9 @@ func TestCreateMessageRendersSelectedTemplate(t *testing.T) {
 			"url":   "https://blog.example.com",
 		},
 		"mail": {
-			"signup_code_subject": "自定义注册验证码",
-			"signup_code_body":    "<p>{{.siteTitle}} / {{.username}} / {{.code}} / {{.expiresMinutes}} / {{.siteUrl}}</p>",
+			"custom_templates_enabled": true,
+			"signup_code_subject":      "自定义注册验证码",
+			"signup_code_body":         "<p>{{.siteTitle}} / {{.username}} / {{.code}} / {{.expiresMinutes}} / {{.siteUrl}}</p>",
 		},
 	}}
 	ts := newControllerTestServer(t, mailer, "owner", settings)
@@ -253,7 +254,10 @@ func TestComposePasswordResetRendersLink(t *testing.T) {
 
 func TestPasswordResetCustomBodyKeepsEmptyCode(t *testing.T) {
 	settings := &controllerSettingsStub{groups: map[string]map[string]any{
-		"mail": {"password_reset_body": "<p>{{.code}}</p>"},
+		"mail": {
+			"custom_templates_enabled": true,
+			"password_reset_body":      "<p>{{.code}}</p>",
+		},
 	}}
 
 	_, body, err := Compose(context.Background(), settings, TemplatePasswordReset, map[string]string{"code": ""})
@@ -452,9 +456,41 @@ func TestComposeSettingsReadError(t *testing.T) {
 
 func TestComposeRejectsBadCustomBody(t *testing.T) {
 	settings := &controllerSettingsStub{groups: map[string]map[string]any{
-		"mail": {"signup_code_body": "{{"},
+		"mail": {
+			"custom_templates_enabled": true,
+			"signup_code_body":         "{{",
+		},
 	}}
 	if _, _, err := Compose(context.Background(), settings, TemplateSignupCode, map[string]string{"verifyUrl": "https://example.com/x"}); err == nil {
 		t.Fatal("Compose accepted bad custom body")
+	}
+}
+
+func TestComposeIgnoresCustomTemplatesWhenDisabled(t *testing.T) {
+	settings := &controllerSettingsStub{groups: map[string]map[string]any{
+		"mail": {
+			"custom_templates_enabled": false,
+			"password_reset_subject":   "自定义主题",
+			"password_reset_body":      "<p>custom body</p>",
+		},
+	}}
+	subject, body, err := Compose(context.Background(), settings, TemplatePasswordReset, map[string]string{"resetUrl": "https://example.com/x"})
+	if err != nil {
+		t.Fatalf("Compose: %v", err)
+	}
+	if subject != "密码重置" {
+		t.Fatalf("subject = %q, want the built-in subject", subject)
+	}
+	if strings.Contains(body.HTML, "custom body") {
+		t.Fatalf("html = %q, custom body applied while disabled", body.HTML)
+	}
+}
+
+func TestComposeRequiresCustomTemplatesSetting(t *testing.T) {
+	settings := &controllerSettingsStub{groups: map[string]map[string]any{
+		"mail": {"signup_code_subject": "自定义主题"},
+	}}
+	if _, _, err := Compose(context.Background(), settings, TemplateSignupCode, map[string]string{}); err == nil {
+		t.Fatal("Compose accepted a missing custom_templates_enabled setting")
 	}
 }

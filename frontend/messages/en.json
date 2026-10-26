@@ -72,6 +72,7 @@
     "senderAddress": "Sender address",
     "senderName": "Sender display name",
     "mailTemplatesGroup": "Mail templates",
+    "mailCustomTemplates": "Use custom email templates",
     "mailTemplateSignupCode": "Registration verification email",
     "mailTemplatePasswordReset": "Password reset",
     "mailTemplateRecoveryCodes": "Recovery codes email",

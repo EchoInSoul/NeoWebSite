@@ -257,6 +257,10 @@ func TestRequestComposeFailureCompensates(t *testing.T) {
 	enablePasswordReset(t, settingsService)
 	setSite(t, settingsService, "My Blog", "https://blog.example.com")
 
+	if err := settingsService.SetBool(ctx, "mail", "custom_templates_enabled", true); err != nil {
+		t.Fatalf("enable custom templates: %v", err)
+	}
+	t.Cleanup(func() { _ = settingsService.ResetItem(ctx, "mail", "custom_templates_enabled") })
 	if err := settingsService.SetString(ctx, "mail", "password_reset_body", "{{.broken"); err != nil {
 		t.Fatalf("set broken template: %v", err)
 	}

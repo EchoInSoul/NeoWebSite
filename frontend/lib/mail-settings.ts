@@ -7,6 +7,7 @@ export type MailSettingsValues = {
   smtpPassword: string;
   senderAddress: string;
   senderName: string;
+  customTemplatesEnabled: boolean;
   signupCodeSubject: string;
   signupCodeBody: string;
   passwordResetSubject: string;
@@ -41,6 +42,7 @@ const MAIL_SETTINGS_PATCH_KEYS: Record<keyof MailSettingsValues, string> = {
   smtpPassword: "smtp_password",
   senderAddress: "sender_address",
   senderName: "sender_name",
+  customTemplatesEnabled: "custom_templates_enabled",
   signupCodeSubject: "signup_code_subject",
   signupCodeBody: "signup_code_body",
   passwordResetSubject: "password_reset_subject",
@@ -70,6 +72,7 @@ export function parseMailSettingsValues(
     typeof raw.smtp_password !== "string" ||
     typeof raw.sender_address !== "string" ||
     typeof raw.sender_name !== "string" ||
+    typeof raw.custom_templates_enabled !== "boolean" ||
     typeof raw.signup_code_subject !== "string" ||
     typeof raw.signup_code_body !== "string" ||
     typeof raw.password_reset_subject !== "string" ||
@@ -89,6 +92,7 @@ export function parseMailSettingsValues(
     smtpPassword: raw.smtp_password,
     senderAddress: raw.sender_address,
     senderName: raw.sender_name,
+    customTemplatesEnabled: raw.custom_templates_enabled,
     signupCodeSubject: raw.signup_code_subject,
     signupCodeBody: raw.signup_code_body,
     passwordResetSubject: raw.password_reset_subject,

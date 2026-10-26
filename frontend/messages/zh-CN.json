@@ -72,6 +72,7 @@
     "senderAddress": "发件人地址",
     "senderName": "发件人显示名",
     "mailTemplatesGroup": "邮件模板",
+    "mailCustomTemplates": "启用自定义邮件模板",
     "mailTemplateSignupCode": "注册验证邮件",
     "mailTemplatePasswordReset": "密码重置",
     "mailTemplateRecoveryCodes": "恢复码邮件",

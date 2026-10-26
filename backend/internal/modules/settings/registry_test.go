@@ -132,8 +132,8 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "turnstile_secret_key", typ: FieldTypeString, def: ""},
 	})
 
-	if len(reg.groups["mail"]) != 14 {
-		t.Fatalf("mail items = %d, want 14", len(reg.groups["mail"]))
+	if len(reg.groups["mail"]) != 15 {
+		t.Fatalf("mail items = %d, want 15", len(reg.groups["mail"]))
 	}
 	assertDefinitions(t, reg.groups["mail"], []wantItem{
 		{name: "enabled", typ: FieldTypeBool, def: true},
@@ -144,6 +144,7 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "smtp_password", typ: FieldTypeString, def: ""},
 		{name: "sender_address", typ: FieldTypeString, def: ""},
 		{name: "sender_name", typ: FieldTypeString, def: ""},
+		{name: "custom_templates_enabled", typ: FieldTypeBool, def: false},
 		{name: "signup_code_subject", typ: FieldTypeString, def: ""},
 		{name: "signup_code_body", typ: FieldTypeString, def: ""},
 		{name: "password_reset_subject", typ: FieldTypeString, def: ""},

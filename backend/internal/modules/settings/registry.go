@@ -81,6 +81,7 @@ var builtinRegistry = []Group{
 			{Name: "smtp_password", Type: FieldTypeString, Default: ""},
 			{Name: "sender_address", Type: FieldTypeString, Default: ""},
 			{Name: "sender_name", Type: FieldTypeString, Default: ""},
+			{Name: "custom_templates_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "signup_code_subject", Type: FieldTypeString, Default: ""},
 			{Name: "signup_code_body", Type: FieldTypeString, Default: ""},
 			{Name: "password_reset_subject", Type: FieldTypeString, Default: ""},

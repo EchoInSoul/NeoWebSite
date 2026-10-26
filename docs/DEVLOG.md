@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-10-27 · 邮件模板自定义总开关
+
+**范围**：`settings` mail 组新增 `custom_templates_enabled`（bool，默认 false）+ seed 迁移 `20261027130000_seed_custom_templates_setting.sql`（test/dev 已应用）；`mail.Compose` 加总闸——关闭时忽略全部自定义主题/正文，开启且对应字段非空才覆盖；前端邮件设置页「邮件模板」组顶部加开关，类型 / 解析 / patch / 中英文案同步；README 同步。零新接口、零新依赖；默认关闭，现有自定义内容需手动开启才生效。
+
+**动机**：用户要求一个总开关，只有开启且模板对应内容已配置时才用自定义配置；默认关闭。
+
+**决策**：
+- 总开关 `mail.custom_templates_enabled`，默认 false；迁移只补一行默认值，不自动为已有自定义内容置开。
+- `Compose` 读取该 bool；缺行 / 类型错按错误上抛（不静默回落）；关闭时直接返回内置主题/正文；开启时按字段覆盖（主题 / HTML 正文各自判断），纯文本正文始终内置。
+- 管理端测试发送走同一个 `Compose`，自动跟随开关；开关关着时自定义内容仍可编辑，只是不生效。
+- 设置项校验 / 前端无需额外逻辑。
+
+**验证**：`TestComposeIgnoresCustomTemplatesWhenDisabled`、`TestComposeRequiresCustomTemplatesSetting`；已有的自定义主题/正文用例显式开启开关；`mail` / `settings` / `passwordreset` / `auth` 四包全绿；`go vet ./...`、`scripts/check.sh` 通过；全量 `scripts/test.sh` 通过；前端 `tsc` / `eslint` / `prettier` 通过。**提交状态**：随本次提交入库；尚未推送。
+
+---
+
 ## 2026-10-27 · 2FA 恢复码邮件落地
 
 **范围**：后端 `twofactor`（未使用哈希校验 + `RecoveryCodesEmailRequest`）、`auth`（`EmailRecoveryCodes` + 路由实现，注入 mailer）、`mail`（`recovery_codes` 模板 html/txt、`SiteInfo`、预览数据与测试发送支持）、`settings`（mail 组新增 `recovery_codes_subject` / `recovery_codes_body`）与迁移 `20261027120000_seed_recovery_codes_mail_settings.sql`（test/dev 已应用）；前端恢复码弹窗回传 `codes`、去掉 501 分支与「暂未开放」文案，邮件设置页新增第三行模板与测试发送，中英文案同步。零新依赖、零新错误码。
