@@ -42,6 +42,8 @@ var (
 	ErrInvalidRequest           = &Error{Type: TypeInvalidRequest, Code: "invalid_request"}
 	ErrWeakPassword             = &Error{Type: TypeInvalidRequest, Code: "weak_password"}
 	ErrPasswordUnchanged        = &Error{Type: TypeInvalidRequest, Code: "password_unchanged", Param: strPtr("new_password")}
+	ErrPasswordResetDisabled    = &Error{Type: TypePermission, Code: "password_reset_disabled"}
+	ErrPasswordResetInvalid     = &Error{Type: TypeInvalidRequest, Code: "password_reset_invalid", Param: strPtr("token")}
 	ErrInvalidPermission        = &Error{Type: TypeInvalidRequest, Code: "invalid_permission"}
 	ErrEmailDomainNotAllowed    = &Error{Type: TypeInvalidRequest, Code: "email_domain_not_allowed", Param: strPtr("email")}
 	ErrCaptchaFailed            = &Error{Type: TypeInvalidRequest, Code: "captcha_failed", Param: strPtr("captcha_token")}
@@ -86,6 +88,8 @@ var statusByCode = map[string]int{
 	"invalid_request":             http.StatusBadRequest,
 	"weak_password":               http.StatusBadRequest,
 	"password_unchanged":          http.StatusBadRequest,
+	"password_reset_disabled":     http.StatusForbidden,
+	"password_reset_invalid":      http.StatusBadRequest,
 	"invalid_permission":          http.StatusBadRequest,
 	"email_domain_not_allowed":    http.StatusBadRequest,
 	"captcha_failed":              http.StatusBadRequest,

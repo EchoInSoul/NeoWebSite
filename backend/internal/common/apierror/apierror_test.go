@@ -61,6 +61,8 @@ func TestRegistryMatchesSpec(t *testing.T) {
 		{"email_not_verified", ErrEmailNotVerified, TypePermission, "email_not_verified", http.StatusForbidden, nil},
 		{"service_unavailable", ErrServiceUnavailable, TypeServer, "service_unavailable", http.StatusServiceUnavailable, nil},
 		{"internal_error", ErrInternal, TypeServer, "internal_error", http.StatusInternalServerError, nil},
+		{"password_reset_disabled", ErrPasswordResetDisabled, TypePermission, "password_reset_disabled", http.StatusForbidden, nil},
+		{"password_reset_invalid", ErrPasswordResetInvalid, TypeInvalidRequest, "password_reset_invalid", http.StatusBadRequest, strPtr("token")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -355,12 +357,13 @@ func TestRegistryIntegrity(t *testing.T) {
 		ErrGroupNotEmpty, ErrLastOwner, ErrSettingConflict, ErrTwoFactorAlreadyEnabled, ErrTwoFactorNotSetup,
 		ErrTwoFactorNotEnabled, ErrMailDeliveryFailed, ErrMailUnavailable, ErrEmailVerificationInvalid,
 		ErrEmailNotVerified, ErrNotImplemented, ErrServiceUnavailable, ErrInternal,
+		ErrPasswordResetDisabled, ErrPasswordResetInvalid,
 	}
-	if len(all) != 40 {
-		t.Fatalf("sentinel count = %d, want 40", len(all))
+	if len(all) != 42 {
+		t.Fatalf("sentinel count = %d, want 42", len(all))
 	}
-	if len(statusByCode) != 40 {
-		t.Fatalf("statusByCode entries = %d, want 40", len(statusByCode))
+	if len(statusByCode) != 42 {
+		t.Fatalf("statusByCode entries = %d, want 42", len(statusByCode))
 	}
 	statusTypes := map[int]Type{
 		http.StatusBadRequest:          TypeInvalidRequest,
