@@ -47,7 +47,7 @@
 | D13 | 邮件模板 | 内置 `password_reset` 改成链接模板，占位符用 `{{resetUrl}}`；数据里仍带一个空 `code`，让历史自定义正文里的 `{{code}}` 渲染为空而不是 `<no value>`。默认主题从「密码重置验证码」改成「密码重置」；管理端测试发送预览补 `resetUrl` |
 | D14 | 失效联动 | 正常改密码（`POST /users/me/password`）或改邮箱（`PATCH /users/me` 带 `email`）时，在同一事务里删掉该账号未用的重置记录。否则一个泄露的重置链接在用户改完密码后仍然有效 |
 | D15 | 通知与审计 | 不发「密码已修改」通知邮件、不做重置审计表、不做重发按钮/倒计时；需要再发一次就重新提交申请（限流兜底） |
-| D16 | 前端形态 | 登录页密码框下方右侧加「忘记密码？」；新增 `/reset-password`（输邮箱）与 `/reset-password/confirm?token=...`（设新密码，**密码 + 确认密码两框**，与注册页一致）；成功后回登录页，不自动登录 |
+| D16 | 前端形态 | 登录页「密码」标签同一行右侧加「忘记密码？」（位置经 2026-10-27 修订，见 §9.1）；新增 `/reset-password`（输邮箱）与 `/reset-password/confirm?token=...`（设新密码，**密码 + 确认密码两框**，与注册页一致）；成功后回登录页，不自动登录 |
 
 ## 3. 范围
 
@@ -87,7 +87,7 @@
 | --- | --- | --- |
 | `lib/public-settings.ts` | 改 | `isPasswordResetEnabled(settings)`：`settings.auth?.password_reset_enabled === true`；读取失败返回 `{}` 时按关闭处理 |
 | `app/login/page.tsx` | 改 | 读取开关并传给视图 |
-| `app/login/signin-view.tsx` / `signin-form.tsx` | 改 | 密码框下方右侧渲染「忘记密码？」（仅开关开启） |
+| `app/login/signin-view.tsx` / `signin-form.tsx` | 改 | 与「密码」标签同一行右侧渲染「忘记密码？」（仅开关开启，见 §9.1 修订） |
 | `app/reset-password/page.tsx` | 新增 | 申请页；开关关闭 `notFound()`；`instant = false`、noindex |
 | `app/reset-password/reset-request-form.tsx` | 新增 | 邮箱表单、202 成功态、429 倒计时、错误 toast |
 | `hooks/use-password-reset-request.ts` | 新增 | 校验、提交、状态与错误映射 |
@@ -285,7 +285,8 @@ ent 写法对照 `pending_registration.go`：`field.UUID("id", uuid.UUID{}).Defa
 ### 9.1 登录页
 
 - `SigninPage` 读 `getPublicSettings()`，`isPasswordResetEnabled(settings)` 为真时把 `passwordResetEnabled` 传到 `SigninView` → `SigninForm`。
-- 凭据分支（`step === "verify"` 的 2FA 步骤不渲染）的密码框下方、右对齐一行链接「忘记密码？」，`href="/reset-password"`；样式沿用登录页现有链接（`text-sm font-medium text-primary underline-offset-4 hover:underline`）。
+- 凭据分支（`step === "verify"` 的 2FA 步骤不渲染）渲染一行链接「忘记密码？」，`href="/reset-password"`；样式沿用登录页现有链接（`text-sm font-medium text-primary underline-offset-4 hover:underline`）。
+  - **2026-10-27 实施后修订**：原案放在「密码框下方、右对齐独立一行」，用户看实际效果后要求改位置；出四方案对照页后改定为**与「密码」标签同一行、左右分置**（`flex items-center justify-between` 包住 `Label` 与链接），少占一行垂直空间、归属更清楚。
 - 公开设置读取失败（`{}`）时按关闭处理：入口不显示。代价是后端不可用时入口消失，但不会有安全影响；与 `isSignupOpen` 的 fail-open 方向不同，这是刻意的。
 
 ### 9.2 `/reset-password`（申请页）
@@ -304,12 +305,13 @@ ent 写法对照 `pending_registration.go`：`field.UUID("id", uuid.UUID{}).Defa
 ### 9.3 `/reset-password/confirm?token=...`（确认页）
 
 - 服务器组件：开关关闭 → `notFound()`；`instant = false`；metadata 标题 + noindex + `referrer: "no-referrer"`（防止令牌经 Referer 外泄）。
-- 读取 `searchParams.token`（字符串；缺省空串）。缺 token：页面渲染提示 + 「重新申请」链接，并 toast「链接无效或已过期」；不发请求。
+- 读取 `searchParams.token`（字符串；缺省空串）。缺 token：toast「链接无效或已过期」；不发请求。
+  - **2026-10-27 修订**：原案在此处还要「页面渲染提示 + 「重新申请」链接」，用户实测后要求**整块删除**——无效令牌只走 sonner，页面不渲染任何内联提示或跳转链接，表单照常展示。`auth.reset.goRequest` 文案键随之删除。
 - 表单：新密码 + 确认密码两框，各带显示/隐藏按钮，`autoComplete="new-password"`；下方一行密码提示（沿用注册页 `passwordHint` 的基线 8 位写法）；客户端校验空值、两次不一致、`isStrongPassword` 基线；服务端策略才是最终权威。
 - **GET 不消费令牌**：页面只渲染；必须点「重置密码」按钮才发 POST。
 - 成功（200）：toast「密码已重置，请用新密码登录」→ `router.push("/login")`；不自动登录。
 - 错误：
-  - 400 `password_reset_invalid`：toast「链接无效或已过期」+ 展示「重新申请」链接；
+  - 400 `password_reset_invalid`：toast「链接无效或已过期」（2026-10-27 修订：不再展示「重新申请」链接）；
   - 400 `weak_password`：toast「密码不符合站点要求」；
   - 400 `password_unchanged`：toast「新密码不能与当前密码相同」；
   - 403 `password_reset_disabled`：toast「密码重置已关闭」；
@@ -340,7 +342,6 @@ ent 写法对照 `pending_registration.go`：`field.UUID("id", uuid.UUID{}).Defa
 | `requiredConfirmPassword` | 请再次输入新密码 | Enter the new password again |
 | `mismatch` | 两次输入的密码不一致 | Passwords do not match |
 | `invalidToken` | 链接无效或已过期 | This link is invalid or expired |
-| `goRequest` | 重新申请 | Request a new link |
 | `weakPassword` | 密码不符合站点要求 | Password does not meet the site requirements |
 | `passwordUnchanged` | 新密码不能与当前密码相同 | New password must differ from the current one |
 | `disabled` | 密码重置已关闭 | Password reset is disabled |
