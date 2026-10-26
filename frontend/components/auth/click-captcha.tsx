@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { cn } from "cn";
 
 import {
+  isCaptchaRejected,
   solveClickCaptchaChallenge,
   type CaptchaClick,
   type ClickCaptchaChallenge,
@@ -16,11 +17,13 @@ type ClickPhase = "ready" | "verifying" | "success" | "failed";
 export function ClickCaptcha({
   challenge,
   onToken,
-  onFailed,
+  onRejected,
+  onServiceError,
 }: {
   challenge: ClickCaptchaChallenge;
   onToken: (token: string) => void;
-  onFailed: () => void;
+  onRejected: () => void;
+  onServiceError: (error: unknown) => void;
 }) {
   const t = useTranslations("auth");
   const [phase, setPhase] = useState<ClickPhase>("ready");
@@ -33,15 +36,20 @@ export function ClickCaptcha({
   const firstClickAtRef = useRef(0);
   const lockedRef = useRef(false);
   const onTokenRef = useRef(onToken);
-  const onFailedRef = useRef(onFailed);
+  const onRejectedRef = useRef(onRejected);
+  const onServiceErrorRef = useRef(onServiceError);
 
   useEffect(() => {
     onTokenRef.current = onToken;
   }, [onToken]);
 
   useEffect(() => {
-    onFailedRef.current = onFailed;
-  }, [onFailed]);
+    onRejectedRef.current = onRejected;
+  }, [onRejected]);
+
+  useEffect(() => {
+    onServiceErrorRef.current = onServiceError;
+  }, [onServiceError]);
 
   useEffect(() => {
     return () => {
@@ -85,12 +93,16 @@ export function ClickCaptcha({
       setElapsedSeconds(seconds);
       onTokenRef.current(token);
       setPhase("success");
-    } catch {
+    } catch (error) {
       if (controller.signal.aborted) {
         return;
       }
-      onFailedRef.current();
-      setPhase("failed");
+      if (isCaptchaRejected(error)) {
+        onRejectedRef.current();
+        setPhase("failed");
+        return;
+      }
+      onServiceErrorRef.current(error);
     } finally {
       if (solveControllerRef.current === controller) {
         solveControllerRef.current = null;

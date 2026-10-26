@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
-import { ApiError } from "@/lib/api";
+import { ApiError, looksLikeServiceFailure } from "@/lib/api";
 import {
   requestCaptchaChallenge,
   type CaptchaChallenge,
@@ -11,6 +11,7 @@ import type { CaptchaConfig } from "@/lib/public-settings";
 
 export function useCaptchaGate(config: CaptchaConfig | null) {
   const t = useTranslations("auth");
+  const tCommon = useTranslations("common");
   const [isOpen, setIsOpen] = useState(false);
   const [challenge, setChallenge] = useState<CaptchaChallenge | null>(null);
   const preparingRef = useRef(false);
@@ -58,9 +59,11 @@ export function useCaptchaGate(config: CaptchaConfig | null) {
           toast.error(t("captchaRateLimited"));
           return;
         }
-        setChallenge(null);
-        isOpenRef.current = true;
-        setIsOpen(true);
+        toast.error(
+          looksLikeServiceFailure(error)
+            ? tCommon("serviceUnavailable")
+            : t("captchaLoadFailed"),
+        );
       })
       .finally(() => {
         if (controllerRef.current === controller) {
@@ -68,7 +71,7 @@ export function useCaptchaGate(config: CaptchaConfig | null) {
           preparingRef.current = false;
         }
       });
-  }, [config, t]);
+  }, [config, t, tCommon]);
 
   const cancel = useCallback(() => {
     controllerRef.current?.abort();

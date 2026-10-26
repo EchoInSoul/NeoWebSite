@@ -6,8 +6,9 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { cn } from "cn";
 
-import { ApiError } from "@/lib/api";
+import { ApiError, looksLikeServiceFailure } from "@/lib/api";
 import {
+  isCaptchaRejected,
   requestCaptchaChallenge,
   solveSlideCaptchaChallenge,
   type CaptchaChallenge,
@@ -19,6 +20,10 @@ import { ClickCaptcha } from "./click-captcha";
 
 const CAPTCHA_FAIL_RETRY_MS = 800;
 const DEFAULT_CAPTCHA_CANVAS = { width: 300, height: 220 };
+const CAPTCHA_CONTROL_ROW_HEIGHT = 40;
+const CAPTCHA_HOST_GAP = 12;
+const CAPTCHA_CARD_MIN_HEIGHT =
+  DEFAULT_CAPTCHA_CANVAS.height + CAPTCHA_CONTROL_ROW_HEIGHT + CAPTCHA_HOST_GAP;
 
 type SlidePhase = "ready" | "dragging" | "verifying" | "success" | "failed";
 
@@ -32,6 +37,7 @@ export function BuiltinCaptcha({
   onToken: (token: string) => void;
 }) {
   const t = useTranslations("auth");
+  const tCommon = useTranslations("common");
   const [challenge, setChallenge] = useState<CaptchaChallenge | null>(
     initialChallenge,
   );
@@ -91,7 +97,7 @@ export function BuiltinCaptcha({
     };
   }, [clearRetryTimer]);
 
-  const handleSolveFailed = useCallback(() => {
+  const handleSolveRejected = useCallback(() => {
     nudgeDialogNode(
       hostRef.current?.closest<HTMLElement>('[role="dialog"]') ?? null,
     );
@@ -102,6 +108,20 @@ export function BuiltinCaptcha({
     }, CAPTCHA_FAIL_RETRY_MS);
   }, [clearRetryTimer, requestChallenge]);
 
+  const handleSolveError = useCallback(
+    (error: unknown) => {
+      clearRetryTimer();
+      setChallenge(null);
+      setLoadFailed(true);
+      toast.error(
+        looksLikeServiceFailure(error)
+          ? tCommon("serviceUnavailable")
+          : t("captchaLoadFailed"),
+      );
+    },
+    [clearRetryTimer, t, tCommon],
+  );
+
   return (
     <div ref={hostRef} className="flex w-full flex-col gap-3 select-none">
       {challenge === null ? (
@@ -110,6 +130,7 @@ export function BuiltinCaptcha({
             role="alert"
             style={{
               aspectRatio: `${DEFAULT_CAPTCHA_CANVAS.width} / ${DEFAULT_CAPTCHA_CANVAS.height}`,
+              minHeight: CAPTCHA_CARD_MIN_HEIGHT,
             }}
             className="flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-red-300 bg-red-50 text-sm text-red-600 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
           >
@@ -131,14 +152,16 @@ export function BuiltinCaptcha({
           key={challenge.id}
           challenge={challenge}
           onToken={onToken}
-          onFailed={handleSolveFailed}
+          onRejected={handleSolveRejected}
+          onServiceError={handleSolveError}
         />
       ) : (
         <SlideCaptcha
           key={challenge.id}
           challenge={challenge}
           onToken={onToken}
-          onFailed={handleSolveFailed}
+          onRejected={handleSolveRejected}
+          onServiceError={handleSolveError}
         />
       )}
     </div>
@@ -148,11 +171,13 @@ export function BuiltinCaptcha({
 function SlideCaptcha({
   challenge,
   onToken,
-  onFailed,
+  onRejected,
+  onServiceError,
 }: {
   challenge: SlideCaptchaChallenge;
   onToken: (token: string) => void;
-  onFailed: () => void;
+  onRejected: () => void;
+  onServiceError: (error: unknown) => void;
 }) {
   const t = useTranslations("auth");
   const [phase, setPhase] = useState<SlidePhase>("ready");
@@ -165,15 +190,20 @@ function SlideCaptcha({
   const dragStartRef = useRef(0);
   const slidePxRef = useRef(0);
   const onTokenRef = useRef(onToken);
-  const onFailedRef = useRef(onFailed);
+  const onRejectedRef = useRef(onRejected);
+  const onServiceErrorRef = useRef(onServiceError);
 
   useEffect(() => {
     onTokenRef.current = onToken;
   }, [onToken]);
 
   useEffect(() => {
-    onFailedRef.current = onFailed;
-  }, [onFailed]);
+    onRejectedRef.current = onRejected;
+  }, [onRejected]);
+
+  useEffect(() => {
+    onServiceErrorRef.current = onServiceError;
+  }, [onServiceError]);
 
   useEffect(() => {
     return () => {
@@ -261,12 +291,16 @@ function SlideCaptcha({
       setElapsedSeconds(seconds);
       onTokenRef.current(token);
       setPhase("success");
-    } catch {
+    } catch (error) {
       if (controller.signal.aborted) {
         return;
       }
-      onFailedRef.current();
-      setPhase("failed");
+      if (isCaptchaRejected(error)) {
+        onRejectedRef.current();
+        setPhase("failed");
+        return;
+      }
+      onServiceErrorRef.current(error);
     } finally {
       if (solveControllerRef.current === controller) {
         solveControllerRef.current = null;

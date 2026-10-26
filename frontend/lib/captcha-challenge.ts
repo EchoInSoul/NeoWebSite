@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api";
+import { ApiError, apiRequest } from "@/lib/api";
 import type { CaptchaScope } from "@/lib/captcha-settings";
 
 export type SlideCaptchaChallenge = {
@@ -33,6 +33,14 @@ export type CaptchaClick = {
   x: number;
   y: number;
 };
+
+export function isCaptchaRejected(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 400 &&
+    error.code === "captcha_failed"
+  );
+}
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);

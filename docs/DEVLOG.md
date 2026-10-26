@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-26 · 人机验证失败分级：服务故障不再冒充「答错」
+
+**范围**：仅前端四个文件。`lib/captcha-challenge.ts` 新增传输层判定 `isCaptchaRejected`；`components/auth/click-captcha.tsx` 与 `components/auth/builtin-captcha.tsx`（含内部滑块组件）把子组件的单一 `onFailed` 出口拆成 `onRejected` / `onServiceError`，由父级分流；`hooks/use-captcha-gate.ts` 的出题预取失败改为分级提示。后端、迁移、`backend/README.md`、中英文案键零改动（复用既有 `common.serviceUnavailable` 与 `auth.captchaLoadFailed`）。
+
+**动机**：点选形态接入后的代码审查发现，交卷失败一律按「答错」处理——后端 503、断网、坏响应都被画成红色「人机验证未通过」+ 弹窗摆动 + 800ms 自动换题，而换题要消耗 5 次 / 10 分钟的 IP 出题额度；出题预取失败时还会静默把弹窗开到空态。用户分不清是点错了还是服务挂了，也不符合 `agents.md`「主路径失败按错误上抛、不得降级掩盖」。
+
+**决策**：
+- **只有 400 `captcha_failed` 算答错**：该码意味着后端已把这道题判负（`markFailed`），必须换新题，所以保留原有红标 + 摆动 + 800ms 换题。
+- **其余错误一律按故障说**：5xx、断网（`ApiError.status === 0`）、坏响应、400 `invalid_request` 走 `onServiceError` → 只出 toast（复用全站既有的 `looksLikeServiceFailure`）+ 落到已有的「重新加载」卡，**不摆动、不自动换题**。理由：这类失败下题目在服务端仍是 pending、没有作废，自动换题等于白烧一次出题额度，且故障时新题也会失败。
+- **判定放传输层**：`isCaptchaRejected` 与出题 / 交卷调用同层，滑块与点选共用一个判定；子组件只报告错误类别，不再自己决定要不要换题。
+- **预取失败不开弹窗**：与既有 429 分支同构（只 toast、不开窗），避免「弹窗起来后子组件立刻重发同一个必败请求」的隐藏重试；用户重按登录 / 注册即重新预取。
+- **失败卡补最终高度**：卡原先只按 300×220 留宽高比，被复用为交卷失败态时会比正常态矮 52px（提示行 / 滑轨 `h-10` + 容器 `gap-3` 12px）；补 `minHeight: 220 + 40 + 12`，弹窗不再跳高。
+
+**已知缺口**：
+- 真答错（400 `captcha_failed`）分支本轮未在浏览器重测：探针把 dev 环境 5 次 / 10 分钟的出题额度用尽，后续出题实测返回 429 并停在失败卡（正是预期行为）。该分支代码只改了出口名与判定门，红标 + 摆动 + 800ms 换题逻辑沿用上一轮已实测的行为。
+- 断网（`ApiError.status === 0`）与 400 `invalid_request` 同走故障分支，未各自单独实测。
+- 点选形态仍无键盘 / 读屏路径（沿用上一轮记录）。
+
+**验证**：`npx tsc --noEmit` 通过；四个改动文件 `eslint` 0 error（4 条既有 `@next/next/no-img-element` warning，与滑块旧用法同类）；`prettier --check` 通过。浏览器实测（dev server + 后端在跑，走前端 `/api` 代理，注入 `/solutions` 返回 503）：只弹「服务暂时不可用，请稍后重试」toast，弹窗内**没有**「人机验证未通过」红标、不摆动，改落到「重新加载」卡；卡高 272px（`minHeight` 生效）、弹窗高度维持 348px 不跳；带调用栈的 fetch 日志证明交卷 503 之后 7.5 秒内没有再发出题请求（日志里只有预取那一次 POST `/captcha/challenges`），即故障后**没有自动换题**。
+
+**未提交。**
+
+---
+
 ## 2026-10-26 · 登录 / 注册接入自研点选形态
 
 **范围**：仅前端。`lib/captcha-challenge.ts` 把出题响应改为判别联合（`SlideCaptchaChallenge` / `ClickCaptchaChallenge`，按字段有效值区分）并新增点选交卷 `solveClickCaptchaChallenge`；`components/auth/builtin-captcha.tsx` 拆成父级容器（出题 / 重试 / 失败卡 / 弹窗摆动）+ 内部滑块组件；新增 `components/auth/click-captcha.tsx`（点选形态）；中英文案各两条；`backend/README.md` 删掉「前端只接滑块、切 click 会拦死」的过时说明并补记点选响应的零值 `tile_*`。后端、迁移、`public-settings`、登录 / 注册表单零改动。
