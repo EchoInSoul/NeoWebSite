@@ -53,6 +53,7 @@ import {
 const MAIL_TEMPLATE_PLACEHOLDERS = [
   "code",
   "verifyUrl",
+  "resetUrl",
   "expiresMinutes",
   "siteTitle",
   "siteUrl",
