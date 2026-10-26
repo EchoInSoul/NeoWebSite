@@ -3,6 +3,7 @@ package twofactor
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -14,7 +15,10 @@ import (
 	"website/backend/internal/modules/session"
 )
 
-const maxVerifyAttempts = 5
+const (
+	maxVerifyAttempts          = 5
+	maxRecoveryCodeInputLength = 64
+)
 
 type Settings interface {
 	GetBool(ctx context.Context, group, name string) (bool, error)
@@ -263,6 +267,46 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID, password 
 		return RecoveryCodesResponse{}, err
 	}
 	return RecoveryCodesResponse{RecoveryCodes: codes}, nil
+}
+
+func (s *Service) VerifyRecoveryCodes(ctx context.Context, userID string, codes []string) error {
+	if len(codes) == 0 {
+		return apierror.WithParam(apierror.ErrInvalidRequest, "codes")
+	}
+
+	found, err := s.activeUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if found.TotpEnabledAt == nil {
+		return apierror.ErrTwoFactorNotEnabled
+	}
+
+	hashes, err := s.repo.unusedRecoveryCodeHashes(ctx, found.ID)
+	if err != nil {
+		return err
+	}
+	allowed := make(map[string]struct{}, len(hashes))
+	for _, hash := range hashes {
+		allowed[hash] = struct{}{}
+	}
+
+	seen := make(map[string]struct{}, len(codes))
+	for _, code := range codes {
+		trimmed := strings.TrimSpace(code)
+		if trimmed == "" || len(trimmed) > maxRecoveryCodeInputLength {
+			return apierror.WithParam(apierror.ErrInvalidRequest, "codes")
+		}
+		hash := HashRecoveryCode(trimmed)
+		if _, ok := allowed[hash]; !ok {
+			return apierror.WithParam(apierror.ErrInvalidRequest, "codes")
+		}
+		if _, duplicate := seen[hash]; duplicate {
+			return apierror.WithParam(apierror.ErrInvalidRequest, "codes")
+		}
+		seen[hash] = struct{}{}
+	}
+	return nil
 }
 
 func (s *Service) VerifySecondFactor(ctx context.Context, code string, meta session.Meta) (User, error) {

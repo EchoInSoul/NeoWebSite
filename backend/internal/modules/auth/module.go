@@ -5,6 +5,7 @@ import (
 
 	"website/backend/internal/database"
 	"website/backend/internal/modules/login"
+	"website/backend/internal/modules/mail"
 	"website/backend/internal/modules/passwordreset"
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
@@ -18,8 +19,8 @@ type Module struct {
 	controller *controller
 }
 
-func New(db *database.Database, sessions *session.Service, settingsService *settings.Service, loginService *login.Service, registrationService *registration.Service, twoFactorService *twofactor.Service, passwordResetService *passwordreset.Service) *Module {
-	service := newService(db, sessions, settingsService)
+func New(db *database.Database, sessions *session.Service, settingsService *settings.Service, loginService *login.Service, registrationService *registration.Service, twoFactorService *twofactor.Service, passwordResetService *passwordreset.Service, mailer mail.Mailer) *Module {
+	service := newService(db, sessions, settingsService, mailer)
 	return &Module{
 		Service:    service,
 		controller: newController(service, loginService, registrationService, twoFactorService, passwordResetService),

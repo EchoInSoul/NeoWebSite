@@ -20,14 +20,17 @@ const (
 	selfCheckSubject      = "邮件配置自检"
 	TemplateSignupCode    = "signup_code"
 	TemplatePasswordReset = "password_reset"
+	TemplateRecoveryCodes = "recovery_codes"
 	exampleTemplate       = "example"
 	signupCodeTemplate    = TemplateSignupCode
 	passwordResetTemplate = TemplatePasswordReset
+	recoveryCodesTemplate = TemplateRecoveryCodes
 )
 
 var previewSubjects = map[string]string{
 	signupCodeTemplate:    "注册验证邮件",
 	passwordResetTemplate: "密码重置",
+	recoveryCodesTemplate: "两步验证恢复码",
 }
 
 type controller struct {
@@ -179,12 +182,13 @@ func (c *controller) previewData(ctx context.Context, to string) (map[string]str
 		"sentAt":         now,
 		"verifyUrl":      "https://example.com/register/verify?token=preview-token",
 		"resetUrl":       "https://example.com/reset-password/confirm?token=preview-token",
+		"codes":          "AAAA-BBBB-CCCC-DDDD\nEEEE-FFFF-GGGG-HHHH\nIIII-JJJJ-KKKK-LLLL\nMMMM-NNNN-OOOO-PPPP\nQQQQ-RRRR-SSSS-TTTT",
 	}, nil
 }
 
 func isSupportedTemplate(name string) bool {
 	switch name {
-	case exampleTemplate, signupCodeTemplate, passwordResetTemplate:
+	case exampleTemplate, signupCodeTemplate, passwordResetTemplate, recoveryCodesTemplate:
 		return true
 	default:
 		return false

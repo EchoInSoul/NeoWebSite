@@ -331,7 +331,28 @@ func (c *controller) regenerateRecoveryCodes(ctx *gin.Context) {
 }
 
 func (c *controller) emailRecoveryCodes(ctx *gin.Context) {
-	apierror.Write(ctx, apierror.ErrNotImplemented)
+	if !requireJSONRequest(ctx) {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	var req twofactor.RecoveryCodesEmailRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || len(req.Codes) == 0 || len(req.Codes) > twofactor.RecoveryCodesPerBatch {
+		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, "codes"))
+		return
+	}
+
+	userID := ctx.GetString(guard.SessionUserIDKey)
+	if err := c.twoFactorService.VerifyRecoveryCodes(ctx.Request.Context(), userID, req.Codes); err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+	if err := c.service.EmailRecoveryCodes(ctx.Request.Context(), userID, req.Codes); err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, apiresponse.Empty{})
 }
 
 func (c *controller) verifySecondFactor(ctx *gin.Context) {

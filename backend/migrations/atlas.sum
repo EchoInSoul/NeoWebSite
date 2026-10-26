@@ -1,4 +1,4 @@
-h1:6/CJQuGHub+bbZ/0fonNod33Qbr0TW7Wh21hBxGWl0s=
+h1:XzPmfmK0zdaQbCkLmGCC60UWyJizyFzRseVANkM6g+s=
 20261010223715_init_users_sessions.sql h1:6xPxTqRkZVioWCjqzfsj7gJVSa3xEjNrO0RtwYHtV1Y=
 20261011061853_groups_and_permissions.sql h1:yAz+nby6I6iVNOLlN2ejMf1yETaDl2jKFsiTscAIWXI=
 20261011082507_totp_and_recovery_codes.sql h1:9OgWtMl1TbtlOjGsY3EPzvK6Aw0eZ1x+GBtHWpQQGFU=
@@ -20,3 +20,4 @@ h1:6/CJQuGHub+bbZ/0fonNod33Qbr0TW7Wh21hBxGWl0s=
 20261026090001_captcha_challenge_answer_dots.sql h1:39JcNezfUq5keNo3FT0HvywiPa+9ejekm5TDGzQOpsw=
 20261026150000_seed_captcha_mode.sql h1:+IPu5B3lM2qqqlM3SmZBf7xhtEb/umP5v2ASp5h4jLw=
 20261026150001_password_resets.sql h1:cZo7fw4im9qLI4lanSmND0nP/sm+sR6FXyCefv+8lC8=
+20261027120000_seed_recovery_codes_mail_settings.sql h1:FUIfXROm+WBX+NkKISv8R3tiLSp9XhQyZbpj2YQmLJc=

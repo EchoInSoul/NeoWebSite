@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -10,6 +12,7 @@ import (
 	"website/backend/internal/common/userinput"
 	"website/backend/internal/database"
 	"website/backend/internal/database/ent"
+	"website/backend/internal/modules/mail"
 	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
 )
@@ -18,13 +21,18 @@ type Service struct {
 	repo     *repository
 	sessions *session.Service
 	settings *settings.Service
+	mailer   mail.Mailer
 }
 
-func newService(db *database.Database, sessions *session.Service, settingsService *settings.Service) *Service {
+func newService(db *database.Database, sessions *session.Service, settingsService *settings.Service, mailer mail.Mailer) *Service {
+	if mailer == nil {
+		panic("auth: mailer is required")
+	}
 	return &Service{
 		repo:     newRepository(db),
 		sessions: sessions,
 		settings: settingsService,
+		mailer:   mailer,
 	}
 }
 
@@ -153,6 +161,48 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, nickname, em
 	}
 
 	return toUser(updated), nil
+}
+
+func (s *Service) EmailRecoveryCodes(ctx context.Context, userID string, codes []string) error {
+	found, err := s.repo.findUserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, errUserNotFound) {
+			s.sessions.Destroy(ctx)
+			return apierror.ErrUnauthorized
+		}
+		return err
+	}
+
+	configured, err := s.mailer.Configured(ctx)
+	if err != nil || !configured {
+		return apierror.ErrMailUnavailable
+	}
+
+	title, baseURL, err := mail.SiteInfo(ctx, s.settings)
+	if err != nil {
+		return apierror.ErrMailUnavailable
+	}
+
+	subject, body, err := mail.Compose(ctx, s.settings, mail.TemplateRecoveryCodes, map[string]string{
+		"siteTitle": title,
+		"siteUrl":   baseURL,
+		"username":  found.Nickname,
+		"codes":     strings.Join(codes, "\n"),
+		"sentAt":    time.Now().Format("2006-01-02 15:04:05"),
+	})
+	if err != nil {
+		return apierror.ErrMailUnavailable
+	}
+
+	if err := s.mailer.SendSync(ctx, mail.Message{
+		To:          found.Email,
+		Subject:     subject,
+		Body:        body,
+		RequireSMTP: true,
+	}); err != nil {
+		return apierror.ErrMailUnavailable
+	}
+	return nil
 }
 
 func (s *Service) ensureIdentifierFree(ctx context.Context, userID, identifier string, taken error) error {

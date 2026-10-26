@@ -87,7 +87,7 @@ func newTestAppWithVerifyPolicies(t *testing.T, db *database.Database, policies 
 
 	sessionService := session.New(settingsModule.Service, sm)
 	captchaService := captcha.NewService(settingsModule.Service, nil)
-	service := newService(db, sessionService, settingsModule.Service)
+	service := newService(db, sessionService, settingsModule.Service, &fakeMailer{configured: true})
 	loginService := login.New(db, sessionService, ratelimit.New(), captchaService)
 	registrationService := registration.New(db, settingsModule.Service, ratelimit.New(), &fakeMailer{configured: true}, captchaService)
 	twoFactorService := twofactor.NewWithPolicies(db, sessionService, settingsModule.Service, ratelimit.New(), policies, []byte("0123456789abcdef0123456789abcdef"))
@@ -139,7 +139,7 @@ func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settings
 
 	sessionService := session.New(settingsService, sm)
 	captchaService := captcha.NewService(settingsService, verifier)
-	service := newService(db, sessionService, settingsService)
+	service := newService(db, sessionService, settingsService, mailer)
 	loginService := login.NewWithPolicies(db, sessionService, limiter, login.Policies{
 		IdentifierFailure: policies.LoginIdentifier,
 		IPWindow:          policies.LoginIP,

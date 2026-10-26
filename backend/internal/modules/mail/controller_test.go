@@ -212,6 +212,25 @@ func TestCreateMessageUsesBuiltinTemplateDefaults(t *testing.T) {
 	}
 }
 
+func TestCreateMessageUsesDefaultRecoveryCodesSubject(t *testing.T) {
+	mailer := &stubMailer{}
+	ts := newControllerTestServer(t, mailer, "owner")
+
+	resp := postMessage(t, ts, `{"to":"me@example.com","template":"recovery_codes"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	if mailer.got.Subject != "两步验证恢复码" {
+		t.Fatalf("subject = %q, want default recovery codes subject", mailer.got.Subject)
+	}
+	if !strings.Contains(mailer.got.Body.Text, "AAAA-BBBB-CCCC-DDDD") {
+		t.Fatalf("text = %q, want preview codes", mailer.got.Body.Text)
+	}
+	if !strings.Contains(mailer.got.Body.HTML, "AAAA-BBBB-CCCC-DDDD") {
+		t.Fatalf("html = %q, want preview codes", mailer.got.Body.HTML)
+	}
+}
+
 func TestComposePasswordResetRendersLink(t *testing.T) {
 	body, err := Render(TemplatePasswordReset, map[string]string{
 		"siteTitle": "My Blog", "siteUrl": "https://blog.example.com",

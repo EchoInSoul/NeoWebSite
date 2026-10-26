@@ -227,7 +227,7 @@ func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settings
 		EmailVerificationWindow: policies.EmailVerificationIP,
 	}, mailer, captchaService)
 	twoFactorService := twofactor.New(db, sessionService, settingsService, ratelimit.New(), testTOTPKey)
-	module := auth.New(db, sessionService, settingsService, loginService, registrationService, twoFactorService, passwordreset.New(db, settingsService, limiter, mailer))
+	module := auth.New(db, sessionService, settingsService, loginService, registrationService, twoFactorService, passwordreset.New(db, settingsService, limiter, mailer), mailer)
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))

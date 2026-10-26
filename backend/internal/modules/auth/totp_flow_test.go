@@ -460,20 +460,46 @@ func TestTwoFactorRegenerateRecoveryCodes(t *testing.T) {
 	}
 }
 
-func TestEmailRecoveryCodesReserved(t *testing.T) {
+func TestEmailRecoveryCodes(t *testing.T) {
 	db := testDB(t)
 	tag := uniqueTag(t)
 	u, password := createTestUser(t, db, tag)
-	ts := newTestApp(t, db)
+	mailer := &fakeMailer{configured: true}
+	ts, _, settingsService := newTestAppWithMailer(t, db, mailer)
+	setResetSite(t, settingsService)
 
 	anonymous := post2FA(t, testClient(t), ts.URL, "recovery-codes/email", struct{}{})
 	assertErrorCode(t, anonymous, http.StatusUnauthorized, "unauthorized")
 
 	client := testClient(t)
 	loginOK(t, client, ts.URL, u.Email, password)
+	setup := setup2FA(t, client, ts.URL, password)
+	issued := enable2FA(t, client, ts.URL, setup.Secret, password)
 
-	reserved := post2FA(t, client, ts.URL, "recovery-codes/email", struct{}{})
-	assertErrorCode(t, reserved, http.StatusNotImplemented, "not_implemented")
+	resp := post2FA(t, client, ts.URL, "recovery-codes/email", twofactor.RecoveryCodesEmailRequest{Codes: issued.RecoveryCodes})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("email recovery codes status = %d, want 200", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	messages := mailer.sent()
+	if len(messages) != 1 {
+		t.Fatalf("sent messages = %d, want 1", len(messages))
+	}
+	if messages[0].To != u.Email {
+		t.Fatalf("To = %q, want %q", messages[0].To, u.Email)
+	}
+	if !messages[0].RequireSMTP {
+		t.Fatal("RequireSMTP = false, want true")
+	}
+	for _, code := range issued.RecoveryCodes {
+		if !strings.Contains(messages[0].Body.Text, code) {
+			t.Fatalf("email body missing recovery code %q", code)
+		}
+	}
+
+	stale := post2FA(t, client, ts.URL, "recovery-codes/email", twofactor.RecoveryCodesEmailRequest{Codes: []string{"AAAA-BBBB-CCCC-DDDD"}})
+	assertErrorCode(t, stale, http.StatusBadRequest, "invalid_request")
 }
 
 func TestTwoFactorEnableRevokesOtherSessions(t *testing.T) {

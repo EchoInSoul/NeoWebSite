@@ -85,6 +85,8 @@ var builtinRegistry = []Group{
 			{Name: "signup_code_body", Type: FieldTypeString, Default: ""},
 			{Name: "password_reset_subject", Type: FieldTypeString, Default: ""},
 			{Name: "password_reset_body", Type: FieldTypeString, Default: ""},
+			{Name: "recovery_codes_subject", Type: FieldTypeString, Default: ""},
+			{Name: "recovery_codes_body", Type: FieldTypeString, Default: ""},
 		},
 	},
 }

@@ -115,6 +115,13 @@ func (r *repository) replaceRecoveryCodes(ctx context.Context, userID uuid.UUID,
 	return tx.Commit()
 }
 
+func (r *repository) unusedRecoveryCodeHashes(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	return r.client.RecoveryCode.Query().
+		Where(recoverycode.UserIDEQ(userID), recoverycode.UsedAtIsNil()).
+		Select(recoverycode.FieldCodeHash).
+		Strings(ctx)
+}
+
 func (r *repository) consumeRecoveryCode(ctx context.Context, userID uuid.UUID, hash string) (bool, error) {
 	updated, err := r.client.RecoveryCode.Update().
 		Where(

@@ -23,6 +23,10 @@ type TwoFactorDisableRequest struct {
 	Password string `json:"password"`
 }
 
+type RecoveryCodesEmailRequest struct {
+	Codes []string `json:"codes"`
+}
+
 type TwoFactorSetupResponse struct {
 	Secret     string `json:"secret"`
 	OTPAuthURL string `json:"otpauth_url"`
