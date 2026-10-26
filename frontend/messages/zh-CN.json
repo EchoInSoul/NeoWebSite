@@ -326,6 +326,8 @@
     "captchaUnavailable": "人机验证加载失败",
     "captchaImageAlt": "拼图验证图片",
     "captchaSliderHint": "拖动滑块完成拼图",
+    "captchaClickImageAlt": "点选验证图片",
+    "captchaClickHint": "按顺序点击",
     "captchaLoadFailed": "验证码加载失败",
     "captchaReload": "重新加载",
     "captchaSuccess": "验证成功，用时 {seconds}s",

@@ -326,6 +326,8 @@
     "captchaUnavailable": "Verification failed to load",
     "captchaImageAlt": "Puzzle verification image",
     "captchaSliderHint": "Drag the slider to complete the puzzle",
+    "captchaClickImageAlt": "Click verification image",
+    "captchaClickHint": "Click in order",
     "captchaLoadFailed": "The puzzle failed to load",
     "captchaReload": "Reload",
     "captchaSuccess": "Verified in {seconds}s",
