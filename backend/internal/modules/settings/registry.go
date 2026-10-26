@@ -45,7 +45,7 @@ var builtinRegistry = []Group{
 			{Name: "session_max_age_enabled", Type: FieldTypeBool, Default: false},
 			{Name: "session_max_age_days", Type: FieldTypeNumber, Default: int64(7)},
 			{Name: "totp_enabled", Type: FieldTypeBool, Default: true, Public: true},
-			{Name: "password_reset_enabled", Type: FieldTypeBool, Default: false},
+			{Name: "password_reset_enabled", Type: FieldTypeBool, Default: false, Public: true},
 		},
 	},
 	{

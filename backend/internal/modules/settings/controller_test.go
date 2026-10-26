@@ -463,11 +463,14 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 		t.Fatalf("group = %v, want auth", items[2]["group"])
 	}
 	authValues, ok := items[2]["values"].(map[string]any)
-	if !ok || len(authValues) != 1 {
-		t.Fatalf("public auth values = %v, want only totp_enabled", items[2]["values"])
+	if !ok || len(authValues) != 2 {
+		t.Fatalf("public auth values = %v, want totp_enabled and password_reset_enabled", items[2]["values"])
 	}
 	if authValues["totp_enabled"] != true {
 		t.Fatalf("public auth.totp_enabled = %v, want true", authValues["totp_enabled"])
+	}
+	if authValues["password_reset_enabled"] != false {
+		t.Fatalf("public auth.password_reset_enabled = %v, want false", authValues["password_reset_enabled"])
 	}
 	if items[3]["group"] != "captcha" {
 		t.Fatalf("group = %v, want captcha", items[3]["group"])

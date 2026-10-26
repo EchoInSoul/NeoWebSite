@@ -118,7 +118,7 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "session_max_age_enabled", typ: FieldTypeBool, def: false},
 		{name: "session_max_age_days", typ: FieldTypeNumber, def: int64(7)},
 		{name: "totp_enabled", typ: FieldTypeBool, def: true, public: true},
-		{name: "password_reset_enabled", typ: FieldTypeBool, def: false},
+		{name: "password_reset_enabled", typ: FieldTypeBool, def: false, public: true},
 	})
 
 	if len(reg.groups["captcha"]) != 5 {
@@ -167,6 +167,7 @@ func TestBuiltinPublicAllowlist(t *testing.T) {
 	}
 	sort.Strings(public)
 	want := []string{
+		"auth.password_reset_enabled",
 		"auth.totp_enabled",
 		"captcha.captcha_enabled",
 		"captcha.captcha_mode",
