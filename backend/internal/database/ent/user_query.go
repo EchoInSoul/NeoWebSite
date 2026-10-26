@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"website/backend/internal/database/ent/group"
+	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/predicate"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/user"
@@ -24,14 +25,15 @@ import (
 // UserQuery is the builder for querying User entities.
 type UserQuery struct {
 	config
-	ctx               *QueryContext
-	order             []user.OrderOption
-	inters            []Interceptor
-	predicates        []predicate.User
-	withGroup         *GroupQuery
-	withPermissions   *UserPermissionQuery
-	withRecoveryCodes *RecoveryCodeQuery
-	modifiers         []func(*sql.Selector)
+	ctx                *QueryContext
+	order              []user.OrderOption
+	inters             []Interceptor
+	predicates         []predicate.User
+	withGroup          *GroupQuery
+	withPermissions    *UserPermissionQuery
+	withRecoveryCodes  *RecoveryCodeQuery
+	withPasswordResets *PasswordResetQuery
+	modifiers          []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -127,6 +129,28 @@ func (_q *UserQuery) QueryRecoveryCodes() *RecoveryCodeQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(recoverycode.Table, recoverycode.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.RecoveryCodesTable, user.RecoveryCodesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryPasswordResets chains the current query on the "passwordResets" edge.
+func (_q *UserQuery) QueryPasswordResets() *PasswordResetQuery {
+	query := (&PasswordResetClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(passwordreset.Table, passwordreset.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.PasswordResetsTable, user.PasswordResetsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -321,14 +345,15 @@ func (_q *UserQuery) Clone() *UserQuery {
 		return nil
 	}
 	return &UserQuery{
-		config:            _q.config,
-		ctx:               _q.ctx.Clone(),
-		order:             append([]user.OrderOption{}, _q.order...),
-		inters:            append([]Interceptor{}, _q.inters...),
-		predicates:        append([]predicate.User{}, _q.predicates...),
-		withGroup:         _q.withGroup.Clone(),
-		withPermissions:   _q.withPermissions.Clone(),
-		withRecoveryCodes: _q.withRecoveryCodes.Clone(),
+		config:             _q.config,
+		ctx:                _q.ctx.Clone(),
+		order:              append([]user.OrderOption{}, _q.order...),
+		inters:             append([]Interceptor{}, _q.inters...),
+		predicates:         append([]predicate.User{}, _q.predicates...),
+		withGroup:          _q.withGroup.Clone(),
+		withPermissions:    _q.withPermissions.Clone(),
+		withRecoveryCodes:  _q.withRecoveryCodes.Clone(),
+		withPasswordResets: _q.withPasswordResets.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -365,6 +390,17 @@ func (_q *UserQuery) WithRecoveryCodes(opts ...func(*RecoveryCodeQuery)) *UserQu
 		opt(query)
 	}
 	_q.withRecoveryCodes = query
+	return _q
+}
+
+// WithPasswordResets tells the query-builder to eager-load the nodes that are connected to
+// the "passwordResets" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithPasswordResets(opts ...func(*PasswordResetQuery)) *UserQuery {
+	query := (&PasswordResetClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withPasswordResets = query
 	return _q
 }
 
@@ -446,10 +482,11 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [3]bool{
+		loadedTypes = [4]bool{
 			_q.withGroup != nil,
 			_q.withPermissions != nil,
 			_q.withRecoveryCodes != nil,
+			_q.withPasswordResets != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -490,6 +527,13 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadRecoveryCodes(ctx, query, nodes,
 			func(n *User) { n.Edges.RecoveryCodes = []*RecoveryCode{} },
 			func(n *User, e *RecoveryCode) { n.Edges.RecoveryCodes = append(n.Edges.RecoveryCodes, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withPasswordResets; query != nil {
+		if err := _q.loadPasswordResets(ctx, query, nodes,
+			func(n *User) { n.Edges.PasswordResets = []*PasswordReset{} },
+			func(n *User, e *PasswordReset) { n.Edges.PasswordResets = append(n.Edges.PasswordResets, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -570,6 +614,36 @@ func (_q *UserQuery) loadRecoveryCodes(ctx context.Context, query *RecoveryCodeQ
 	}
 	query.Where(predicate.RecoveryCode(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(user.RecoveryCodesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadPasswordResets(ctx context.Context, query *PasswordResetQuery, nodes []*User, init func(*User), assign func(*User, *PasswordReset)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(passwordreset.FieldUserID)
+	}
+	query.Where(predicate.PasswordReset(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.PasswordResetsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

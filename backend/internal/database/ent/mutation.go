@@ -12,6 +12,7 @@ import (
 	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/predicate"
 	"website/backend/internal/database/ent/recoverycode"
@@ -37,6 +38,7 @@ const (
 	TypeCaptchaChallenge    = "CaptchaChallenge"
 	TypeGroup               = "Group"
 	TypeGroupPermission     = "GroupPermission"
+	TypePasswordReset       = "PasswordReset"
 	TypePendingRegistration = "PendingRegistration"
 	TypeRecoveryCode        = "RecoveryCode"
 	TypeSession             = "Session"
@@ -1959,6 +1961,554 @@ func (m *GroupPermissionMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown GroupPermission edge %s", name)
+}
+
+// PasswordResetMutation represents an operation that mutates the PasswordReset nodes in the graph.
+type PasswordResetMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *uuid.UUID
+	token_hash    *string
+	expires_at    *time.Time
+	created_at    *time.Time
+	clearedFields map[string]struct{}
+	user          *uuid.UUID
+	cleareduser   bool
+	done          bool
+	oldValue      func(context.Context) (*PasswordReset, error)
+	predicates    []predicate.PasswordReset
+}
+
+var _ ent.Mutation = (*PasswordResetMutation)(nil)
+
+// passwordresetOption allows management of the mutation configuration using functional options.
+type passwordresetOption func(*PasswordResetMutation)
+
+// newPasswordResetMutation creates new mutation for the PasswordReset entity.
+func newPasswordResetMutation(c config, op Op, opts ...passwordresetOption) *PasswordResetMutation {
+	m := &PasswordResetMutation{
+		config:        c,
+		op:            op,
+		typ:           TypePasswordReset,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withPasswordResetID sets the ID field of the mutation.
+func withPasswordResetID(id uuid.UUID) passwordresetOption {
+	return func(m *PasswordResetMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *PasswordReset
+		)
+		m.oldValue = func(ctx context.Context) (*PasswordReset, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().PasswordReset.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withPasswordReset sets the old PasswordReset of the mutation.
+func withPasswordReset(node *PasswordReset) passwordresetOption {
+	return func(m *PasswordResetMutation) {
+		m.oldValue = func(context.Context) (*PasswordReset, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m PasswordResetMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m PasswordResetMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of PasswordReset entities.
+func (m *PasswordResetMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *PasswordResetMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *PasswordResetMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().PasswordReset.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUserID sets the "user_id" field.
+func (m *PasswordResetMutation) SetUserID(u uuid.UUID) {
+	m.user = &u
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *PasswordResetMutation) UserID() (r uuid.UUID, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the PasswordReset entity.
+// If the PasswordReset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PasswordResetMutation) OldUserID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *PasswordResetMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetTokenHash sets the "token_hash" field.
+func (m *PasswordResetMutation) SetTokenHash(s string) {
+	m.token_hash = &s
+}
+
+// TokenHash returns the value of the "token_hash" field in the mutation.
+func (m *PasswordResetMutation) TokenHash() (r string, exists bool) {
+	v := m.token_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTokenHash returns the old "token_hash" field's value of the PasswordReset entity.
+// If the PasswordReset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PasswordResetMutation) OldTokenHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTokenHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTokenHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTokenHash: %w", err)
+	}
+	return oldValue.TokenHash, nil
+}
+
+// ResetTokenHash resets all changes to the "token_hash" field.
+func (m *PasswordResetMutation) ResetTokenHash() {
+	m.token_hash = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *PasswordResetMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *PasswordResetMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the PasswordReset entity.
+// If the PasswordReset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PasswordResetMutation) OldExpiresAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *PasswordResetMutation) ResetExpiresAt() {
+	m.expires_at = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *PasswordResetMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *PasswordResetMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the PasswordReset entity.
+// If the PasswordReset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PasswordResetMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *PasswordResetMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *PasswordResetMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[passwordreset.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *PasswordResetMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *PasswordResetMutation) UserIDs() (ids []uuid.UUID) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *PasswordResetMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// Where appends a list predicates to the PasswordResetMutation builder.
+func (m *PasswordResetMutation) Where(ps ...predicate.PasswordReset) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the PasswordResetMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *PasswordResetMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.PasswordReset, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *PasswordResetMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *PasswordResetMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (PasswordReset).
+func (m *PasswordResetMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *PasswordResetMutation) Fields() []string {
+	fields := make([]string, 0, 4)
+	if m.user != nil {
+		fields = append(fields, passwordreset.FieldUserID)
+	}
+	if m.token_hash != nil {
+		fields = append(fields, passwordreset.FieldTokenHash)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, passwordreset.FieldExpiresAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, passwordreset.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *PasswordResetMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case passwordreset.FieldUserID:
+		return m.UserID()
+	case passwordreset.FieldTokenHash:
+		return m.TokenHash()
+	case passwordreset.FieldExpiresAt:
+		return m.ExpiresAt()
+	case passwordreset.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *PasswordResetMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case passwordreset.FieldUserID:
+		return m.OldUserID(ctx)
+	case passwordreset.FieldTokenHash:
+		return m.OldTokenHash(ctx)
+	case passwordreset.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	case passwordreset.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown PasswordReset field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PasswordResetMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case passwordreset.FieldUserID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case passwordreset.FieldTokenHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTokenHash(v)
+		return nil
+	case passwordreset.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	case passwordreset.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PasswordReset field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *PasswordResetMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *PasswordResetMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PasswordResetMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown PasswordReset numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *PasswordResetMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *PasswordResetMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *PasswordResetMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown PasswordReset nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *PasswordResetMutation) ResetField(name string) error {
+	switch name {
+	case passwordreset.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case passwordreset.FieldTokenHash:
+		m.ResetTokenHash()
+		return nil
+	case passwordreset.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	case passwordreset.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown PasswordReset field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *PasswordResetMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.user != nil {
+		edges = append(edges, passwordreset.EdgeUser)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *PasswordResetMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case passwordreset.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *PasswordResetMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *PasswordResetMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *PasswordResetMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.cleareduser {
+		edges = append(edges, passwordreset.EdgeUser)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *PasswordResetMutation) EdgeCleared(name string) bool {
+	switch name {
+	case passwordreset.EdgeUser:
+		return m.cleareduser
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *PasswordResetMutation) ClearEdge(name string) error {
+	switch name {
+	case passwordreset.EdgeUser:
+		m.ClearUser()
+		return nil
+	}
+	return fmt.Errorf("unknown PasswordReset unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *PasswordResetMutation) ResetEdge(name string) error {
+	switch name {
+	case passwordreset.EdgeUser:
+		m.ResetUser()
+		return nil
+	}
+	return fmt.Errorf("unknown PasswordReset edge %s", name)
 }
 
 // PendingRegistrationMutation represents an operation that mutates the PendingRegistration nodes in the graph.
@@ -4106,6 +4656,9 @@ type UserMutation struct {
 	recoveryCodes             map[uuid.UUID]struct{}
 	removedrecoveryCodes      map[uuid.UUID]struct{}
 	clearedrecoveryCodes      bool
+	passwordResets            map[uuid.UUID]struct{}
+	removedpasswordResets     map[uuid.UUID]struct{}
+	clearedpasswordResets     bool
 	done                      bool
 	oldValue                  func(context.Context) (*User, error)
 	predicates                []predicate.User
@@ -4924,6 +5477,60 @@ func (m *UserMutation) ResetRecoveryCodes() {
 	m.removedrecoveryCodes = nil
 }
 
+// AddPasswordResetIDs adds the "passwordResets" edge to the PasswordReset entity by ids.
+func (m *UserMutation) AddPasswordResetIDs(ids ...uuid.UUID) {
+	if m.passwordResets == nil {
+		m.passwordResets = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.passwordResets[ids[i]] = struct{}{}
+	}
+}
+
+// ClearPasswordResets clears the "passwordResets" edge to the PasswordReset entity.
+func (m *UserMutation) ClearPasswordResets() {
+	m.clearedpasswordResets = true
+}
+
+// PasswordResetsCleared reports if the "passwordResets" edge to the PasswordReset entity was cleared.
+func (m *UserMutation) PasswordResetsCleared() bool {
+	return m.clearedpasswordResets
+}
+
+// RemovePasswordResetIDs removes the "passwordResets" edge to the PasswordReset entity by IDs.
+func (m *UserMutation) RemovePasswordResetIDs(ids ...uuid.UUID) {
+	if m.removedpasswordResets == nil {
+		m.removedpasswordResets = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.passwordResets, ids[i])
+		m.removedpasswordResets[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedPasswordResets returns the removed IDs of the "passwordResets" edge to the PasswordReset entity.
+func (m *UserMutation) RemovedPasswordResetsIDs() (ids []uuid.UUID) {
+	for id := range m.removedpasswordResets {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// PasswordResetsIDs returns the "passwordResets" edge IDs in the mutation.
+func (m *UserMutation) PasswordResetsIDs() (ids []uuid.UUID) {
+	for id := range m.passwordResets {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetPasswordResets resets all changes to the "passwordResets" edge.
+func (m *UserMutation) ResetPasswordResets() {
+	m.passwordResets = nil
+	m.clearedpasswordResets = false
+	m.removedpasswordResets = nil
+}
+
 // Where appends a list predicates to the UserMutation builder.
 func (m *UserMutation) Where(ps ...predicate.User) {
 	m.predicates = append(m.predicates, ps...)
@@ -5321,7 +5928,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.group != nil {
 		edges = append(edges, user.EdgeGroup)
 	}
@@ -5330,6 +5937,9 @@ func (m *UserMutation) AddedEdges() []string {
 	}
 	if m.recoveryCodes != nil {
 		edges = append(edges, user.EdgeRecoveryCodes)
+	}
+	if m.passwordResets != nil {
+		edges = append(edges, user.EdgePasswordResets)
 	}
 	return edges
 }
@@ -5354,18 +5964,27 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgePasswordResets:
+		ids := make([]ent.Value, 0, len(m.passwordResets))
+		for id := range m.passwordResets {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.removedpermissions != nil {
 		edges = append(edges, user.EdgePermissions)
 	}
 	if m.removedrecoveryCodes != nil {
 		edges = append(edges, user.EdgeRecoveryCodes)
+	}
+	if m.removedpasswordResets != nil {
+		edges = append(edges, user.EdgePasswordResets)
 	}
 	return edges
 }
@@ -5386,13 +6005,19 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgePasswordResets:
+		ids := make([]ent.Value, 0, len(m.removedpasswordResets))
+		for id := range m.removedpasswordResets {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.clearedgroup {
 		edges = append(edges, user.EdgeGroup)
 	}
@@ -5401,6 +6026,9 @@ func (m *UserMutation) ClearedEdges() []string {
 	}
 	if m.clearedrecoveryCodes {
 		edges = append(edges, user.EdgeRecoveryCodes)
+	}
+	if m.clearedpasswordResets {
+		edges = append(edges, user.EdgePasswordResets)
 	}
 	return edges
 }
@@ -5415,6 +6043,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedpermissions
 	case user.EdgeRecoveryCodes:
 		return m.clearedrecoveryCodes
+	case user.EdgePasswordResets:
+		return m.clearedpasswordResets
 	}
 	return false
 }
@@ -5442,6 +6072,9 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgeRecoveryCodes:
 		m.ResetRecoveryCodes()
+		return nil
+	case user.EdgePasswordResets:
+		m.ResetPasswordResets()
 		return nil
 	}
 	return fmt.Errorf("unknown User edge %s", name)

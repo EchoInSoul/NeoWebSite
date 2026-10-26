@@ -47,6 +47,7 @@ func (User) Edges() []ent.Edge {
 		edge.From("group", Group.Type).Ref("users").Unique().Required().Field("group_id"),
 		edge.To("permissions", UserPermission.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("recoveryCodes", RecoveryCode.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("passwordResets", PasswordReset.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 	}
 }
 

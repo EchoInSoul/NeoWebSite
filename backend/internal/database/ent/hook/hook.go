@@ -44,6 +44,18 @@ func (f GroupPermissionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GroupPermissionMutation", m)
 }
 
+// The PasswordResetFunc type is an adapter to allow the use of ordinary
+// function as PasswordReset mutator.
+type PasswordResetFunc func(context.Context, *ent.PasswordResetMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PasswordResetFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PasswordResetMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PasswordResetMutation", m)
+}
+
 // The PendingRegistrationFunc type is an adapter to allow the use of ordinary
 // function as PendingRegistration mutator.
 type PendingRegistrationFunc func(context.Context, *ent.PendingRegistrationMutation) (ent.Value, error)

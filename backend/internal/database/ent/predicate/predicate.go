@@ -15,6 +15,9 @@ type Group func(*sql.Selector)
 // GroupPermission is the predicate function for grouppermission builders.
 type GroupPermission func(*sql.Selector)
 
+// PasswordReset is the predicate function for passwordreset builders.
+type PasswordReset func(*sql.Selector)
+
 // PendingRegistration is the predicate function for pendingregistration builders.
 type PendingRegistration func(*sql.Selector)
 

@@ -59,9 +59,11 @@ type UserEdges struct {
 	Permissions []*UserPermission `json:"permissions,omitempty"`
 	// RecoveryCodes holds the value of the recoveryCodes edge.
 	RecoveryCodes []*RecoveryCode `json:"recoveryCodes,omitempty"`
+	// PasswordResets holds the value of the passwordResets edge.
+	PasswordResets []*PasswordReset `json:"passwordResets,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 }
 
 // GroupOrErr returns the Group value or an error if the edge
@@ -91,6 +93,15 @@ func (e UserEdges) RecoveryCodesOrErr() ([]*RecoveryCode, error) {
 		return e.RecoveryCodes, nil
 	}
 	return nil, &NotLoadedError{edge: "recoveryCodes"}
+}
+
+// PasswordResetsOrErr returns the PasswordResets value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) PasswordResetsOrErr() ([]*PasswordReset, error) {
+	if e.loadedTypes[3] {
+		return e.PasswordResets, nil
+	}
+	return nil, &NotLoadedError{edge: "passwordResets"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -236,6 +247,11 @@ func (_m *User) QueryPermissions() *UserPermissionQuery {
 // QueryRecoveryCodes queries the "recoveryCodes" edge of the User entity.
 func (_m *User) QueryRecoveryCodes() *RecoveryCodeQuery {
 	return NewUserClient(_m.config).QueryRecoveryCodes(_m)
+}
+
+// QueryPasswordResets queries the "passwordResets" edge of the User entity.
+func (_m *User) QueryPasswordResets() *PasswordResetQuery {
+	return NewUserClient(_m.config).QueryPasswordResets(_m)
 }
 
 // Update returns a builder for updating this User.

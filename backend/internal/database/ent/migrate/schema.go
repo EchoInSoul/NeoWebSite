@@ -74,6 +74,40 @@ var (
 			},
 		},
 	}
+	// PasswordResetsColumns holds the columns for the "password_resets" table.
+	PasswordResetsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "token_hash", Type: field.TypeString, Unique: true},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeUUID},
+	}
+	// PasswordResetsTable holds the schema information for the "password_resets" table.
+	PasswordResetsTable = &schema.Table{
+		Name:       "password_resets",
+		Columns:    PasswordResetsColumns,
+		PrimaryKey: []*schema.Column{PasswordResetsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "password_resets_users_passwordResets",
+				Columns:    []*schema.Column{PasswordResetsColumns[4]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "passwordreset_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{PasswordResetsColumns[4]},
+			},
+			{
+				Name:    "passwordreset_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{PasswordResetsColumns[2]},
+			},
+		},
+	}
 	// PendingRegistrationsColumns holds the columns for the "pending_registrations" table.
 	PendingRegistrationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -243,6 +277,7 @@ var (
 		CaptchaChallengesTable,
 		GroupsTable,
 		GroupPermissionsTable,
+		PasswordResetsTable,
 		PendingRegistrationsTable,
 		RecoveryCodesTable,
 		SessionsTable,
@@ -254,6 +289,7 @@ var (
 
 func init() {
 	GroupPermissionsTable.ForeignKeys[0].RefTable = GroupsTable
+	PasswordResetsTable.ForeignKeys[0].RefTable = UsersTable
 	RecoveryCodesTable.ForeignKeys[0].RefTable = UsersTable
 	UsersTable.ForeignKeys[0].RefTable = GroupsTable
 	UserPermissionsTable.ForeignKeys[0].RefTable = UsersTable

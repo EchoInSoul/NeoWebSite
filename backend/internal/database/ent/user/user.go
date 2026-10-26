@@ -47,6 +47,8 @@ const (
 	EdgePermissions = "permissions"
 	// EdgeRecoveryCodes holds the string denoting the recoverycodes edge name in mutations.
 	EdgeRecoveryCodes = "recoveryCodes"
+	// EdgePasswordResets holds the string denoting the passwordresets edge name in mutations.
+	EdgePasswordResets = "passwordResets"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// GroupTable is the table that holds the group relation/edge.
@@ -70,6 +72,13 @@ const (
 	RecoveryCodesInverseTable = "recovery_codes"
 	// RecoveryCodesColumn is the table column denoting the recoveryCodes relation/edge.
 	RecoveryCodesColumn = "user_id"
+	// PasswordResetsTable is the table that holds the passwordResets relation/edge.
+	PasswordResetsTable = "password_resets"
+	// PasswordResetsInverseTable is the table name for the PasswordReset entity.
+	// It exists in this package in order to avoid circular dependency with the "passwordreset" package.
+	PasswordResetsInverseTable = "password_resets"
+	// PasswordResetsColumn is the table column denoting the passwordResets relation/edge.
+	PasswordResetsColumn = "user_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -230,6 +239,20 @@ func ByRecoveryCodes(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newRecoveryCodesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByPasswordResetsCount orders the results by passwordResets count.
+func ByPasswordResetsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPasswordResetsStep(), opts...)
+	}
+}
+
+// ByPasswordResets orders the results by passwordResets terms.
+func ByPasswordResets(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPasswordResetsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newGroupStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -249,5 +272,12 @@ func newRecoveryCodesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(RecoveryCodesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, RecoveryCodesTable, RecoveryCodesColumn),
+	)
+}
+func newPasswordResetsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PasswordResetsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PasswordResetsTable, PasswordResetsColumn),
 	)
 }

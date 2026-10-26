@@ -18,6 +18,8 @@ type Tx struct {
 	Group *GroupClient
 	// GroupPermission is the client for interacting with the GroupPermission builders.
 	GroupPermission *GroupPermissionClient
+	// PasswordReset is the client for interacting with the PasswordReset builders.
+	PasswordReset *PasswordResetClient
 	// PendingRegistration is the client for interacting with the PendingRegistration builders.
 	PendingRegistration *PendingRegistrationClient
 	// RecoveryCode is the client for interacting with the RecoveryCode builders.
@@ -164,6 +166,7 @@ func (tx *Tx) init() {
 	tx.CaptchaChallenge = NewCaptchaChallengeClient(tx.config)
 	tx.Group = NewGroupClient(tx.config)
 	tx.GroupPermission = NewGroupPermissionClient(tx.config)
+	tx.PasswordReset = NewPasswordResetClient(tx.config)
 	tx.PendingRegistration = NewPendingRegistrationClient(tx.config)
 	tx.RecoveryCode = NewRecoveryCodeClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)

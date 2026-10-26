@@ -7,6 +7,7 @@ import (
 	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/schema"
@@ -96,6 +97,20 @@ func init() {
 	grouppermissionDescID := grouppermissionFields[0].Descriptor()
 	// grouppermission.DefaultID holds the default value on creation for the id field.
 	grouppermission.DefaultID = grouppermissionDescID.Default.(func() uuid.UUID)
+	passwordresetFields := schema.PasswordReset{}.Fields()
+	_ = passwordresetFields
+	// passwordresetDescTokenHash is the schema descriptor for token_hash field.
+	passwordresetDescTokenHash := passwordresetFields[2].Descriptor()
+	// passwordreset.TokenHashValidator is a validator for the "token_hash" field. It is called by the builders before save.
+	passwordreset.TokenHashValidator = passwordresetDescTokenHash.Validators[0].(func(string) error)
+	// passwordresetDescCreatedAt is the schema descriptor for created_at field.
+	passwordresetDescCreatedAt := passwordresetFields[4].Descriptor()
+	// passwordreset.DefaultCreatedAt holds the default value on creation for the created_at field.
+	passwordreset.DefaultCreatedAt = passwordresetDescCreatedAt.Default.(func() time.Time)
+	// passwordresetDescID is the schema descriptor for id field.
+	passwordresetDescID := passwordresetFields[0].Descriptor()
+	// passwordreset.DefaultID holds the default value on creation for the id field.
+	passwordreset.DefaultID = passwordresetDescID.Default.(func() uuid.UUID)
 	pendingregistrationFields := schema.PendingRegistration{}.Fields()
 	_ = pendingregistrationFields
 	// pendingregistrationDescEmail is the schema descriptor for email field.

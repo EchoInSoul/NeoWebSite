@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 	"website/backend/internal/database/ent/group"
+	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/user"
 	"website/backend/internal/database/ent/userpermission"
@@ -224,6 +225,21 @@ func (_c *UserCreate) AddRecoveryCodes(v ...*RecoveryCode) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddRecoveryCodeIDs(ids...)
+}
+
+// AddPasswordResetIDs adds the "passwordResets" edge to the PasswordReset entity by IDs.
+func (_c *UserCreate) AddPasswordResetIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddPasswordResetIDs(ids...)
+	return _c
+}
+
+// AddPasswordResets adds the "passwordResets" edges to the PasswordReset entity.
+func (_c *UserCreate) AddPasswordResets(v ...*PasswordReset) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPasswordResetIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -458,6 +474,22 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(recoverycode.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PasswordResetsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PasswordResetsTable,
+			Columns: []string{user.PasswordResetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {
