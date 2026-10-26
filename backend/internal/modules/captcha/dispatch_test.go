@@ -2,11 +2,13 @@ package captcha
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"website/backend/internal/common/ratelimit"
 	"website/backend/internal/database"
+	"website/backend/internal/database/ent/settingvalue"
 	"website/backend/internal/modules/captcha/builtin"
 	"website/backend/internal/modules/captcha/turnstile"
 	"website/backend/internal/modules/settings"
@@ -94,6 +96,113 @@ func TestDispatchVerifyRoutesTurnstileToVerifier(t *testing.T) {
 	assertErrorCode(t, service.Verify(ctx, "login", "token", "1.2.3.4"), "captcha_failed")
 }
 
+func TestChallengeFailsWhenModeRowMissing(t *testing.T) {
+	db := testDB(t)
+	settingsSvc := dispatchSettings(t, db)
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaMode(t, settingsSvc, "slide")
+
+	ctx := context.Background()
+	deleted, err := db.Client.SettingValue.Delete().
+		Where(settingvalue.SettingGroupEQ("captcha"), settingvalue.NameEQ("captcha_mode")).
+		Exec(ctx)
+	if err != nil {
+		t.Fatalf("delete mode row: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("deleted mode rows = %d, want 1", deleted)
+	}
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		updated, err := db.Client.SettingValue.Update().
+			Where(settingvalue.SettingGroupEQ("captcha"), settingvalue.NameEQ("captcha_mode")).
+			SetValue([]byte(`"slide"`)).
+			Save(cleanupCtx)
+		if err != nil {
+			t.Fatalf("restore mode row: %v", err)
+		}
+		if updated > 0 {
+			return
+		}
+		if _, err := db.Client.SettingValue.Create().
+			SetSettingGroup("captcha").
+			SetName("captcha_mode").
+			SetValue([]byte(`"slide"`)).
+			Save(cleanupCtx); err != nil {
+			t.Fatalf("recreate mode row: %v", err)
+		}
+	})
+
+	builtinService, err := builtin.NewWithPolicies(db, settingsSvc, ratelimit.New(), builtin.DefaultPolicies())
+	if err != nil {
+		t.Fatalf("builtin.NewWithPolicies: %v", err)
+	}
+	service := newService(settingsSvc, nil, builtinService)
+
+	_, err = service.Challenge(ctx, "login", "1.2.3.4")
+	assertErrorCode(t, err, "service_unavailable")
+}
+
+func TestChallengeFailsWhenModeValueInvalid(t *testing.T) {
+	db := testDB(t)
+	settingsSvc := dispatchSettings(t, db)
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
+
+	ctx := context.Background()
+	if _, err := db.Client.SettingValue.Update().
+		Where(settingvalue.SettingGroupEQ("captcha"), settingvalue.NameEQ("captcha_mode")).
+		SetValue([]byte(`"foo"`)).
+		Save(ctx); err != nil {
+		t.Fatalf("write bad mode row: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = settingsSvc.SetString(context.Background(), "captcha", "captcha_mode", "slide")
+	})
+
+	builtinService, err := builtin.NewWithPolicies(db, settingsSvc, ratelimit.New(), builtin.DefaultPolicies())
+	if err != nil {
+		t.Fatalf("builtin.NewWithPolicies: %v", err)
+	}
+	service := newService(settingsSvc, nil, builtinService)
+
+	_, err = service.Challenge(ctx, "login", "1.2.3.4")
+	assertErrorCode(t, err, "internal_error")
+}
+
+func TestChallengeSlideUnchanged(t *testing.T) {
+	db := testDB(t)
+	settingsSvc := dispatchSettings(t, db)
+	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaMode(t, settingsSvc, "slide")
+
+	builtinService, err := builtin.NewWithPolicies(db, settingsSvc, ratelimit.New(), builtin.DefaultPolicies())
+	if err != nil {
+		t.Fatalf("builtin.NewWithPolicies: %v", err)
+	}
+	service := newService(settingsSvc, nil, builtinService)
+
+	challenge, err := service.Challenge(context.Background(), "login", "1.2.3.4")
+	if err != nil {
+		t.Fatalf("Challenge: %v", err)
+	}
+	deleteChallenge(t, db, challenge.ID)
+
+	if !strings.HasPrefix(challenge.TileImage, "data:image/png;base64,") {
+		t.Fatalf("tile image = %.40q", challenge.TileImage)
+	}
+	if challenge.PromptImage != "" || challenge.PromptText != "" || challenge.ExpectedClicks != 0 {
+		t.Fatalf("click fields leaked into slide response: %+v", challenge)
+	}
+
+	dots := challengeDots(t, db, challenge.ID)
+	if len(dots) != 1 {
+		t.Fatalf("stored dots = %d, want 1", len(dots))
+	}
+	if got := challengePromptText(t, db, challenge.ID); got != "" {
+		t.Fatalf("stored prompt text = %q, want empty", got)
+	}
+}
+
 func TestDispatchVerifyRoutesBuiltin(t *testing.T) {
 	db := testDB(t)
 	settingsSvc := dispatchSettings(t, db)
@@ -112,8 +221,8 @@ func TestDispatchVerifyRoutesBuiltin(t *testing.T) {
 	}
 	deleteChallenge(t, db, challenge.ID)
 
-	x, y := challengeAnswer(t, db, challenge.ID)
-	solved, err := service.Solve(ctx, challenge.ID, x, y)
+	dots := challengeDots(t, db, challenge.ID)
+	solved, err := service.Solve(ctx, challenge.ID, []builtin.Point{{X: dots[0].X, Y: dots[0].Y}})
 	if err != nil {
 		t.Fatalf("Solve: %v", err)
 	}

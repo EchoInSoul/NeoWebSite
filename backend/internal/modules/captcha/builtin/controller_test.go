@@ -32,7 +32,7 @@ func newChallengeRouteTestApp(t *testing.T, db *database.Database, policies Poli
 	t.Helper()
 
 	settingsSvc := newTestSettings(t, db)
-	service := newService(settingsSvc, newRepository(db), mustGenerator(t), ratelimit.New(), policies)
+	service := newService(settingsSvc, newRepository(db), mustGenerator(t), mustClickGenerator(t), ratelimit.New(), policies)
 	controller := NewController(service)
 
 	gin.SetMode(gin.TestMode)
@@ -80,7 +80,7 @@ func decodeError(t *testing.T, data []byte) routeErrorBody {
 func TestChallengeRouteRequiresJSON(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaSettings(t, settingsSvc, true, "builtin", modeSlide)
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "text/plain", `{"scope":"login"}`)
 	if response.StatusCode != http.StatusBadRequest {
@@ -94,7 +94,7 @@ func TestChallengeRouteRequiresJSON(t *testing.T) {
 func TestChallengeRouteCreatesChallenge(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaSettings(t, settingsSvc, true, "builtin", modeSlide)
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "application/json", `{"scope":"login"}`)
 	if response.StatusCode != http.StatusCreated {
@@ -124,7 +124,7 @@ func TestChallengeRouteCreatesChallenge(t *testing.T) {
 func TestChallengeRouteRejectsUnknownScope(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaSettings(t, settingsSvc, true, "builtin", modeSlide)
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "application/json", `{"scope":"signup"}`)
 	if response.StatusCode != http.StatusBadRequest {
@@ -150,7 +150,7 @@ func TestChallengeRouteRejectsWhenInactive(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			setCaptchaSettings(t, settingsSvc, tc.enabled, tc.provider)
+			setCaptchaSettings(t, settingsSvc, tc.enabled, tc.provider, modeSlide)
 			response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "application/json", `{"scope":"login"}`)
 			if response.StatusCode != http.StatusForbidden {
 				t.Fatalf("status = %d, want 403 (%s)", response.StatusCode, data)
@@ -167,7 +167,7 @@ func TestChallengeRouteRateLimited(t *testing.T) {
 	policies := DefaultPolicies()
 	policies.ChallengeLimit = 1
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, policies)
-	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaSettings(t, settingsSvc, true, "builtin", modeSlide)
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "application/json", `{"scope":"login"}`)
 	if response.StatusCode != http.StatusCreated {
@@ -194,7 +194,7 @@ func TestChallengeRouteRateLimited(t *testing.T) {
 func TestSolveRouteRejectsMalformedID(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaSettings(t, settingsSvc, true, "builtin", modeSlide)
 
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges/not-a-uuid/solutions", "application/json", `{"x":1,"y":2}`)
 	if response.StatusCode != http.StatusBadRequest {
@@ -209,9 +209,9 @@ func TestSolveRouteRejectsMalformedID(t *testing.T) {
 func TestSolveRouteRejectsMissingAndNegativeCoordinates(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaSettings(t, settingsSvc, true, "builtin", modeSlide)
 
-	challenge := createChallengeViaRoute(t, ts, db)
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeSlide)
 	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
 
 	cases := []struct {
@@ -240,9 +240,9 @@ func TestSolveRouteRejectsMissingAndNegativeCoordinates(t *testing.T) {
 func TestSolveRouteInvalidInputKeepsChallengePending(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaSettings(t, settingsSvc, true, "builtin", modeSlide)
 
-	challenge := createChallengeViaRoute(t, ts, db)
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeSlide)
 	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
 
 	response, _ := postJSONBody(t, endpoint, "application/json", `{"x":-1,"y":2}`)
@@ -250,8 +250,8 @@ func TestSolveRouteInvalidInputKeepsChallengePending(t *testing.T) {
 		t.Fatalf("invalid status = %d, want 400", response.StatusCode)
 	}
 
-	x, y := challengeAnswer(t, db, challenge.ID)
-	response, data := postJSONBody(t, endpoint, "application/json", `{"x":`+strconv.Itoa(x)+`,"y":`+strconv.Itoa(y)+`}`)
+	answer := challengeAnswer(t, db, challenge.ID)
+	response, data := postJSONBody(t, endpoint, "application/json", `{"x":`+strconv.Itoa(answer[0].X)+`,"y":`+strconv.Itoa(answer[0].Y)+`}`)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("valid status = %d, want 200 (%s)", response.StatusCode, data)
 	}
@@ -260,9 +260,9 @@ func TestSolveRouteInvalidInputKeepsChallengePending(t *testing.T) {
 func TestSolveRouteWrongAnswer(t *testing.T) {
 	db := testDB(t)
 	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
-	setCaptchaSettings(t, settingsSvc, true, "builtin")
+	setCaptchaSettings(t, settingsSvc, true, "builtin", modeSlide)
 
-	challenge := createChallengeViaRoute(t, ts, db)
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeSlide)
 	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
 
 	response, data := postJSONBody(t, endpoint, "application/json", `{"x":1,"y":1}`)
@@ -274,8 +274,8 @@ func TestSolveRouteWrongAnswer(t *testing.T) {
 		t.Fatalf("error = %+v, want captcha_failed param nil", body)
 	}
 
-	x, y := challengeAnswer(t, db, challenge.ID)
-	response, data = postJSONBody(t, endpoint, "application/json", `{"x":`+strconv.Itoa(x)+`,"y":`+strconv.Itoa(y)+`}`)
+	answer := challengeAnswer(t, db, challenge.ID)
+	response, data = postJSONBody(t, endpoint, "application/json", `{"x":`+strconv.Itoa(answer[0].X)+`,"y":`+strconv.Itoa(answer[0].Y)+`}`)
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("solved after wrong answer status = %d, want 400 (%s)", response.StatusCode, data)
 	}
@@ -284,9 +284,216 @@ func TestSolveRouteWrongAnswer(t *testing.T) {
 	}
 }
 
-func createChallengeViaRoute(t *testing.T, ts *httptest.Server, db *database.Database) ChallengeResponse {
+func TestChallengeRouteClickShape(t *testing.T) {
+	db := testDB(t)
+	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
+
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeClick)
+
+	if !strings.HasPrefix(challenge.PromptImage, "data:image/png;base64,") {
+		t.Fatalf("prompt image = %.40q", challenge.PromptImage)
+	}
+	if challenge.PromptText == "" {
+		t.Fatal("prompt text is empty")
+	}
+	if challenge.ExpectedClicks != 3 {
+		t.Fatalf("expected clicks = %d, want 3", challenge.ExpectedClicks)
+	}
+	if challenge.TileImage != "" {
+		t.Fatalf("tile image = %.40q, want empty for click mode", challenge.TileImage)
+	}
+	if !strings.HasPrefix(challenge.MasterImage, "data:image/jpeg;base64,") {
+		t.Fatalf("master image = %.40q", challenge.MasterImage)
+	}
+}
+
+func TestSolveRouteClickRequiresThreeClicks(t *testing.T) {
+	db := testDB(t)
+	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
+
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeClick)
+	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
+
+	for _, body := range []string{
+		`{"clicks":[{"x":10,"y":50},{"x":92,"y":80}]}`,
+		`{"clicks":[{"x":10,"y":50},{"x":92,"y":80},{"x":170,"y":110},{"x":200,"y":150}]}`,
+	} {
+		response, data := postJSONBody(t, endpoint, "application/json", body)
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (%s)", response.StatusCode, data)
+		}
+		if got := decodeError(t, data); got.Code != "invalid_request" || got.Param == nil || *got.Param != "clicks" {
+			t.Fatalf("error = %+v, want invalid_request param clicks", got)
+		}
+	}
+
+	response, data := postJSONBody(t, endpoint, "application/json", clickBody(t, challengeAnswer(t, db, challenge.ID)))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("valid status = %d, want 200 (%s)", response.StatusCode, data)
+	}
+}
+
+func TestSolveRouteClickCountCheckedBeforeLookup(t *testing.T) {
+	db := testDB(t)
+	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
+
+	setCaptchaSettings(t, settingsSvc, true, "builtin", modeClick)
+	missing := uuid.New()
+	endpoint := ts.URL + "/api/v1/captcha/challenges/" + missing.String() + "/solutions"
+
+	response, data := postJSONBody(t, endpoint, "application/json", `{"clicks":[{"x":10,"y":50},{"x":92,"y":80}]}`)
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (%s)", response.StatusCode, data)
+	}
+	if got := decodeError(t, data); got.Code != "invalid_request" || got.Param == nil || *got.Param != "clicks" {
+		t.Fatalf("error = %+v, want invalid_request param clicks", got)
+	}
+}
+
+func TestSolveRouteClickRejectsMalformedClicks(t *testing.T) {
+	db := testDB(t)
+	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
+
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeClick)
+	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
+
+	for _, body := range []string{
+		`{"clicks":[{"y":50},{"x":92,"y":80},{"x":170,"y":110}]}`,
+		`{"clicks":[{"x":10},{"x":92,"y":80},{"x":170,"y":110}]}`,
+		`{"clicks":[{"x":-1,"y":50},{"x":92,"y":80},{"x":170,"y":110}]}`,
+		`{"clicks":[{"x":10,"y":-5},{"x":92,"y":80},{"x":170,"y":110}]}`,
+	} {
+		response, data := postJSONBody(t, endpoint, "application/json", body)
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (%s)", response.StatusCode, data)
+		}
+		if got := decodeError(t, data); got.Code != "invalid_request" || got.Param == nil || *got.Param != "clicks" {
+			t.Fatalf("error = %+v, want invalid_request param clicks", got)
+		}
+	}
+
+	response, data := postJSONBody(t, endpoint, "application/json", clickBody(t, challengeAnswer(t, db, challenge.ID)))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("valid status = %d, want 200 (%s)", response.StatusCode, data)
+	}
+}
+
+func TestSolveRouteClickRejectsMissingClicks(t *testing.T) {
+	db := testDB(t)
+	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
+
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeClick)
+	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
+
+	response, data := postJSONBody(t, endpoint, "application/json", `{}`)
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (%s)", response.StatusCode, data)
+	}
+	if got := decodeError(t, data); got.Code != "invalid_request" || got.Param == nil || *got.Param != "x" {
+		t.Fatalf("error = %+v, want invalid_request param x", got)
+	}
+}
+
+func TestSolveRouteRejectsMixedShapes(t *testing.T) {
+	db := testDB(t)
+	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
+
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeClick)
+	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
+
+	response, data := postJSONBody(t, endpoint, "application/json", `{"x":10,"y":50,"clicks":[{"x":10,"y":50},{"x":92,"y":80},{"x":170,"y":110}]}`)
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (%s)", response.StatusCode, data)
+	}
+	if got := decodeError(t, data); got.Code != "invalid_request" || got.Param == nil || *got.Param != "clicks" {
+		t.Fatalf("error = %+v, want invalid_request param clicks", got)
+	}
+}
+
+func TestSolveRouteSlideRejectsSingleClickShape(t *testing.T) {
+	db := testDB(t)
+	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
+
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeSlide)
+	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
+
+	answer := challengeAnswer(t, db, challenge.ID)
+	body, err := json.Marshal(map[string]any{"clicks": []Point{{X: answer[0].X, Y: answer[0].Y}}})
+	if err != nil {
+		t.Fatalf("marshal clicks: %v", err)
+	}
+
+	response, data := postJSONBody(t, endpoint, "application/json", string(body))
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (%s)", response.StatusCode, data)
+	}
+	if got := decodeError(t, data); got.Code != "invalid_request" || got.Param == nil || *got.Param != "clicks" {
+		t.Fatalf("error = %+v, want invalid_request param clicks", got)
+	}
+}
+
+func TestSolveRouteSlideRejectsClickShape(t *testing.T) {
+	db := testDB(t)
+	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
+
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeSlide)
+	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
+
+	response, data := postJSONBody(t, endpoint, "application/json", `{"clicks":[{"x":10,"y":50},{"x":92,"y":80},{"x":170,"y":110}]}`)
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (%s)", response.StatusCode, data)
+	}
+	if got := decodeError(t, data); got.Code != "invalid_request" || got.Param == nil || *got.Param != "clicks" {
+		t.Fatalf("error = %+v, want invalid_request param clicks", got)
+	}
+
+	answer := challengeAnswer(t, db, challenge.ID)
+	response, data = postJSONBody(t, endpoint, "application/json", `{"x":`+strconv.Itoa(answer[0].X)+`,"y":`+strconv.Itoa(answer[0].Y)+`}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("valid status = %d, want 200 (%s)", response.StatusCode, data)
+	}
+}
+
+func TestSolveRouteClickRejectsSinglePointShape(t *testing.T) {
+	db := testDB(t)
+	ts, settingsSvc := newChallengeRouteTestApp(t, db, DefaultPolicies())
+
+	challenge := createChallengeViaRoute(t, ts, db, settingsSvc, modeClick)
+	endpoint := ts.URL + "/api/v1/captcha/challenges/" + challenge.ID.String() + "/solutions"
+
+	dots := challengeAnswer(t, db, challenge.ID)
+	response, data := postJSONBody(t, endpoint, "application/json", `{"x":`+strconv.Itoa(dots[0].X)+`,"y":`+strconv.Itoa(dots[0].Y)+`}`)
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (%s)", response.StatusCode, data)
+	}
+	if got := decodeError(t, data); got.Code != "invalid_request" || got.Param == nil || *got.Param != "clicks" {
+		t.Fatalf("error = %+v, want invalid_request param clicks", got)
+	}
+
+	response, data = postJSONBody(t, endpoint, "application/json", clickBody(t, dots))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("valid status = %d, want 200 (%s)", response.StatusCode, data)
+	}
+}
+
+func clickBody(t *testing.T, dots []AnswerDot) string {
 	t.Helper()
 
+	clicks := make([]Point, 0, len(dots))
+	for _, dot := range dots {
+		clicks = append(clicks, Point{X: dot.X, Y: dot.Y})
+	}
+	encoded, err := json.Marshal(map[string]any{"clicks": clicks})
+	if err != nil {
+		t.Fatalf("marshal clicks: %v", err)
+	}
+	return string(encoded)
+}
+
+func createChallengeViaRoute(t *testing.T, ts *httptest.Server, db *database.Database, settingsSvc *settings.Service, mode string) ChallengeResponse {
+	t.Helper()
+
+	setCaptchaSettings(t, settingsSvc, true, "builtin", mode)
 	response, data := postJSONBody(t, ts.URL+"/api/v1/captcha/challenges", "application/json", `{"scope":"login"}`)
 	if response.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d, want 201 (%s)", response.StatusCode, data)

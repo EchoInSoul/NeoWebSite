@@ -52,6 +52,16 @@ func mustGenerator(t *testing.T) *generator {
 	return generator
 }
 
+func mustClickGenerator(t *testing.T) *clickGenerator {
+	t.Helper()
+
+	generator, err := newClickGenerator()
+	if err != nil {
+		t.Fatalf("newClickGenerator: %v", err)
+	}
+	return generator
+}
+
 func newTestSettings(t *testing.T, db *database.Database) *settings.Service {
 	t.Helper()
 
@@ -62,7 +72,7 @@ func newTestSettings(t *testing.T, db *database.Database) *settings.Service {
 	return module.Service
 }
 
-func setCaptchaSettings(t *testing.T, svc *settings.Service, enabled bool, provider string) {
+func setCaptchaSettings(t *testing.T, svc *settings.Service, enabled bool, provider, mode string) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -72,21 +82,29 @@ func setCaptchaSettings(t *testing.T, svc *settings.Service, enabled bool, provi
 	if err := svc.SetString(ctx, "captcha", "captcha_provider", provider); err != nil {
 		t.Fatalf("set provider: %v", err)
 	}
+	if err := svc.SetString(ctx, "captcha", "captcha_mode", mode); err != nil {
+		t.Fatalf("set mode: %v", err)
+	}
 
 	t.Cleanup(func() {
 		_ = svc.SetBool(context.Background(), "captcha", "captcha_enabled", false)
 		_ = svc.SetString(context.Background(), "captcha", "captcha_provider", "none")
+		_ = svc.SetString(context.Background(), "captcha", "captcha_mode", modeSlide)
 	})
 }
 
-func challengeAnswer(t *testing.T, db *database.Database, id uuid.UUID) (int, int) {
+func challengeAnswer(t *testing.T, db *database.Database, id uuid.UUID) []AnswerDot {
 	t.Helper()
 
 	row, err := db.Client.CaptchaChallenge.Get(context.Background(), id)
 	if err != nil {
 		t.Fatalf("read challenge: %v", err)
 	}
-	return row.AnswerX, row.AnswerY
+	dots, err := decodeAnswerDots(row.AnswerDots)
+	if err != nil {
+		t.Fatalf("decode answer dots: %v", err)
+	}
+	return dots
 }
 
 func deleteChallenge(t *testing.T, db *database.Database, id uuid.UUID) {
@@ -110,6 +128,16 @@ func newServiceHarness(t *testing.T, db *database.Database, policies Policies) (
 	t.Helper()
 
 	settingsSvc := newTestSettings(t, db)
-	service := newService(settingsSvc, newRepository(db), mustGenerator(t), ratelimit.New(), policies)
+	service := newService(settingsSvc, newRepository(db), mustGenerator(t), mustClickGenerator(t), ratelimit.New(), policies)
 	return service, settingsSvc
+}
+
+func challengePromptText(t *testing.T, db *database.Database, id uuid.UUID) string {
+	t.Helper()
+
+	row, err := db.Client.CaptchaChallenge.Get(context.Background(), id)
+	if err != nil {
+		t.Fatalf("read challenge: %v", err)
+	}
+	return row.PromptText
 }

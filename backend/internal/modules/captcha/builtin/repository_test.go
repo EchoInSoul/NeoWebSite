@@ -9,13 +9,25 @@ import (
 	"website/backend/internal/database/ent/captchachallenge"
 )
 
+func slideDots(x, y int) []AnswerDot {
+	return []AnswerDot{{X: x, Y: y, Width: 64, Height: 64}}
+}
+
+func clickDotsAt(x, y int) []AnswerDot {
+	return []AnswerDot{
+		{Text: "验", X: x, Y: y, Width: 30, Height: 32},
+		{Text: "证", X: x + 80, Y: y + 30, Width: 28, Height: 30},
+		{Text: "码", X: x + 160, Y: y + 60, Width: 31, Height: 32},
+	}
+}
+
 func TestChallengeRepositoryCreateAndFindPending(t *testing.T) {
 	db := testDB(t)
 	repo := newRepository(db)
 	ctx := context.Background()
 
 	now := time.Now()
-	id, err := repo.create(ctx, "login", 10, 20, now.Add(3*time.Minute))
+	id, err := repo.create(ctx, "login", "", slideDots(10, 20), now.Add(3*time.Minute))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -25,12 +37,45 @@ func TestChallengeRepositoryCreateAndFindPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("findPending: %v", err)
 	}
-	if rec.AnswerX != 10 || rec.AnswerY != 20 {
-		t.Fatalf("answer = (%d,%d), want (10,20)", rec.AnswerX, rec.AnswerY)
+	if len(rec.Dots) != 1 || rec.Dots[0].X != 10 || rec.Dots[0].Y != 20 {
+		t.Fatalf("answer = %+v, want [{10 20 64 64}]", rec.Dots)
+	}
+	if rec.PromptText != "" {
+		t.Fatalf("prompt text = %q, want empty", rec.PromptText)
 	}
 
 	if _, err := repo.findPending(ctx, id, now.Add(4*time.Minute)); !errors.Is(err, errChallengeNotFound) {
 		t.Fatalf("expired findPending err = %v, want errChallengeNotFound", err)
+	}
+}
+
+func TestChallengeRepositoryFindPendingDecodesClickDots(t *testing.T) {
+	db := testDB(t)
+	repo := newRepository(db)
+	ctx := context.Background()
+
+	now := time.Now()
+	dots := clickDotsAt(10, 20)
+	id, err := repo.create(ctx, "register", "验 证 码", dots, now.Add(3*time.Minute))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Client.CaptchaChallenge.DeleteOneID(id).Exec(context.Background()) })
+
+	rec, err := repo.findPending(ctx, id, now)
+	if err != nil {
+		t.Fatalf("findPending: %v", err)
+	}
+	if rec.PromptText != "验 证 码" {
+		t.Fatalf("prompt text = %q, want 验 证 码", rec.PromptText)
+	}
+	if len(rec.Dots) != len(dots) {
+		t.Fatalf("dots = %d, want %d", len(rec.Dots), len(dots))
+	}
+	for i, dot := range dots {
+		if rec.Dots[i] != dot {
+			t.Fatalf("dots[%d] = %+v, want %+v", i, rec.Dots[i], dot)
+		}
 	}
 }
 
@@ -40,7 +85,7 @@ func TestChallengeRepositoryMarkSolvedIsSingleUse(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now()
-	id, err := repo.create(ctx, "login", 1, 2, now.Add(3*time.Minute))
+	id, err := repo.create(ctx, "login", "", slideDots(1, 2), now.Add(3*time.Minute))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -62,7 +107,7 @@ func TestChallengeRepositoryMarkSolvedIsSingleUse(t *testing.T) {
 		t.Fatalf("second markSolved = %d, want 0", n)
 	}
 
-	failedID, err := repo.create(ctx, "login", 3, 4, now.Add(3*time.Minute))
+	failedID, err := repo.create(ctx, "login", "", slideDots(3, 4), now.Add(3*time.Minute))
 	if err != nil {
 		t.Fatalf("create failed row: %v", err)
 	}
@@ -82,7 +127,7 @@ func TestChallengeRepositoryConsumeOnceAndScopeBound(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now()
-	id, err := repo.create(ctx, "login", 1, 2, now.Add(3*time.Minute))
+	id, err := repo.create(ctx, "login", "", slideDots(1, 2), now.Add(3*time.Minute))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -103,7 +148,7 @@ func TestChallengeRepositoryConsumeOnceAndScopeBound(t *testing.T) {
 		t.Fatalf("consume second = (%v,%v), want (false,nil)", ok, err)
 	}
 
-	expiredID, err := repo.create(ctx, "login", 5, 6, now.Add(3*time.Minute))
+	expiredID, err := repo.create(ctx, "login", "", slideDots(5, 6), now.Add(3*time.Minute))
 	if err != nil {
 		t.Fatalf("create expired row: %v", err)
 	}
@@ -128,11 +173,11 @@ func TestChallengeRepositoryDeleteExpired(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now()
-	expiredID, err := repo.create(ctx, "login", 1, 2, now.Add(-time.Minute))
+	expiredID, err := repo.create(ctx, "login", "", slideDots(1, 2), now.Add(-time.Minute))
 	if err != nil {
 		t.Fatalf("create expired: %v", err)
 	}
-	liveID, err := repo.create(ctx, "login", 3, 4, now.Add(time.Minute))
+	liveID, err := repo.create(ctx, "login", "", slideDots(3, 4), now.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("create live: %v", err)
 	}

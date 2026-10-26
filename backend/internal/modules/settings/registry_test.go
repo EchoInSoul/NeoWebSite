@@ -121,12 +121,13 @@ func TestBuiltinRegistryShape(t *testing.T) {
 		{name: "password_reset_enabled", typ: FieldTypeBool, def: false},
 	})
 
-	if len(reg.groups["captcha"]) != 4 {
-		t.Fatalf("captcha items = %d, want 4", len(reg.groups["captcha"]))
+	if len(reg.groups["captcha"]) != 5 {
+		t.Fatalf("captcha items = %d, want 5", len(reg.groups["captcha"]))
 	}
 	assertDefinitions(t, reg.groups["captcha"], []wantItem{
 		{name: "captcha_enabled", typ: FieldTypeBool, def: false, public: true},
 		{name: "captcha_provider", typ: FieldTypeString, def: "none", public: true},
+		{name: "captcha_mode", typ: FieldTypeString, def: "slide", public: true},
 		{name: "turnstile_site_key", typ: FieldTypeString, def: "", public: true},
 		{name: "turnstile_secret_key", typ: FieldTypeString, def: ""},
 	})
@@ -168,6 +169,7 @@ func TestBuiltinPublicAllowlist(t *testing.T) {
 	want := []string{
 		"auth.totp_enabled",
 		"captcha.captcha_enabled",
+		"captcha.captcha_mode",
 		"captcha.captcha_provider",
 		"captcha.turnstile_site_key",
 		"register.enabled",
@@ -406,6 +408,28 @@ func TestSplitListValue(t *testing.T) {
 		got := SplitListValue(tc.raw)
 		if !reflect.DeepEqual(got, tc.want) {
 			t.Fatalf("SplitListValue(%q) = %v, want %v", tc.raw, got, tc.want)
+		}
+	}
+}
+
+func TestValidateCaptchaGroup(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mode    string
+		touched bool
+		wantErr bool
+	}{
+		{"slide", "slide", true, false},
+		{"click", "click", true, false},
+		{"unknown value", "foo", true, true},
+		{"empty string", "", true, true},
+		{"uppercase slide", "Slide", true, true},
+		{"untouched invalid value", "foo", false, false},
+	} {
+		touched := map[string]bool{"captcha_mode": tc.touched}
+		err := validateCaptchaGroup(map[string]any{"captcha_mode": tc.mode}, touched)
+		if (err != nil) != tc.wantErr {
+			t.Fatalf("%s: err = %v, wantErr = %v", tc.name, err, tc.wantErr)
 		}
 	}
 }

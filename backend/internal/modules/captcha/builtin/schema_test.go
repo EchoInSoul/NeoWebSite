@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -12,10 +13,14 @@ func TestCaptchaChallengeSchema(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 
+	dots, err := json.Marshal(AnswerDots{Dots: []AnswerDot{{X: 12, Y: 34, Width: 64, Height: 64}}})
+	if err != nil {
+		t.Fatalf("marshal dots: %v", err)
+	}
+
 	created, err := db.Client.CaptchaChallenge.Create().
 		SetScope("login").
-		SetAnswerX(12).
-		SetAnswerY(34).
+		SetAnswerDots(dots).
 		SetExpiresAt(time.Now().Add(3 * time.Minute)).
 		Save(ctx)
 	if err != nil {
@@ -32,10 +37,13 @@ func TestCaptchaChallengeSchema(t *testing.T) {
 	if created.CreatedAt.IsZero() {
 		t.Fatal("created_at not set")
 	}
+	if created.PromptText != "" {
+		t.Fatalf("prompt_text = %q, want empty", created.PromptText)
+	}
 
 	hash := "h" + uniqueTag(t)
 	row, err := db.Client.CaptchaChallenge.Create().
-		SetScope("login").SetAnswerX(1).SetAnswerY(2).
+		SetScope("login").SetAnswerDots(dots).SetPromptText("验 证 码").
 		SetTokenHash(hash).SetExpiresAt(time.Now().Add(time.Minute)).
 		Save(ctx)
 	if err != nil {
@@ -44,7 +52,7 @@ func TestCaptchaChallengeSchema(t *testing.T) {
 	t.Cleanup(func() { _ = db.Client.CaptchaChallenge.DeleteOneID(row.ID).Exec(context.Background()) })
 
 	if _, err := db.Client.CaptchaChallenge.Create().
-		SetScope("login").SetAnswerX(1).SetAnswerY(2).
+		SetScope("login").SetAnswerDots(dots).
 		SetTokenHash(hash).SetExpiresAt(time.Now().Add(time.Minute)).
 		Save(ctx); !ent.IsConstraintError(err) {
 		t.Fatalf("duplicate token_hash err = %v, want constraint error", err)

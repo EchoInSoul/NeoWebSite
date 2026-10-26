@@ -47,7 +47,7 @@ func resetCaptchaSettings(t *testing.T, svc *settings.Service) {
 	t.Helper()
 
 	ctx := context.Background()
-	names := []string{"captcha_enabled", "captcha_provider", "turnstile_site_key", "turnstile_secret_key"}
+	names := []string{"captcha_enabled", "captcha_provider", "captcha_mode", "turnstile_site_key", "turnstile_secret_key"}
 	for _, name := range names {
 		if err := svc.ResetItem(ctx, "captcha", name); err != nil {
 			t.Fatalf("reset auth.%s: %v", name, err)

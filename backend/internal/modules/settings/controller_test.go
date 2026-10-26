@@ -473,10 +473,10 @@ func TestSettingsPublicGetAnonymously(t *testing.T) {
 		t.Fatalf("group = %v, want captcha", items[3]["group"])
 	}
 	captchaValues, ok := items[3]["values"].(map[string]any)
-	if !ok || len(captchaValues) != 3 {
-		t.Fatalf("public captcha values = %v, want the three public keys without the secret", items[3]["values"])
+	if !ok || len(captchaValues) != 4 {
+		t.Fatalf("public captcha values = %v, want the four public keys without the secret", items[3]["values"])
 	}
-	if captchaValues["captcha_enabled"] != false || captchaValues["captcha_provider"] != "none" || captchaValues["turnstile_site_key"] != "" {
+	if captchaValues["captcha_enabled"] != false || captchaValues["captcha_provider"] != "none" || captchaValues["captcha_mode"] != "slide" || captchaValues["turnstile_site_key"] != "" {
 		t.Fatalf("public captcha values = %v, want the disabled defaults", captchaValues)
 	}
 	if _, leaked := captchaValues["turnstile_secret_key"]; leaked {
@@ -619,11 +619,14 @@ func TestSettingsAdminPatchAuthRoundtrip(t *testing.T) {
 	if group != "captcha" {
 		t.Fatalf("group = %q, want captcha", group)
 	}
-	if len(values) != 4 {
-		t.Fatalf("captcha values = %v, want the four defaults", values)
+	if len(values) != 5 {
+		t.Fatalf("captcha values = %v, want the five defaults", values)
 	}
 	if values["captcha_provider"] != "none" {
 		t.Fatalf("captcha.captcha_provider = %v, want none", values["captcha_provider"])
+	}
+	if values["captcha_mode"] != "slide" {
+		t.Fatalf("captcha.captcha_mode = %v, want slide", values["captcha_mode"])
 	}
 	if values["turnstile_site_key"] != "" || values["turnstile_secret_key"] != "" {
 		t.Fatalf("turnstile keys = %v / %v, want empty", values["turnstile_site_key"], values["turnstile_secret_key"])
