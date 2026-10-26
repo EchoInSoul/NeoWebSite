@@ -293,6 +293,7 @@ ent 写法对照 `pending_registration.go`：`field.UUID("id", uuid.UUID{}).Defa
 - 服务器组件：`getPublicSettings()` + `!isPasswordResetEnabled` → `notFound()`；`instant = false`；metadata 标题 + `robots: {index:false, follow:false}`。
 - 表单：邮箱单字段，`autoComplete="email"`，用普通 `Input`（与注册页邮箱框一致）；客户端校验空值与基本格式。
 - 提交成功（202）：把表单替换成中性成功态「如果该邮箱已注册，重置邮件已发送」+ 返回登录链接；不出现重发按钮、不做倒计时。要再发一次就重新打开页面提交。
+  - **2026-10-27 实施后修订**：本条被用户实测反馈推翻——申请成功改为**先跳 `/login`、再在登录页弹 sonner**（与注册页同用的跨页标记机制），不再原地替换成功态。原因是在当前页 `toast` 后立刻客户端跳转会把提示带走；两个找回密码页面的外壳也一并改成与注册页逐值一致（居中「返回登录」链接 + 提交按钮转圈）。见 `docs/DEVLOG.md` 同日条目。
 - 错误：
   - 429：按钮倒计时（复用 `formatRetryDuration` / 登录页的 `retryRemaining` 写法）+ toast；
   - 503 `mail_unavailable`：toast「邮件服务不可用，请稍后再试」；
@@ -328,7 +329,7 @@ ent 写法对照 `pending_registration.go`：`field.UUID("id", uuid.UUID{}).Defa
 | `submitting` | 发送中… | Sending… |
 | `requiredEmail` | 请输入邮箱 | Enter your email |
 | `invalidEmail` | 邮箱格式不正确 | Invalid email address |
-| `sent` | 如果该邮箱已注册，重置邮件已发送，请查收 | If that email is registered, a reset email has been sent |
+| `sent` | 如果此用户存在，我们将发送一份重置链接 | If this user exists, we will send a reset link |
 | `backToLogin` | 返回登录 | Back to sign in |
 | `confirmTitle` | 设置新密码 | Set a new password |
 | `password` | 新密码 | New password |

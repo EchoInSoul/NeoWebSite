@@ -4,9 +4,9 @@
 
 ---
 
-## 2026-10-26 · 找回密码（邮件一次性链接）后端
+## 2026-10-26 · 找回密码（邮件一次性链接）
 
-**范围**：后端 `internal/common/apierror/apierror.go`（两个哨兵与状态映射）、新增 `internal/database/ent/schema/password_reset.go` 与迁移 `20261026150001_password_resets.sql`（含 `atlas.sum`）、新增能力模块 `internal/modules/passwordreset/{service,repository,token,ratelimit,email}.go` 及其五个测试文件、`internal/modules/mail/{controller.go,templates/password_reset.html,templates/password_reset.txt,controller_test.go}`、`internal/modules/auth/{controller.go,dto.go,module.go,repository.go,auth_test.go,password_reset_flow_test.go}`、`internal/modules/settings/{registry.go,registry_test.go,controller_test.go}`、`internal/app/app.go`、`backend/README.md`、API 规范 §3 与 §7.3；另加本条目。设计 `docs/superpowers/specs/2026-10-26-neoblog-password-reset-design.md`、计划 `docs/superpowers/plans/2026-10-26-neoblog-password-reset.md`（两份均仍未入库）。
+**范围**：后端 `internal/common/apierror/apierror.go`（两个哨兵与状态映射）、新增 `internal/database/ent/schema/password_reset.go` 与迁移 `20261026150001_password_resets.sql`（含 `atlas.sum`）、新增能力模块 `internal/modules/passwordreset/{service,repository,token,ratelimit,email}.go` 及其五个测试文件、`internal/modules/mail/{controller.go,templates/password_reset.html,templates/password_reset.txt,controller_test.go}`、`internal/modules/auth/{controller.go,dto.go,module.go,repository.go,auth_test.go,password_reset_flow_test.go}`、`internal/modules/settings/{registry.go,registry_test.go,controller_test.go}`、`internal/app/app.go`、`backend/README.md`、API 规范 §3 与 §7.3；前端 `lib/public-settings.ts`（`isPasswordResetEnabled`）、`app/login/{page.tsx,signin-view.tsx,signin-form.tsx}`（「忘记密码？」入口）、新增 `app/reset-password/{page.tsx,reset-request-form.tsx}` 与 `app/reset-password/confirm/{page.tsx,reset-confirm-form.tsx}`、新增 `hooks/use-password-reset-{request,confirm}.ts`、`app/console/settings/mail/mail-settings-form.tsx`（占位符清单加 `resetUrl`）、`messages/{zh-CN,en}.json`（`auth.signin.forgotPassword` + `auth.reset.*` 26 键、邮件模板标签与占位符提示）；另加本条目。设计 `docs/superpowers/specs/2026-10-26-neoblog-password-reset-design.md`、计划 `docs/superpowers/plans/2026-10-26-neoblog-password-reset.md`。
 
 **动机**：`auth.password_reset_enabled` 从 0.15 那轮起就是纯数据（后台有开关、后端零实现）。本轮按已批准的 spec 让它第一次真正生效：申请 → 邮件链接 → 确认页设新密码 → 全部旧会话作废。
 
@@ -22,17 +22,25 @@
 - **内置 `password_reset` 模板从「验证码」改成「链接」**，占位符 `{{resetUrl}}`、默认主题「密码重置」；数据里仍带一个空 `code`，让库里历史自定义正文的 `{{code}}` 渲染为空而不是 `<no value>`。
 - **本轮不接人机验证、不做重发按钮、不发「密码已修改」通知、不做审计表、不提版本号**（spec §11 非目标）。
 - **`user_id` 的唯一性写在 `index.Fields("user_id").Unique()` 而不是字段上的 `.Unique()`**：实施时实测——`user.go` 那边是复数边 `passwordResets`（O2M），ent 会**静默忽略**字段级 `.Unique()`，Atlas 生成的迁移里根本没有唯一索引，`ON CONFLICT (user_id)` 会在运行时报「没有匹配的唯一约束」。补成唯一索引后由 `TestPasswordResetIndexShape` 与 `TestPasswordResetRejectsSecondRowPerUser` 一起钉住。
-- **前端整段被用户砍掉**（原计划 Task 10-12：登录页「忘记密码？」入口、`/reset-password` 与 `/reset-password/confirm` 两个页面、`auth.reset.*` 文案、邮件设置页占位符）。后端这轮做完即自洽：两个端点可用、邮件里的链接指向一个**当前还不存在的**前端路径。
+- **前端**（先按用户口径只做后端，随后补上）：入口挂在凭据分支的密码框下方、2FA 那一步不挂；`/reset-password` 与 `/reset-password/confirm` 都是服务器组件，读公开设置后 `!isPasswordResetEnabled` 直接 `notFound()`；确认页 metadata 带 `referrer: "no-referrer"`，令牌只从 query 读进 props、**GET 渲染不发请求**，必须点「重置密码」才 POST。
+- **外壳与注册页逐值对齐**（用户点名要「和注册一样」）：`AuthFrame` + `h1` + `<div className="mt-6">` 包表单，卡片下方居中一行 `p.mt-5 flex items-center justify-center text-center text-sm text-muted-foreground` 放「返回登录」链接；提交按钮带 `aria-busy` 与 `LoaderCircle` 转圈，与 `signup-form.tsx` 同一写法。**没有自创提示文案**（注册页 footer 那句「已有账号？」是它自己的语义，这里只放链接）。
+- **成功提示一律「先跳转、再在目标页弹 sonner」**（用户实测反馈：原来在 `toast.success` 之后立刻 `router.push`，客户端一跳转那个 toast 就没了）：新增 `lib/password-reset-notice.ts` + `hooks/use-password-reset-notice.ts`，照 `signup-notice` 那对 sessionStorage 标记/消费机制，登录页 `SigninView` 里与 `useSignupNotice` 并排调用。申请页 202 → 落 `requested` 标记 → 跳 `/login` → 弹「如果该邮箱已注册…」；确认页 200 → 落 `done` 标记 → 跳 `/login` → 弹「密码已重置，请用新密码登录」。**申请页因此不再原地换中性成功态**（spec §9.2 原案被这次调整推翻，`sent` 状态与分支一并删除，不留死代码）。
+- **公开设置读不到时按「关闭」处理**（入口不显示、两个页面 404）——与 `isSignupOpen` 的 fail-open 方向相反，这是 spec §9.1 的刻意选择：后端不可用时宁可少一个入口，也不能给出一个必然 503 的表单。
+- **缺 token 用派生值而不是 effect 里 setState**：`missingToken` 由 props 直接算出，effect 只负责 toast。初版照计划写了 `setInvalidToken(true)` 在 effect 里，被 `react-hooks/set-state-in-effect` 判错；改成派生后，SSR 首屏就能出「链接无效或已过期 + 重新申请」，不用等水合。服务端回 `password_reset_invalid` 时才置拒绝态。
+- 提交成功（202）把整个表单替换成中性文案「如果该邮箱已注册，重置邮件已发送」+ 返回登录，**不做重发按钮、不做倒计时**；错误全走 sonner，不留内嵌红字行；429 复用 `formatRetryDuration` 的按钮倒计时写法。
+- 邮件设置页占位符清单加 `resetUrl`、**保留 `code`**（库里历史自定义正文可能还在用），标签与提示文案随之从「验证码/`{{code}}`」改成「密码重置/`{{resetUrl}}`」。
+- **人机验证这一轮仍然不接**：用户中途提出「找回密码也要人机验证」，我核出现状要动 scope 白名单（`builtin/service.go` 只认 `CaptchaScopeLogin` / `CaptchaScopeRegister`）、两个 DTO、服务注入与两个页面的弹窗，他随后自己收回（「先不接，先完成整体功能」），故 spec §2 D11 维持有效。真要接时按那条清单起步。
+- **申请成功的 toast 文案按用户要求改成「如果此用户存在，我们将发送一份重置链接」**（en 同步为 "If this user exists, we will send a reset link"），spec §9.4 的文案表一并更正；本条目「验证」段里引用的还是改动前实测到的那句旧文案，不改写。
 
-**验证**：新增 41 个 `passwordreset` 测试（表形状 6、令牌 2、仓库 7、申请 15、确认 11）+ 15 个 auth flow HTTP 测试（含开关 403、503 前置、旧会话 401、响应无 cookie、两条限流 429）+ 2 个 mail 模板测试并改写 1 个既有断言；`apierror` 哨兵计数 40 → 42；`settings` 公开白名单加 `auth.password_reset_enabled` 并改公开响应断言。全量 `scripts/test.sh ./...` = 22 个 `ok`、0 `FAIL`、退出码 0；`scripts/check.sh` 通过；`atlas migrate validate` 通过；迁移已 apply 到 `neoblog` 与 `neoblog_test` 两个库。**未做**：真实收信、浏览器点按与运行期验收（交用户）。
+**验证**：新增 41 个 `passwordreset` 测试（表形状 6、令牌 2、仓库 7、申请 15、确认 11）+ 15 个 auth flow HTTP 测试（含开关 403、503 前置、旧会话 401、响应无 cookie、两条限流 429）+ 2 个 mail 模板测试并改写 1 个既有断言；`apierror` 哨兵计数 40 → 42；`settings` 公开白名单加 `auth.password_reset_enabled` 并改公开响应断言。全量 `scripts/test.sh ./...` = 22 个 `ok`、0 `FAIL`、退出码 0；`scripts/check.sh` 通过；`atlas migrate validate` 通过；迁移已 apply 到 `neoblog` 与 `neoblog_test` 两个库。前端：`npx tsc --noEmit` 0 错、`npx eslint`（改动文件与两个新目录）0 问题、`npx prettier --check` 通过。**浏览器实测**（开发库该开关本就是开着的，`site.url=http://localhost:3000`）：登录页密码框下方渲染出「忘记密码？」且 `href="/reset-password"`（14px、右对齐到字段列）；`/reset-password` 200、填未知邮箱提交回 202 后**客户端跳到 `/login`，toast 在登录页弹出**（实测 toast DOM = 「如果该邮箱已注册，重置邮件已发送，请查收」，标记同时被消费）；确认页外壳与注册页逐值一致（`h1` + `.mt-6` 包表单 + 卡片下方居中「返回登录」），提交瞬间 `LoaderCircle` 转圈实测出现（`loaderSeen=true`），伪造 token 提交 → toast「链接无效或已过期」且表单换成带「重新申请」链接的无效态；`done` 标记经客户端跳转落到登录页实测弹出「密码已重置，请用新密码登录」；两次密码填成不一致时**只弹「两次输入的密码不一致」且一次请求都不发**；不带 token 直接打开确认页，首屏 SSR 就渲染无效态。接口经 3000 rewrite 实测：未知邮箱 202 `{}`、非法邮箱 400 `param:"email"`、伪造 token 400 `password_reset_invalid` `param:"token"`、空 `new_password` 400 `param:"new_password"`。**仍未实测**：真实收到邮件并点开、开关关闭时两个页面确实 404、429 的按钮倒计时读数。
 
 **已知缺口**：
-- 前端没有入口也没有两个页面，公开布尔暂无消费者；重置链接指向 `/reset-password/confirm?token=...`，在当前前端上是 404。
+- 开关关闭时两个页面应 404 这条只在代码层成立（`notFound()`），本轮没为了验证去翻开发库那个共享的布尔；登录页入口的隐藏同理。
 - 「待二段」会话无法精确吊销（spec §2 D9）：重置密码后，只过了第一段密码、还没走二段的会话仍能用二因子完成登录。
 - 申请与确认都还没有人机验证；限流计数在单实例进程内，重启清零。
 - 库里既有的 `password_reset_subject` / `password_reset_body` 自定义正文若写死了 `{{code}}`，现在渲染出来是空串——需要管理员自己去改成 `{{resetUrl}}`（内置模板已改）。
 
-**提交状态**：**未提交**，改动全部留在工作区待用户检查（按计划的全局约束「绝不提交」执行）。
+**提交状态**：后端部分已按用户要求分 8 笔入库（错误码 → 表与迁移 → 邮件模板 → 能力模块 → 两个接口 → 改密/改邮箱清令牌 → 公开开关 → 文档），每笔单独 `go build` 通过、对应测试单独跑绿，未推远端。**前端整段（`lib/public-settings.ts`、登录页三件、两个页面与两个 hook、邮件设置页占位符、两语言文案）以及本条目的这次更正尚未提交**，留在工作区等用户检查。
 
 ---
 
