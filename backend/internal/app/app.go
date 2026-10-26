@@ -27,6 +27,7 @@ import (
 	"website/backend/internal/modules/health"
 	"website/backend/internal/modules/login"
 	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/passwordreset"
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
@@ -87,7 +88,8 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	loginService := login.New(db, sessionService, limiter, captchaService)
 	registrationService := registration.New(db, settingsModule.Service, limiter, mailModule.Mailer, captchaService)
 	twoFactorService := twofactor.New(db, sessionService, settingsModule.Service, limiter, cfg.TOTPEncryptionKey)
-	authModule := auth.New(db, sessionService, settingsModule.Service, loginService, registrationService, twoFactorService)
+	passwordResetService := passwordreset.New(db, settingsModule.Service, limiter, mailModule.Mailer)
+	authModule := auth.New(db, sessionService, settingsModule.Service, loginService, registrationService, twoFactorService, passwordResetService)
 	authModule.Register(api)
 	captchaModule.Register(api)
 	settingsModule.Register(api)

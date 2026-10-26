@@ -29,6 +29,15 @@ type EmailVerificationRequest struct {
 	Token string `json:"token"`
 }
 
+type PasswordResetRequest struct {
+	Email string `json:"email"`
+}
+
+type PasswordResetConfirmationRequest struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
+}
+
 type ProfileUpdateRequest struct {
 	Nickname *string `json:"nickname"`
 	Email    *string `json:"email"`

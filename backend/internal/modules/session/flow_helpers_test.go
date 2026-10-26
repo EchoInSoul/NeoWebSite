@@ -27,6 +27,7 @@ import (
 	"website/backend/internal/modules/captcha"
 	"website/backend/internal/modules/login"
 	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/passwordreset"
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
@@ -241,7 +242,7 @@ func newTestAppWithSessionsAndSettings(t *testing.T, db *database.Database) (*ht
 	loginService := login.NewWithPolicies(db, sessionService, ratelimit.New(), login.Policies{}, captchaService)
 	registrationService := registration.NewWithPolicies(db, settingsModule.Service, ratelimit.New(), registration.Policies{}, &fakeMailer{configured: true}, captchaService)
 	twoFactorService := twofactor.New(db, sessionService, settingsModule.Service, ratelimit.New(), testTOTPKey)
-	module := auth.New(db, sessionService, settingsModule.Service, loginService, registrationService, twoFactorService)
+	module := auth.New(db, sessionService, settingsModule.Service, loginService, registrationService, twoFactorService, passwordreset.New(db, settingsModule.Service, ratelimit.New(), &fakeMailer{configured: true}))
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))

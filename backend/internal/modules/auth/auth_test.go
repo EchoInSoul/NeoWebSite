@@ -26,6 +26,7 @@ import (
 	"website/backend/internal/modules/captcha"
 	"website/backend/internal/modules/login"
 	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/passwordreset"
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/settings"
@@ -90,7 +91,7 @@ func newTestAppWithVerifyPolicies(t *testing.T, db *database.Database, policies 
 	loginService := login.New(db, sessionService, ratelimit.New(), captchaService)
 	registrationService := registration.New(db, settingsModule.Service, ratelimit.New(), &fakeMailer{configured: true}, captchaService)
 	twoFactorService := twofactor.NewWithPolicies(db, sessionService, settingsModule.Service, ratelimit.New(), policies, []byte("0123456789abcdef0123456789abcdef"))
-	module := &Module{Service: service, controller: newController(service, loginService, registrationService, twoFactorService)}
+	module := &Module{Service: service, controller: newController(service, loginService, registrationService, twoFactorService, passwordreset.New(db, settingsModule.Service, ratelimit.New(), &fakeMailer{configured: true}))}
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))
@@ -149,7 +150,7 @@ func newTestAppWithCaptchaVerifier(t *testing.T, db *database.Database, settings
 		EmailVerificationWindow: policies.EmailVerificationIP,
 	}, mailer, captchaService)
 	twoFactorService := twofactor.New(db, sessionService, settingsService, ratelimit.New(), []byte("0123456789abcdef0123456789abcdef"))
-	module := &Module{Service: service, controller: newController(service, loginService, registrationService, twoFactorService)}
+	module := &Module{Service: service, controller: newController(service, loginService, registrationService, twoFactorService, passwordreset.New(db, settingsService, limiter, mailer))}
 	module.Register(api)
 	accessModule := access.New(db)
 	protected := api.Group("", guard.RequireAuth(sm), guard.TrackSessionActivity(sm), guard.LoadIdentity(accessModule.Service, sm))

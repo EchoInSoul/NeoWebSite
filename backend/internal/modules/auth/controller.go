@@ -13,30 +13,35 @@ import (
 	"website/backend/internal/common/apiresponse"
 	"website/backend/internal/common/guard"
 	"website/backend/internal/modules/login"
+	"website/backend/internal/modules/passwordreset"
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
 	"website/backend/internal/modules/twofactor"
 )
 
 type controller struct {
-	service             *Service
-	loginService        *login.Service
-	registrationService *registration.Service
-	twoFactorService    *twofactor.Service
+	service              *Service
+	loginService         *login.Service
+	registrationService  *registration.Service
+	twoFactorService     *twofactor.Service
+	passwordResetService *passwordreset.Service
 }
 
-func newController(service *Service, loginService *login.Service, registrationService *registration.Service, twoFactorService *twofactor.Service) *controller {
+func newController(service *Service, loginService *login.Service, registrationService *registration.Service, twoFactorService *twofactor.Service, passwordResetService *passwordreset.Service) *controller {
 	return &controller{
-		service:             service,
-		loginService:        loginService,
-		registrationService: registrationService,
-		twoFactorService:    twoFactorService,
+		service:              service,
+		loginService:         loginService,
+		registrationService:  registrationService,
+		twoFactorService:     twoFactorService,
+		passwordResetService: passwordResetService,
 	}
 }
 
 func (c *controller) register(r *gin.RouterGroup) {
 	r.POST("/users", c.signup)
 	r.POST("/users/email-verifications", c.verifyEmailRegistration)
+	r.POST("/users/password-resets", c.requestPasswordReset)
+	r.POST("/users/password-resets/confirmations", c.confirmPasswordReset)
 	r.POST("/sessions", c.login)
 	r.POST("/sessions/current/verify", c.verifySecondFactor)
 }
@@ -121,6 +126,50 @@ func (c *controller) verifyEmailRegistration(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusCreated, UserResponse{Email: user.Email, Nickname: user.Nickname, Bio: user.Bio})
+}
+
+func (c *controller) requestPasswordReset(ctx *gin.Context) {
+	if !requireJSONRequest(ctx) {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	var req PasswordResetRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Email == "" {
+		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, "email"))
+		return
+	}
+
+	if err := c.passwordResetService.Request(ctx.Request.Context(), req.Email, requestSessionMeta(ctx).IP); err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusAccepted, apiresponse.Empty{})
+}
+
+func (c *controller) confirmPasswordReset(ctx *gin.Context) {
+	if !requireJSONRequest(ctx) {
+		apierror.Write(ctx, apierror.ErrInvalidRequest)
+		return
+	}
+
+	var req PasswordResetConfirmationRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Token == "" {
+		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, "token"))
+		return
+	}
+	if req.NewPassword == "" {
+		apierror.Write(ctx, apierror.WithParam(apierror.ErrInvalidRequest, "new_password"))
+		return
+	}
+
+	if err := c.passwordResetService.Confirm(ctx.Request.Context(), req.Token, req.NewPassword, requestSessionMeta(ctx).IP); err != nil {
+		apierror.Write(ctx, err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, apiresponse.Empty{})
 }
 
 func (c *controller) logout(ctx *gin.Context) {
