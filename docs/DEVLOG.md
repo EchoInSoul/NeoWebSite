@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-10-26 · 自研人机验证新增「点选文字」形态
+
+**范围**：仅后端。`captcha/builtin` 拆出两个生成器（`generator.go` 滑块、`click_generator.go` 点选，后者用 `imagesv2` 背景 + `fzshenksjw` 字体 + 库内置 15 字库，`WithRangeVerifyLen(3,3)` 固定取 3 个字）；新增设置项 `captcha.captcha_mode`（文字、默认 `slide`、`Public`、只认 `slide` / `click`，写其它值 409 `setting_conflict`）+ seed 迁移；挑战表答案列统一为 `answer_dots`（jsonb）+ 新增 `prompt_text`，删除 `answer_x` / `answer_y`；`Service.Challenge` 按 `captcha_mode` 分派出题，`Service.Solve` 改收 `[]Point` 并按题目 `answer_dots` 的 dots 长度路由判分（1 = 滑块，3 = 点选）；交卷端点接受两种请求形状（`{"x","y"}` / `{"clicks":[3 个]}`）并做形状校验；文档同步。前端零改动、零新依赖、零新错误码。**未提交**（用户口径：绝不主动提交）。
+
+**动机**：用户要在「自研」之下加入「图像点击」形态，即大图散落中文字、按提示依次点 3 个。
+
+**决策**：
+- **答案列统一 jsonb 并删旧列**：滑块也搬进 `answer_dots`（长度为 1 的特例），两种形态走同一条判分路径；留着 `answer_x` / `answer_y` 会让「哪种形态该读哪列」变成仓库层隐式判断。
+- **顺序是硬语义**：三个坐标集合正确但顺序打乱 → `captcha_failed`。不为照顾手滑放宽成集合匹配。
+- **固定 3 个字**（代码常量，不做难度 / 题量设置）。
+- **读取不兜底**：`captcha_mode` 缺行 / 读失败 → 503 `service_unavailable`；值不在白名单 → 500 `internal_error`；不静默退回 `slide`。
+- **形状非法不判负**：`clicks` 数量不是 3、元素缺 `x`/`y`、同时带两种形状、形状与题目形态不符 → 400 `invalid_request`，**不改变题目状态**（可换正确形状重交）；只有拿到正确形状但坐标判错才判负。
+- **迁移先清空存量行再改列**：`answer_dots` 非空，dev 库有存量行时先 `ALTER` 会 23502 失败；存量题是一次性、分钟级过期的挑战数据，清空无用户数据损失。
+- **点选元素用指针字段解码**（`ClickInput{X,Y *int}`）：`int` 分不清「元素没写 x」和「x 写 0」，而 spec 要求缺字段算 `invalid_request`。
+
+**实测（点选新增部分）**：
+- 启动期素材：`imagesv2.GetImages()` +6.4 MB / 单次约 51ms（**该函数不缓存，每次调用都重新解码**，滑块与点选各调一次，故启动多付一次背景解码）；`fzshenksjw.GetFont()` +8.1 MB / 约 37ms；两个 builder 自身 <1 MB。点选带来的常驻增量约 14.5 MB、启动多约 88ms。
+- 出题：`click.Generate()` 平均 7.5ms、最大 10.1ms（滑块 7.7ms / 10.1ms，同量级）。
+- 单次负载（base64 data URL 长度）：主图 ≤ 88.6 KB、提示图 ≤ 5.1 KB、两者合计平均 76.3 KB；滑块主图 ≤ 89.3 KB。
+
+**变异自检（四条，均"改坏 → 红 → 还原 → 绿"）**：
+1. 点选判分改成顺序无关（集合匹配）→ `TestClickSolveRejectsShuffledOrder` 红。✔
+2. `len(Clicks) == 3` 改成 `>= 1`：**计划里点名的用例没有变红**——service 层的 `len(dots) != len(clicks)` 把它兜住了。补了 `TestSolveRouteSlideRejectsSingleClickShape`（滑块题交 1 个 `clicks`），变异下会返回 **200 + captcha_token**（形状混淆直接过题），该用例红；还原后绿。
+3. 删掉形态路由（所有题走 `slide.Validate`）：`TestClickSolveInOrder` **没有变红**——既有用例点的是字块左上角 `(X,Y)`，两个校验器都接受。补了 `TestClickSolveAcceptsClicksInsideGlyphBox`（点字块中心，即真人的点法），变异下红；还原后绿。
+4. `captcha_mode` 缺行时默认当 `slide` → `TestChallengeFailsWhenModeRowMissing` 红。✔
+
+**已知缺口**：
+- 图形点选（`ModeShape`）、旋转、自由拖拽三种形态；难度 / 题量设置（目标字数固定 3）。
+- 前端点选组件、登录 / 注册页接线、控制台「验证方式」下拉——**前端目前只接滑块，`captcha_mode` 必须保持 `slide`，切成 `click` 会拦死登录 / 注册**。
+- 管理端自检接口的 builtin 形态（`POST /admin/captcha/verifications` 仍只服务 Turnstile）。
+- `captcha_provider` 取值白名单（既有缺口，本轮不扩大也不修）。
+- 两次资源加载（滑块 + 点选各调一次 `imagesv2.GetImages()`）没有做进程级缓存，启动多付约 51ms。
+- **测试隔离**：`internal/modules/captcha`（父包）与 `.../builtin` 都把 `captcha.*` 写进同一个测试库，**并发跑这两个包**（不带 `-p 1`）会随机出现 `captcha_disabled`；`scripts/test.sh` 自带 `-p 1`，按它的方式跑是绿的。这是既有性质，本轮测试量变大后更容易撞上。
+
+**未提交。**
+
+---
+
 ## 2026-10-26 · 回退人机验证「启用范围」（0.24.2）
 
 **范围**：后端 `settings` 注册表删除 `captcha_scopes` 与组校验 / 公开项；builtin / turnstile 删除 scope 判定；前端删除 admin settings 的 scopes 字段 / 解析 / patch、`public-settings` 的 scopes 过滤、设置页选择器与 4 条文案；新增迁移 `remove_captcha_scopes` 删除存量行；测试同步（删 scope 用例，seed 静态测试忽略历史 seed 行）；README / spec 更新。版本 0.24.1 → **0.24.2**（patch）。零新依赖、零新路由。
