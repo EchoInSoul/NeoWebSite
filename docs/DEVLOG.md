@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-10-27 · 人机验证设置页：自研分支补「验证」自检
+
+**范围**：后端 `internal/modules/captcha/builtin/{service.go,controller.go,dto.go}`、`internal/modules/captcha/module.go`（挂受保护路由）、新增 `internal/modules/captcha/admin_challenge_route_test.go`、`internal/modules/captcha/verify_route_test.go`（测试脚手架改为同时装配 builtin）、`backend/README.md`；前端 `lib/public-settings.ts`（`PublicCaptchaConfig` / `CaptchaConfig` 拆分）、`lib/captcha-challenge.ts`（`requestAdminCaptchaChallenge`）、`components/auth/builtin-captcha.tsx`（`scope` 换成 `requestChallenge` 回调）、`components/auth/captcha-dialog.tsx`、`app/console/settings/captcha/captcha-settings-form.tsx`、`hooks/use-captcha-gate.ts`、`app/{login,register}/{signin,signup}-{view,form}.tsx`（类型改名）、`messages/{zh-CN,en}.json`（新增 `settings.captchaVerifyChallengeFailed`）；另加本条目。
+
+**动机**：设置页 CF 分支有「验证配置 / 验证」——用输入框里当场填的站点密钥与私钥调 siteverify，测的是**未保存的草稿配置**；自研分支只有「验证方式」下拉，管理员只能保存后去登录 / 注册页撞验证码才知道长什么样。用户要求两边统一成一样的，且明确测的是**表单上当前选的方式**（刚切成图像验证码还没保存，点「验证」就得弹点选），故走方案 B：新增管理端出题接口——公开的 `POST /captcha/challenges` 只认数据库里的 `captcha_mode`，没法满足这条。
+
+**决策**：
+- 路由 `POST /api/v1/admin/captcha/challenges`，body `{"mode":"slide"|"click"}`，守卫沿用 `system.captcha.edit`（与 `POST /admin/captcha/verifications` 同一权限点，不新造）。
+- **复用而非重造**：把 `Challenge` 里「清过期 → 按 mode 分派出题」抽成 `issue()`，公开与管理端共用；管理端 `TestChallenge` 只多一步 `mode` 白名单校验。判分仍走公开的 `POST /captcha/challenges/:id/solutions`，前端拿到 token 即算通过，不再多调一个校验接口。
+- **绝不读设置表**：`captcha_enabled` / `captcha_provider` / `captcha_mode` 一概不看——这是「测草稿配置」的前提。`TestAdminChallengeRouteIgnoresSavedSettings` 把设置改成 disabled + turnstile + click 后再请求 `slide`，仍须出滑块题。
+- **题目 `scope` 记 `test`**（不是 `login` / `register`）：`consume` 按 scope 匹配，测试题换出的凭证天然不能用于登录 / 注册。
+- **不套公开出题的 IP 限流**（5 次 / 10 分钟）：管理端是登录 + 权限下的显式自检，连点两下就 429 没法用；`TestAdminChallengeRouteIsNotRateLimited` 连发 7 次须全 201。
+- 前端：`CaptchaConfig` 拆成 `PublicCaptchaConfig`（登录 / 注册页的 scope 形态，`getCaptchaConfig` 与 `useCaptchaGate` 都收这个）+ `CaptchaConfig = PublicCaptchaConfig | {provider:"builtin",testMode}`；`BuiltinCaptcha` 的 `scope` 换成 `requestChallenge` 回调，**答错后 800ms 自动重拉也走同一个回调**（否则会打回公开接口，按已保存设置出题甚至 `captcha_disabled`）。`CaptchaDialog` 其余行为（1618ms 关闭延迟、Esc 关闭）不变。
+- 设置页自研分支的「验证配置」行与 CF 那行逐值一致（`BadgeCheck` 图标、`outline` + `size="sm"` 按钮、同一 `aria-label`）；点「验证」先拉挑战再弹窗（按钮在拉取期间置灰），答对走既有 `captchaVerifySucceeded`，拉取失败分 401 静默 / 403 / 503 / 其它四支 toast，新增文案 `captchaVerifyChallengeFailed`。
+
+**验证**：6 个新 HTTP 测试（两种 mode 的形状与 scope、忽略已保存设置、不限流、拒绝未知 mode、要求 JSON、权限 403 / 未登录 401）。变异六条实测「改坏 → 红 → 还原 → 绿」：① `scopeTest` 写成 `login` → 形状 / scope 用例红；② 改成直接调公开 `Challenge` → 忽略设置、不限流两用例红；③ 套上公开限流 → 不限流用例红；④ 删 `mode` 白名单 → 未知 mode 用例红；⑤ 删权限守卫 → 权限用例红；⑥ 删 JSON 守卫 → JSON 用例红。全量 `scripts/test.sh`：22 个 `ok`、0 `FAIL`、退出码 0。前端 `npx tsc --noEmit` 0 错、改动文件 `eslint` 0 error（仅 `builtin-captcha.tsx` 既有的两条 `<img>` warning）、`npx prettier --check` 通过。
+
+**已知缺口**：
+- 本轮没做浏览器实测（按惯例运行期验收留给用户）：自研「验证」行与 CF 行是否逐值对齐、答错后自动换新题、Esc 关闭再重开是否出新题。
+- `captchaVerifyChallengeFailed` 同时兜住「库里的 `captcha_mode` 是未知值 → 后端 400」这种情况，文案统一说「验证码生成失败」。
+- 数据库不可用 503 等分支没在本地造条件实测，只依赖既有 `apierror` 映射。
+- 顺带填掉 2026-10-26 条目「已知缺口」里的「管理端自检接口的 builtin 形态」。
+
+**提交状态**：已按用户要求分 3 笔入库（后端接口 + 测试 / 前端接线 / 文档），均未推远端。
+
+---
+
 ## 2026-10-26 · 找回密码（邮件一次性链接）
 
 **范围**：后端 `internal/common/apierror/apierror.go`（两个哨兵与状态映射）、新增 `internal/database/ent/schema/password_reset.go` 与迁移 `20261026150001_password_resets.sql`（含 `atlas.sum`）、新增能力模块 `internal/modules/passwordreset/{service,repository,token,ratelimit,email}.go` 及其五个测试文件、`internal/modules/mail/{controller.go,templates/password_reset.html,templates/password_reset.txt,controller_test.go}`、`internal/modules/auth/{controller.go,dto.go,module.go,repository.go,auth_test.go,password_reset_flow_test.go}`、`internal/modules/settings/{registry.go,registry_test.go,controller_test.go}`、`internal/app/app.go`、`backend/README.md`、API 规范 §3 与 §7.3；前端 `lib/public-settings.ts`（`isPasswordResetEnabled`）、`app/login/{page.tsx,signin-view.tsx,signin-form.tsx}`（「忘记密码？」入口）、新增 `app/reset-password/{page.tsx,reset-request-form.tsx}` 与 `app/reset-password/confirm/{page.tsx,reset-confirm-form.tsx}`、新增 `hooks/use-password-reset-{request,confirm}.ts`、`app/console/settings/mail/mail-settings-form.tsx`（占位符清单加 `resetUrl`）、`messages/{zh-CN,en}.json`（`auth.signin.forgotPassword` + `auth.reset.*` 26 键、邮件模板标签与占位符提示）；另加本条目。设计 `docs/superpowers/specs/2026-10-26-neoblog-password-reset-design.md`、计划 `docs/superpowers/plans/2026-10-26-neoblog-password-reset.md`。
