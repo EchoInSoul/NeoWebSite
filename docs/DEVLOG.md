@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-10-27 · 2FA 恢复码邮件落地
+
+**范围**：后端 `twofactor`（未使用哈希校验 + `RecoveryCodesEmailRequest`）、`auth`（`EmailRecoveryCodes` + 路由实现，注入 mailer）、`mail`（`recovery_codes` 模板 html/txt、`SiteInfo`、预览数据与测试发送支持）、`settings`（mail 组新增 `recovery_codes_subject` / `recovery_codes_body`）与迁移 `20261027120000_seed_recovery_codes_mail_settings.sql`（test/dev 已应用）；前端恢复码弹窗回传 `codes`、去掉 501 分支与「暂未开放」文案，邮件设置页新增第三行模板与测试发送，中英文案同步。零新依赖、零新错误码。
+
+**动机**：原接口是 501 占位，前端「发送」按钮点了只提示「邮件发送暂未开放」。恢复码只存 SHA-256 哈希，原始码只在生成响应里出现一次；按用户裁定走「前端回传当前这组」，后端校验后发到账号邮箱。
+
+**决策**：
+- **回传 + 校验**：前端发送 `{"codes":[...]}`；`twofactor.VerifyRecoveryCodes` 用 `HashRecoveryCode` 比对当前账号未使用的哈希集合，重复 / 已用 / 不属于当前账号 / 超长一律 400 `invalid_request`（param `codes`）；未启用 2FA 409 `two_factor_not_enabled`。
+- **同步投递**：用户就在弹窗里等结果，SMTP 未配置 / `site.url` 非法 / 投递失败返回 503 `mail_unavailable`；`RequireSMTP: true` 保证不会降级把恢复码写进日志。
+- **模板与设置**：内置 `recovery_codes` html/txt（占位符 `{{codes}}` 等），mail 组两项可覆盖主题 / 正文，管理端测试发送支持该模板；迁移只补两行默认值，`ON CONFLICT DO NOTHING`。
+- **不改 2FA 状态**：发信不签发新码、不作废当前码；注册验证与找回密码流程不动。
+
+**已知缺口**：该端点没有独立限流（需登录，只能发到本人邮箱）；一组里只要有一张已使用就整体拒绝，用户需重新生成；真实收信与弹窗成功画面未在浏览器实测。
+
+**验证**：`TestEmailRecoveryCodes`（匿名 401、成功 200 + 收件人 / 正文含 5 个码 + RequireSMTP、错码 400）；`TestCreateMessageUsesDefaultRecoveryCodesSubject`；settings registry 邮件组 14 项；`mail` / `twofactor` / `settings` / `auth` 四包全绿；`go vet ./...`、`scripts/check.sh` 通过；全量 `scripts/test.sh` 通过；前端 `tsc` / `eslint` / `prettier` 通过。**提交状态**：随本批次入库；尚未推送。
+
+---
+
+
+
 ## 2026-10-27 · 找回密码邮件改为异步投递
 
 **范围**：后端 `internal/modules/passwordreset/service.go` 的申请路径把 `SendSync` 换成 `Send`；`passwordreset` / `auth` 两套测试 fake 改为记录异步调用并断言不走同步；`backend/README.md`、API 规范、password-reset spec（新增 §14）同步。零迁移、零新依赖、零前端改动、零接口形状变化；注册验证与测试发信仍走 `SendSync`。
