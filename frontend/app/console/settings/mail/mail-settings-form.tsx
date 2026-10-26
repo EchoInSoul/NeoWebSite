@@ -54,6 +54,7 @@ const MAIL_TEMPLATE_PLACEHOLDERS = [
   "code",
   "verifyUrl",
   "resetUrl",
+  "codes",
   "expiresMinutes",
   "siteTitle",
   "siteUrl",
@@ -107,6 +108,14 @@ export function MailSettingsForm({
       subjectField: "passwordResetSubject",
       bodyField: "passwordResetBody",
       apiName: "password_reset",
+    },
+    {
+      key: "recoveryCodes",
+      icon: <KeyRound />,
+      label: t("mailTemplateRecoveryCodes"),
+      subjectField: "recoveryCodesSubject",
+      bodyField: "recoveryCodesBody",
+      apiName: "recovery_codes",
     },
   ] as const;
 

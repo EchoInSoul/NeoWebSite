@@ -75,7 +75,7 @@ export function RecoveryCodesDialog({
   }
 
   async function handleSendEmail() {
-    if (isSendingEmail) {
+    if (isSendingEmail || codes === null) {
       return;
     }
 
@@ -84,6 +84,7 @@ export function RecoveryCodesDialog({
     try {
       await apiRequest("/api/v1/users/me/2fa/recovery-codes/email", {
         method: "POST",
+        body: { codes },
       });
       toast.success(t("twoFactorRecoveryEmailed"));
     } catch (error) {
@@ -91,8 +92,8 @@ export function RecoveryCodesDialog({
         if (error.status === 401) {
           return;
         }
-        if (error.code === "not_implemented") {
-          toast.error(t("twoFactorRecoveryEmailUnavailable"));
+        if (error.code === "invalid_request" && error.param === "codes") {
+          toast.error(t("twoFactorRecoveryCodesStale"));
           return;
         }
       }

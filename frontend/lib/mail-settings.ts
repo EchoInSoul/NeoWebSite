@@ -11,6 +11,8 @@ export type MailSettingsValues = {
   signupCodeBody: string;
   passwordResetSubject: string;
   passwordResetBody: string;
+  recoveryCodesSubject: string;
+  recoveryCodesBody: string;
 };
 
 export type MailSettingsIssue =
@@ -43,6 +45,8 @@ const MAIL_SETTINGS_PATCH_KEYS: Record<keyof MailSettingsValues, string> = {
   signupCodeBody: "signup_code_body",
   passwordResetSubject: "password_reset_subject",
   passwordResetBody: "password_reset_body",
+  recoveryCodesSubject: "recovery_codes_subject",
+  recoveryCodesBody: "recovery_codes_body",
 };
 
 export function parseMailSettingsValues(
@@ -69,7 +73,9 @@ export function parseMailSettingsValues(
     typeof raw.signup_code_subject !== "string" ||
     typeof raw.signup_code_body !== "string" ||
     typeof raw.password_reset_subject !== "string" ||
-    typeof raw.password_reset_body !== "string"
+    typeof raw.password_reset_body !== "string" ||
+    typeof raw.recovery_codes_subject !== "string" ||
+    typeof raw.recovery_codes_body !== "string"
   ) {
     return null;
   }
@@ -87,6 +93,8 @@ export function parseMailSettingsValues(
     signupCodeBody: raw.signup_code_body,
     passwordResetSubject: raw.password_reset_subject,
     passwordResetBody: raw.password_reset_body,
+    recoveryCodesSubject: raw.recovery_codes_subject,
+    recoveryCodesBody: raw.recovery_codes_body,
   };
 }
 

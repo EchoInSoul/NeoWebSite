@@ -4,7 +4,8 @@ import { toast } from "sonner";
 
 import { ApiError, apiRequest, looksLikeServiceFailure } from "@/lib/api";
 
-export type MailTestTemplate = "signup_code" | "password_reset";
+export type MailTestTemplate =
+  "signup_code" | "password_reset" | "recovery_codes";
 
 export type MailTestTarget = {
   template: MailTestTemplate;
