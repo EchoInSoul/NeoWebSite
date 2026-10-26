@@ -10,7 +10,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { CaptchaChallenge } from "@/lib/captcha-challenge";
+import {
+  requestAdminCaptchaChallenge,
+  requestCaptchaChallenge,
+  type CaptchaChallenge,
+} from "@/lib/captcha-challenge";
 import type { CaptchaConfig } from "@/lib/public-settings";
 import { BuiltinCaptcha } from "./builtin-captcha";
 import { TurnstileCaptcha } from "./turnstile-captcha";
@@ -104,8 +108,13 @@ export function CaptchaDialog({
               />
             ) : (
               <BuiltinCaptcha
-                scope={config.scope}
                 initialChallenge={challenge}
+                requestChallenge={
+                  "scope" in config
+                    ? (signal) => requestCaptchaChallenge(config.scope, signal)
+                    : (signal) =>
+                        requestAdminCaptchaChallenge(config.testMode, signal)
+                }
                 onToken={handleToken}
               />
             )}

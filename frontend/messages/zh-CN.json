@@ -130,6 +130,7 @@
     "captchaVerifySucceeded": "配置验证通过",
     "captchaVerifyFailed": "配置验证失败，请检查站点密钥与私钥",
     "captchaVerifyForbidden": "无权验证配置",
+    "captchaVerifyChallengeFailed": "验证码生成失败，请稍后重试",
     "siteGroup": "站点",
     "iconGroup": "图标",
     "seoGroup": "SEO",

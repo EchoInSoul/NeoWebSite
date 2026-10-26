@@ -17,13 +17,13 @@ import { Label } from "@/components/ui/label";
 import { CaptchaDialog } from "@/components/auth/captcha-dialog";
 import { useCaptchaGate } from "@/hooks/use-captcha-gate";
 import { useSigninForm } from "@/hooks/use-signin";
-import type { CaptchaConfig } from "@/lib/public-settings";
+import type { PublicCaptchaConfig } from "@/lib/public-settings";
 
 export function SigninForm({
   captcha,
   passwordResetEnabled,
 }: {
-  captcha: CaptchaConfig | null;
+  captcha: PublicCaptchaConfig | null;
   passwordResetEnabled: boolean;
 }) {
   const t = useTranslations("auth.signin");

@@ -7,9 +7,9 @@ import {
   requestCaptchaChallenge,
   type CaptchaChallenge,
 } from "@/lib/captcha-challenge";
-import type { CaptchaConfig } from "@/lib/public-settings";
+import type { PublicCaptchaConfig } from "@/lib/public-settings";
 
-export function useCaptchaGate(config: CaptchaConfig | null) {
+export function useCaptchaGate(config: PublicCaptchaConfig | null) {
   const t = useTranslations("auth");
   const tCommon = useTranslations("common");
   const [isOpen, setIsOpen] = useState(false);

@@ -29,6 +29,11 @@ import { Switch } from "@/components/ui/switch";
 import { useCaptchaSettingsSave } from "@/hooks/use-captcha-settings-save";
 import { useCaptchaVerify } from "@/hooks/use-captcha-verify";
 import { useSwitchRowExpansion } from "@/hooks/use-switch-row-expansion";
+import { ApiError, looksLikeServiceFailure } from "@/lib/api";
+import {
+  requestAdminCaptchaChallenge,
+  type CaptchaChallenge,
+} from "@/lib/captcha-challenge";
 import {
   CAPTCHA_MODE_CLICK,
   CAPTCHA_MODE_SLIDE,
@@ -52,6 +57,7 @@ export function CaptchaSettingsForm({
   settings: CaptchaSettingsValues;
 }) {
   const t = useTranslations("settings");
+  const tCommon = useTranslations("common");
   const {
     values,
     isDirty,
@@ -66,6 +72,10 @@ export function CaptchaSettingsForm({
   const captchaExpansion = useSwitchRowExpansion(values.captchaEnabled);
   const { isVerifying, verify } = useCaptchaVerify();
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
+  const [isBuiltinVerifying, setIsBuiltinVerifying] = useState(false);
+  const [isBuiltinVerifyOpen, setIsBuiltinVerifyOpen] = useState(false);
+  const [builtinChallenge, setBuiltinChallenge] =
+    useState<CaptchaChallenge | null>(null);
 
   const unknownCaptchaProvider = KNOWN_CAPTCHA_PROVIDERS.includes(
     values.captchaProvider,
@@ -107,6 +117,47 @@ export function CaptchaSettingsForm({
   function handleCaptchaSolved(token: string) {
     setIsVerifyOpen(false);
     void verify(values.turnstileSecretKey, token);
+  }
+
+  async function handleBuiltinVerifyClick() {
+    if (isBuiltinVerifying) {
+      return;
+    }
+
+    setIsBuiltinVerifying(true);
+    try {
+      const next = await requestAdminCaptchaChallenge(values.captchaMode);
+      setBuiltinChallenge(next);
+      setIsBuiltinVerifyOpen(true);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        return;
+      }
+      if (error instanceof ApiError && error.status === 403) {
+        toast.error(t("captchaVerifyForbidden"));
+        return;
+      }
+      if (looksLikeServiceFailure(error)) {
+        toast.error(tCommon("serviceUnavailable"));
+        return;
+      }
+      toast.error(t("captchaVerifyChallengeFailed"));
+    } finally {
+      setIsBuiltinVerifying(false);
+    }
+  }
+
+  function handleBuiltinVerifyOpenChange(open: boolean) {
+    setIsBuiltinVerifyOpen(open);
+    if (!open) {
+      setBuiltinChallenge(null);
+    }
+  }
+
+  function handleBuiltinSolved() {
+    setIsBuiltinVerifyOpen(false);
+    setBuiltinChallenge(null);
+    toast.success(t("captchaVerifySucceeded"));
   }
 
   return (
@@ -173,43 +224,61 @@ export function CaptchaSettingsForm({
                 label={t("captchaProvider")}
               />
               {values.captchaProvider === CAPTCHA_PROVIDER_BUILTIN ? (
-                <ConsoleSettingsRow
-                  control={
-                    <Select
-                      items={captchaModeItems}
-                      value={values.captchaMode}
-                      onValueChange={(value) => {
-                        if (value !== null) {
-                          setCaptchaMode(value);
-                        }
-                      }}
-                      disabled={isSaving}
-                    >
-                      <SelectTrigger
-                        aria-label={t("captchaMode")}
-                        className="w-64"
-                        size="sm"
+                <>
+                  <ConsoleSettingsRow
+                    control={
+                      <Select
+                        items={captchaModeItems}
+                        value={values.captchaMode}
+                        onValueChange={(value) => {
+                          if (value !== null) {
+                            setCaptchaMode(value);
+                          }
+                        }}
+                        disabled={isSaving}
                       >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={CAPTCHA_MODE_SLIDE}>
-                          {t("captchaModeSlide")}
-                        </SelectItem>
-                        <SelectItem value={CAPTCHA_MODE_CLICK}>
-                          {t("captchaModeClick")}
-                        </SelectItem>
-                        {unknownCaptchaMode === null ? null : (
-                          <SelectItem value={unknownCaptchaMode}>
-                            {unknownCaptchaMode}
+                        <SelectTrigger
+                          aria-label={t("captchaMode")}
+                          className="w-64"
+                          size="sm"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={CAPTCHA_MODE_SLIDE}>
+                            {t("captchaModeSlide")}
                           </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  }
-                  icon={<MousePointerClick />}
-                  label={t("captchaMode")}
-                />
+                          <SelectItem value={CAPTCHA_MODE_CLICK}>
+                            {t("captchaModeClick")}
+                          </SelectItem>
+                          {unknownCaptchaMode === null ? null : (
+                            <SelectItem value={unknownCaptchaMode}>
+                              {unknownCaptchaMode}
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    }
+                    icon={<MousePointerClick />}
+                    label={t("captchaMode")}
+                  />
+                  <ConsoleSettingsRow
+                    control={
+                      <Button
+                        aria-label={t("captchaVerifyConfig")}
+                        disabled={isSaving || isBuiltinVerifying}
+                        onClick={handleBuiltinVerifyClick}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        {t("captchaVerify")}
+                      </Button>
+                    }
+                    icon={<BadgeCheck />}
+                    label={t("captchaVerifyConfig")}
+                  />
+                </>
               ) : null}
               {values.captchaProvider === CAPTCHA_PROVIDER_TURNSTILE ? (
                 <>
@@ -283,6 +352,13 @@ export function CaptchaSettingsForm({
         config={{ provider: "turnstile", siteKey: values.turnstileSiteKey }}
         onOpenChange={setIsVerifyOpen}
         onSolved={handleCaptchaSolved}
+      />
+      <CaptchaDialog
+        open={isBuiltinVerifyOpen}
+        config={{ provider: "builtin", testMode: values.captchaMode }}
+        challenge={builtinChallenge}
+        onOpenChange={handleBuiltinVerifyOpenChange}
+        onSolved={handleBuiltinSolved}
       />
     </form>
   );

@@ -4,10 +4,14 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { AuthFrame } from "@/components/auth/auth-frame";
-import type { CaptchaConfig } from "@/lib/public-settings";
+import type { PublicCaptchaConfig } from "@/lib/public-settings";
 import { SignupForm } from "./signup-form";
 
-export function SignupView({ captcha }: { captcha: CaptchaConfig | null }) {
+export function SignupView({
+  captcha,
+}: {
+  captcha: PublicCaptchaConfig | null;
+}) {
   const t = useTranslations("auth.signup");
 
   return (

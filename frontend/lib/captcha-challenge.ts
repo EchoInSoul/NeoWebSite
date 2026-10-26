@@ -179,6 +179,22 @@ export async function requestCaptchaChallenge(
   return toChallenge(payload);
 }
 
+export async function requestAdminCaptchaChallenge(
+  mode: string,
+  signal?: AbortSignal,
+): Promise<CaptchaChallenge> {
+  const payload = await apiRequest<unknown>(
+    "/api/v1/admin/captcha/challenges",
+    {
+      method: "POST",
+      body: { mode },
+      signal,
+    },
+  );
+
+  return toChallenge(payload);
+}
+
 export async function solveSlideCaptchaChallenge(
   id: string,
   x: number,

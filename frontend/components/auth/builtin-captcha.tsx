@@ -9,12 +9,10 @@ import { cn } from "cn";
 import { ApiError, looksLikeServiceFailure } from "@/lib/api";
 import {
   isCaptchaRejected,
-  requestCaptchaChallenge,
   solveSlideCaptchaChallenge,
   type CaptchaChallenge,
   type SlideCaptchaChallenge,
 } from "@/lib/captcha-challenge";
-import type { CaptchaScope } from "@/lib/captcha-settings";
 import { nudgeDialogNode } from "@/lib/dialog-nudge";
 import { ClickCaptcha } from "./click-captcha";
 
@@ -28,11 +26,11 @@ const CAPTCHA_CARD_MIN_HEIGHT =
 type SlidePhase = "ready" | "dragging" | "verifying" | "success" | "failed";
 
 export function BuiltinCaptcha({
-  scope,
+  requestChallenge,
   initialChallenge,
   onToken,
 }: {
-  scope: CaptchaScope;
+  requestChallenge: (signal?: AbortSignal) => Promise<CaptchaChallenge>;
   initialChallenge: CaptchaChallenge | null;
   onToken: (token: string) => void;
 }) {
@@ -54,13 +52,13 @@ export function BuiltinCaptcha({
     }
   }, []);
 
-  const requestChallenge = useCallback(async () => {
+  const loadChallenge = useCallback(async () => {
     challengeControllerRef.current?.abort();
     const controller = new AbortController();
     challengeControllerRef.current = controller;
 
     try {
-      const next = await requestCaptchaChallenge(scope, controller.signal);
+      const next = await requestChallenge(controller.signal);
       if (controller.signal.aborted) {
         return;
       }
@@ -80,15 +78,15 @@ export function BuiltinCaptcha({
         challengeControllerRef.current = null;
       }
     }
-  }, [scope, t]);
+  }, [requestChallenge, t]);
 
   useEffect(() => {
     if (requestedRef.current) {
       return;
     }
     requestedRef.current = true;
-    void requestChallenge();
-  }, [requestChallenge]);
+    void loadChallenge();
+  }, [loadChallenge]);
 
   useEffect(() => {
     return () => {
@@ -104,9 +102,9 @@ export function BuiltinCaptcha({
     clearRetryTimer();
     retryTimerRef.current = window.setTimeout(() => {
       retryTimerRef.current = null;
-      void requestChallenge();
+      void loadChallenge();
     }, CAPTCHA_FAIL_RETRY_MS);
-  }, [clearRetryTimer, requestChallenge]);
+  }, [clearRetryTimer, loadChallenge]);
 
   const handleSolveError = useCallback(
     (error: unknown) => {
@@ -138,7 +136,7 @@ export function BuiltinCaptcha({
             <button
               type="button"
               onClick={() => {
-                void requestChallenge();
+                void loadChallenge();
               }}
               className="inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-1 text-xs hover:bg-red-100 dark:border-red-900/60 dark:hover:bg-red-900/40"
             >

@@ -65,14 +65,17 @@ export function isPasswordResetEnabled(settings: PublicSettings): boolean {
   return settings.auth?.password_reset_enabled === true;
 }
 
-export type CaptchaConfig =
+export type PublicCaptchaConfig =
   | { provider: "turnstile"; siteKey: string }
   | { provider: "builtin"; scope: CaptchaScope };
+
+export type CaptchaConfig =
+  PublicCaptchaConfig | { provider: "builtin"; testMode: string };
 
 export function getCaptchaConfig(
   settings: PublicSettings,
   scope: CaptchaScope,
-): CaptchaConfig | null {
+): PublicCaptchaConfig | null {
   const captcha = settings.captcha;
 
   if (captcha?.captcha_enabled !== true) {

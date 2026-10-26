@@ -7,7 +7,7 @@ import { AuthFrame } from "@/components/auth/auth-frame";
 import { usePasswordResetNotice } from "@/hooks/use-password-reset-notice";
 import { useSignoutNotice } from "@/hooks/use-signout-notice";
 import { useSignupNotice } from "@/hooks/use-signup-notice";
-import type { CaptchaConfig } from "@/lib/public-settings";
+import type { PublicCaptchaConfig } from "@/lib/public-settings";
 import { SigninForm } from "./signin-form";
 
 export function SigninView({
@@ -17,7 +17,7 @@ export function SigninView({
 }: {
   signupOpen: boolean;
   passwordResetEnabled: boolean;
-  captcha: CaptchaConfig | null;
+  captcha: PublicCaptchaConfig | null;
 }) {
   const t = useTranslations("auth.signin");
 

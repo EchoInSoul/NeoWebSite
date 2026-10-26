@@ -17,9 +17,13 @@ import { CaptchaDialog } from "@/components/auth/captcha-dialog";
 import { useCaptchaGate } from "@/hooks/use-captcha-gate";
 import { useSignupForm } from "@/hooks/use-signup";
 import { PASSWORD_MIN_LENGTH } from "@/lib/password";
-import type { CaptchaConfig } from "@/lib/public-settings";
+import type { PublicCaptchaConfig } from "@/lib/public-settings";
 
-export function SignupForm({ captcha }: { captcha: CaptchaConfig | null }) {
+export function SignupForm({
+  captcha,
+}: {
+  captcha: PublicCaptchaConfig | null;
+}) {
   const t = useTranslations("auth.signup");
   const tCommon = useTranslations("common");
   const captchaGate = useCaptchaGate(captcha);

@@ -130,6 +130,7 @@
     "captchaVerifySucceeded": "Configuration verified",
     "captchaVerifyFailed": "Verification failed. Check the site key and secret key.",
     "captchaVerifyForbidden": "You do not have permission to verify the configuration",
+    "captchaVerifyChallengeFailed": "Failed to create a CAPTCHA challenge. Please try again.",
     "siteGroup": "Site",
     "iconGroup": "Icon",
     "seoGroup": "SEO",
