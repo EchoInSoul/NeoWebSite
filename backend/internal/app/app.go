@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -123,7 +124,13 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 }
 
 func recoveryHandler() gin.HandlerFunc {
-	return gin.CustomRecovery(func(c *gin.Context, _ any) {
+	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
+		slog.Error("request panic",
+			"panic", recovered,
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"stack", string(debug.Stack()),
+		)
 		apierror.Abort(c, apierror.ErrInternal)
 	})
 }

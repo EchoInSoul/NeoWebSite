@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -1652,5 +1653,52 @@ func TestMailMessagesEndpointEndToEnd(t *testing.T) {
 	owner.Body.Close()
 	if sentBody.To != "someone@example.com" || !sentBody.Sent || sentBody.Subject == "" {
 		t.Fatalf("sent body = %+v, want to/sent/subject", sentBody)
+	}
+}
+
+func TestRecoveryHandlerLogsPanicWithStack(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previous := slog.Default()
+	buffer := &bytes.Buffer{}
+	slog.SetDefault(slog.New(slog.NewTextHandler(buffer, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	engine := gin.New()
+	engine.Use(recoveryHandler())
+	engine.GET("/probe-panic", func(c *gin.Context) {
+		panic("probe panic value")
+	})
+
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/probe-panic", nil))
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 (body = %s)", recorder.Code, recorder.Body.String())
+	}
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+			Type string `json:"type"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode: %v (body = %s)", err, recorder.Body.String())
+	}
+	if envelope.Error.Code != "internal_error" || envelope.Error.Type != "server_error" {
+		t.Fatalf("error = %+v, want internal_error/server_error", envelope.Error)
+	}
+
+	logged := buffer.String()
+	if !strings.Contains(logged, "probe panic value") {
+		t.Fatalf("log = %q, want the panic value", logged)
+	}
+	if !strings.Contains(logged, "path=/probe-panic") {
+		t.Fatalf("log = %q, want the request path", logged)
+	}
+	if !strings.Contains(logged, "runtime/debug.Stack()") || !strings.Contains(logged, "app_test.go:") {
+		t.Fatalf("log = %q, want a stack reaching the panicking handler", logged)
+	}
+	if !strings.Contains(logged, "status=500") || !strings.Contains(logged, "request failed") {
+		t.Fatalf("log = %q, want the 5xx funnel line alongside the panic line", logged)
 	}
 }

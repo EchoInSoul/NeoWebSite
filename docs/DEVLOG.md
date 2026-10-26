@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-10-26 · 后端 500/panic 可诊断（最小版）
+
+**范围**：`internal/app/app.go` 的 `recoveryHandler` 不再丢弃 panic 值；`internal/common/apierror` 的 `Write` / `Abort` / `WriteHTTP` 三个出口统一记 5xx 日志；`captcha/builtin/service.go` 的 `captcha_mode` 读取失败改为双 `%w` 包裹以保留根因。零新依赖、零新路由、零响应契约变化（不加 request id、不改访问日志格式）。
+
+**动机**：2026-10-12 就拍板「先做对内可诊断」，至今未落地。现状是 `gin.CustomRecovery` 的回调把 panic 值当 `_ any` 丢掉、一行不记，`apierror` 三个写出函数也完全不记——一个 500 落到日志里只剩 gin 访问行那个状态码，根因彻底没了。
+
+**决策**：
+- **只做「把原因写进日志」这一半**：request id 与结构化访问日志按用户口径砍掉——后端单容器、上游既不生成也不透传时，自造的 id 只出现在后端自己的日志里，而那行访问日志凭时间戳 + 路径已能定位，属零增益；等真做多实例或接集中日志再补。
+- **只记 `URL.Path`，不记查询串**：重置令牌这类敏感值可能出现在 query 里。
+- **4xx 不记**，避免噪音；收口放在 `apierror` 的三个写出函数（全仓唯一的错误出口），不在各模块手写 `slog`。
+- **`captcha_mode` 用 `fmt.Errorf("captcha: read captcha_mode: %w (%w)", err, apierror.ErrServiceUnavailable)`**：Go 1.27 的多重 `%w` 让 `errors.As` 仍能找到哨兵，状态码与错误信封不变（仍 503 `service_unavailable`），但底层原因进了日志——这正是审查里那条「哨兵吞掉原因」点位。
+- **一次 panic 落两条 ERROR**（`request panic` 带栈 + `Abort` 走出口时的 `request failed status=500`）是有意的：前者给根因，后者是「所有 5xx 必被记录」这条统一保证的体现；测试把两条一起钉住，防止日后被当成重复删掉。
+
+**已知缺口**：没有 request id，多实例后无法跨进程串联；gin 访问日志走 stdout、`slog` 错误日志走 stderr，容器里要靠采集端合流。
+
+**验证**：新增 `TestRecoveryHandlerLogsPanicWithStack`（断 500 信封 + panic 值 + `path=/probe-panic` + 栈里有 `runtime/debug.Stack()` 与本文件帧 + 同时存在 `request failed` / `status=500` 那一条）；新增 `TestServerErrorLoggedWithCause`（断 5xx 日志含根因 / 状态 / 路径，且 4xx 一条都不记）；`TestChallengeFailsWhenModeRowMissing` 加断返回错误仍带 settings 根因。全量 `scripts/test.sh` = 21 个 `ok`、0 `FAIL`、退出码 0；`gofmt -l internal` 无输出、`go vet ./...` 干净、`scripts/check.sh` 通过。
+
+**工作区处置**：并行会话当时正把密码重置的测试半成品写进 `apierror_test.go`（引用尚未实现的 `ErrPasswordResetDisabled` / `ErrPasswordResetInvalid`，并把哨兵计数从 40 改成 42），使该包测试无法编译。经用户授权把该文件回退到 HEAD，那份在制品已存进 `backend/.scratch/parallel-apierror-wip/`（整文件快照 + pending 补丁），之后只重放了我自己的两个 hunk（测试导入与 `TestServerErrorLoggedWithCause`）。
+
+**提交状态**：随本条目一并入库；**尚未推送**（GitHub 连接被掐，`development` 领先 `origin/development`）。
+
+---
+
 ## 2026-10-26 · 注册验证并发用例对齐 README 契约
 
 **范围**：仅测试文件 `backend/internal/modules/registration/register_verification_test.go`。`TestVerifyEmailRegistrationConcurrent` 的断言从「一个 201 + 一个 400」改成契约允许的结果集：恰一个 201，输家为 400 `email_verification_invalid` 或 409 `email_taken` / `nickname_taken` / `already_taken`；补两条真不变量——`users` 恰 1 行、该邮箱的 `pending_registrations` 清零。同文件新增局部助手 `postJSONStatusAndBody`（把响应体带回主 goroutine 再解错误码，避免在 goroutine 里调 `t.Fatalf`）与 `errorCodeOf`。生产代码、接口契约、版本号零改动（纯测试，不进位）。
@@ -16,7 +39,7 @@
 
 **验证**：目标用例 `-count=20` 全绿；`./internal/modules/registration -count=3` 全绿；全量 `scripts/test.sh` 为 21 个 `ok`、0 `FAIL`、退出码 0；`gofmt -l` 无输出，`scripts/check.sh`（gofmt / apierror 导入守卫 / vet / build / diff）通过。
 
-**未提交。**
+**提交状态**：已入库 `f6bf641`；尚未推送。
 
 ---
 

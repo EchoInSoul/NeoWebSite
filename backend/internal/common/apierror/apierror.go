@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"math"
 	"net"
 	"net/http"
@@ -163,6 +164,25 @@ func resolve(err error) (int, *Error) {
 	return statusOf(err), Body(err)
 }
 
+func requestDescriptor(ctx *gin.Context) (string, string) {
+	if ctx.Request == nil {
+		return "", ""
+	}
+	return ctx.Request.Method, ctx.Request.URL.Path
+}
+
+func logServerFailure(status int, method, path string, err error) {
+	if status < http.StatusInternalServerError {
+		return
+	}
+	slog.Error("request failed",
+		"status", status,
+		"method", method,
+		"path", path,
+		"error", err,
+	)
+}
+
 type paramOverride struct {
 	err   *Error
 	param string
@@ -257,12 +277,16 @@ func statusOf(err error) int {
 
 func Write(ctx *gin.Context, err error) {
 	status, body := resolve(err)
+	method, path := requestDescriptor(ctx)
+	logServerFailure(status, method, path, err)
 	writeRateLimitHeader(ctx, err)
 	ctx.JSON(status, gin.H{"error": body})
 }
 
 func Abort(ctx *gin.Context, err error) {
 	status, body := resolve(err)
+	method, path := requestDescriptor(ctx)
+	logServerFailure(status, method, path, err)
 	writeRateLimitHeader(ctx, err)
 	ctx.AbortWithStatusJSON(status, gin.H{"error": body})
 }
@@ -273,6 +297,7 @@ type httpEnvelope struct {
 
 func WriteHTTP(w http.ResponseWriter, err error) {
 	status, body := resolve(err)
+	logServerFailure(status, "", "", err)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(httpEnvelope{Error: body})

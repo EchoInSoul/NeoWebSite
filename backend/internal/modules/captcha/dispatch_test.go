@@ -141,6 +141,9 @@ func TestChallengeFailsWhenModeRowMissing(t *testing.T) {
 
 	_, err = service.Challenge(ctx, "login", "1.2.3.4")
 	assertErrorCode(t, err, "service_unavailable")
+	if !strings.Contains(err.Error(), "not configured") {
+		t.Fatalf("err = %v, want the settings root cause retained", err)
+	}
 }
 
 func TestChallengeFailsWhenModeValueInvalid(t *testing.T) {

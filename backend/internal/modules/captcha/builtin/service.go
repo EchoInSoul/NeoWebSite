@@ -136,7 +136,7 @@ func (s *Service) Challenge(ctx context.Context, scope, ip string) (ChallengeRes
 
 	mode, err := s.settings.GetString(ctx, "captcha", "captcha_mode")
 	if err != nil {
-		return ChallengeResponse{}, apierror.ErrServiceUnavailable
+		return ChallengeResponse{}, fmt.Errorf("captcha: read captcha_mode: %w (%w)", err, apierror.ErrServiceUnavailable)
 	}
 
 	now := time.Now()

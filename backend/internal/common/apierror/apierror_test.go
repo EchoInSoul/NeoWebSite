@@ -1,6 +1,7 @@
 package apierror
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"database/sql/driver"
@@ -8,9 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,6 +144,36 @@ func TestWriteEnvelope(t *testing.T) {
 	}
 	if p != nil {
 		t.Fatalf("param = %v, want JSON null", p)
+	}
+}
+
+func TestServerErrorLoggedWithCause(t *testing.T) {
+	previous := slog.Default()
+	buffer := &bytes.Buffer{}
+	slog.SetDefault(slog.New(slog.NewTextHandler(buffer, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	rr := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rr)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/v1/captcha/challenges", nil)
+
+	cause := errors.New("settings: captcha.captcha_mode: not configured")
+	Write(ctx, fmt.Errorf("captcha: read captcha_mode: %w (%w)", cause, ErrServiceUnavailable))
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rr.Code)
+	}
+	logged := buffer.String()
+	if !strings.Contains(logged, "not configured") ||
+		!strings.Contains(logged, "status=503") ||
+		!strings.Contains(logged, "path=/api/v1/captcha/challenges") {
+		t.Fatalf("log = %q, want status, path and the root cause", logged)
+	}
+
+	buffer.Reset()
+	Write(ctx, ErrEmailTaken)
+	if buffer.Len() != 0 {
+		t.Fatalf("4xx wrote %q, want no log", buffer.String())
 	}
 }
 
