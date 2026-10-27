@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-10-27 · 媒体存储（任意格式上传 + 本地磁盘 + 静态直出）
+
+**范围**：新增 `internal/modules/media`（`Provider` 抽象 + 本地实现 + service / repository / controller / dto）、`media_assets` 表与迁移 `20261027130001_media_assets.sql`、两条接口 `POST /api/v1/media` / `DELETE /api/v1/media/:id`、静态路由 `GET|HEAD /storage/*key`；`app.go` 新增 `mediaRootPath = "../data/storage"` 与 `newWithRoot`（测试注入临时根），`writeTracker` 补 `Unwrap` 让 `ResponseController` 能清上传 / 下载的 deadline；仓库根 `.gitignore` 加 `/data/`；README / API 规范 / content spec 同步。零环境变量、零新权限点、零新错误码。
+
+**授权记录**：用户 2026-10-27 明确授权——媒体上传本轮**不限制文件大小、不做文件类型校验**，适用范围仅 `POST /api/v1/media`；`data/storage` 所在分区的剩余空间需自行监控。该授权使响应头策略成为唯一防线：上传照单全收，但非图片 / 音视频类型一律 `application/octet-stream` + `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`，避免任意文件变成同源 XSS。
+
+**口径**：删除**先删文件、再删记录**（文件删不掉 500 且记录保留；文件本来就不存在视为已删）；静态读不查库，`Cache-Control` 分档——200 / 206 / 304 用 `immutable`，404 用 `no-store`（否则误删恢复后客户端一年内都看不到文件）；`/storage/` 前缀永久归本地 provider，将来换 S3 时老文件仍留在本地。设计见 `docs/superpowers/specs/2026-10-27-neoblog-media-storage-design.md`，计划见 `docs/superpowers/plans/2026-10-27-neoblog-media-storage.md`。
+
+**已知缺口**：无缩略图 / 多尺寸；无磁盘配额；`data/` 在仓库内，`git clean -xdf` 会连它一起删；`/storage` 的 301 / 405 由 gin 路由层产生，不带自有响应头。
+
 ## 2026-10-27 · 邮件模板自定义总开关
 
 **范围**：`settings` mail 组新增 `custom_templates_enabled`（bool，默认 false）+ seed 迁移 `20261027130000_seed_custom_templates_setting.sql`（test/dev 已应用）；`mail.Compose` 加总闸——关闭时忽略全部自定义主题/正文，开启且对应字段非空才覆盖；前端邮件设置页「邮件模板」组顶部加开关，类型 / 解析 / patch / 中英文案同步；README 同步。零新接口、零新依赖；默认关闭，现有自定义内容需手动开启才生效。

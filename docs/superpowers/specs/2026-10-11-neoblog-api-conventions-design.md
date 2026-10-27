@@ -55,7 +55,7 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 
 规则：
 
-1. 全部端点挂在 `/api/v1` 前缀下，路径版本而非 header（对标 OpenAI 的 `/v1/...`）。前缀在 `internal/app/app.go:26` 以常量 `apiPrefix` 定义一次（README 硬性规则 4），任何模块不得自行拼版本段。
+1. 全部端点挂在 `/api/v1` 前缀下，路径版本而非 header（对标 OpenAI 的 `/v1/...`）。前缀在 `internal/app/app.go` 以常量 `apiPrefix` 定义一次（README 硬性规则 4），任何模块不得自行拼版本段。**例外：`/storage/**` 是静态文件路由**（`data/storage` 直出，见 README「媒体存储」），不属于 API、不带版本段。
 2. **v1 是唯一版本**：不设 v2、不预留 `/api/v2` 升级路径。字段改名、字段类型或语义变更、删除字段或端点、状态码变更、请求参数语义收紧这类破坏性调整，只允许随本规范这类**显式的规范化批次**一次性执行（§12、附录对照表），日常迭代中一律禁止。
 3. **v1 内允许的向后兼容增量**（规范化批次落地后的日常演进）：
    - 新增端点；
@@ -130,6 +130,8 @@ NeoBlog 后端已有一套能用的 API（认证层 1/2、用户组与权限、�
 | 29 | `GET /api/v1/admin/mail/status` | `backend/internal/modules/mail/controller.go:43`（v1.7 新增，`system.register.view`；返回 `{"smtp_configured":bool,"site_url_configured":bool}` 两个布尔，供「用户注册」设置页判断「邮箱所有权认证」开关的前置条件；不泄露 SMTP 细节或私钥） |
 | 30 | `POST /api/v1/users/password-resets` | `backend/internal/modules/auth/controller.go`（2026-10-26 新增，公开；body `{"email":"..."}`，找回密码申请，**存在与否一律 202 `{}`**（不存在不发信、不写记录，限流照常计数）；站级 `auth.password_reset_enabled` 关闭 403 `password_reset_disabled`，邮件前置条件不满足或渲染 / 入队失败 503 `mail_unavailable`（投递走 mail 异步队列，最终失败只记日志）；实现委托 `internal/modules/passwordreset`，路由是本模块薄壳） |
 | 31 | `POST /api/v1/users/password-resets/confirmations` | `backend/internal/modules/auth/controller.go`（2026-10-26 新增，公开；body `{"token","new_password"}`，找回密码确认，**子动作用复数资源 + 过去分词**，与 #28 的 `email-verifications` 同构；令牌只走请求体不进 URL；200 `{}` 不下发会话、响应无 `Set-Cookie`；令牌失效 400 `password_reset_invalid`、新密码不合格 400 `weak_password` / 与当前相同 400 `password_unchanged`、开关关闭 403 `password_reset_disabled`；成功在同一事务 `auth_version` +1 吊销全部旧会话） |
+| 32 | `POST /api/v1/media` | `backend/internal/modules/media/controller.go`（2026-10-27 新增，需登录 + owner/admin；`multipart/form-data` 字段 `file`，**任意格式、不限大小**；201 裸对象 `{"id","url","size_bytes","original_name"}`，`url` 形如 `/storage/2026/10/27/<uuid>.jpg`；原始名含 NUL / 非法 UTF-8、非 multipart、缺 `file` 字段 400 `invalid_request`；落盘失败 500 `internal_error`，写库失败按连接类错误 503 `service_unavailable`、其余 500；失败均补偿删除刚写的文件） |
+| 33 | `DELETE /api/v1/media/:id` | `backend/internal/modules/media/controller.go`（2026-10-27 新增，需登录 + owner/admin；**先删文件再删记录**，200 `{"id","deleted":true}`；文件删除失败（除「本来就不存在」）500 且记录保留；`:id` 非 UUID 或记录不存在 404 `not_found`） |
 
 正例（新端点命名，资源复数 + 子动作）：
 
@@ -182,9 +184,9 @@ POST /api/v1/v1/posts          禁止：重复版本段
 
 1. **废除 204**：不存在无 body 的成功响应，任何 2xx 都必须带 JSON body（至少 `{}`）。现状三处 204 待改：`backend/internal/modules/auth/controller.go:85`（logout）、`backend/internal/modules/auth/controller.go:158`（changePassword）、`backend/internal/modules/access/controller.go:126`（deleteGroup）。
 2. 方法不匹配启用 Gin 的 `HandleMethodNotAllowed`（v1.4 改判，此前裁定为不启用）：路径存在但该路径未注册该方法 → 405 + `invalid_request_error` / `method_not_allowed`，`Allow` 头由 Gin 按 RFC 9110 列出该路径允许的方法；路径不存在仍走 `NoRoute` 兜底，404 + `not_found_error` / `not_found` 且不带 `Allow`。`NoMethod` 与 `NoRoute` 都在 `app.go` 装配、认证中间件之前生效，故匿名请求也能借 `Allow` 确认端点存在——用户知情后选定的取舍，代价与回退开关记在 `backend/README.md`。
-3. 所有请求与响应 body 一律 `application/json`（UTF-8）；`ctx.JSON` 已满足，不需要额外头。
+3. 所有请求与响应 body 一律 `application/json`（UTF-8）；`ctx.JSON` 已满足，不需要额外头。**例外：`/storage/**` 返回文件字节或空 body**（静态资源，不属于 API 契约）。
 4. 401 响应不要求 `WWW-Authenticate` 头（session cookie 认证，无 challenge 语义；对标裁剪见 §11）。
-5. **探针豁免**：`/healthy` 是机器探针端点，200 / 503 的 body 保持 `Status` 对象（`status` / `database` 等字段），不受 §7 错误信封约束；时间字段仍按 §10 规范化（§14 决策 1）。
+5. **探针与静态资源豁免**：`/healthy` 是机器探针端点，200 / 503 的 body 保持 `Status` 对象（`status` / `database` 等字段），不受 §7 错误信封约束；时间字段仍按 §10 规范化（§14 决策 1）。`/storage/**` 的 404 同样是纯文本（`http.FileServer` 的 `404 page not found`）或空 body，不走错误信封。
 
 正例（无有效负载的成功响应——`DELETE /api/v1/sessions/current`（登出））：
 

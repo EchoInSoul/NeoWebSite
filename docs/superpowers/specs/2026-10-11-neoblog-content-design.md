@@ -168,7 +168,7 @@ NeoBlog 是前后端分离的个人博客，本轮给后端加「内容」能力
   "slug": "hello-world",
   "status": "published",
   "excerpt": "这是 head 快照 content_text 的前 200 个字符…",
-  "cover_image_url": "/uploads/2026/10/cover.webp",
+  "cover_image_url": "/storage/2026/10/cover.webp",
   "author": { "id": "0193…", "nickname": "owner" },
   "published_at": 1760123456,
   "created_at": 1760123400,
@@ -188,7 +188,7 @@ NeoBlog 是前后端分离的个人博客，本轮给后端加「内容」能力
   "content_html": "<p>…</p>",
   "content_text": "…",
   "content_format": "pm1",
-  "cover_image_url": "/uploads/2026/10/cover.webp",
+  "cover_image_url": "/storage/2026/10/cover.webp",
   "head_version": 3,
   "release_version": 2,
   "author": { "id": "0193…", "nickname": "owner" },
@@ -295,7 +295,7 @@ NeoBlog 是前后端分离的个人博客，本轮给后端加「内容」能力
 ```json
 {
   "title": "第一篇文章",
-  "cover_image_url": "/uploads/2026/10/cover.webp",
+  "cover_image_url": "/storage/2026/10/cover.webp",
   "content": { "type": "doc", "content": [ … ] },
   "content_html": "<p>…</p>",
   "content_text": "…",
@@ -369,7 +369,7 @@ v1 明确够用即可：
 ## 10. 图片与资源（D11）
 
 - v1 口径：图片以 **URL 内嵌于正文 JSON**（Tiptap image 节点的属性，存于快照），后端不解析、不代理、不改写、不校验可达性；`content_html` 里的 `<img>` 同理原样缓存。
-- **URL 约定（写给前端轮的契约）**：正文图片 URL 与 `cover_image_url` 一律存**相对路径**（如 `/uploads/2026/10/x.webp`），不存带域名的绝对 URL——换域名/CDN 时免改存量 JSON（对快照 jsonb 做批量改写属自找的迁移；快照不可变更放大了改写的代价）。
+- **URL 约定（写给前端轮的契约）**：正文图片 URL 与 `cover_image_url` 一律存**相对路径**（如 `/storage/2026/10/x.webp`），不存带域名的绝对 URL——换域名/CDN 时免改存量 JSON（对快照 jsonb 做批量改写属自找的迁移；快照不可变更放大了改写的代价）。
 - **上传端点为非目标**（本轮不做）：上传涉及存储选型（本地目录 / 对象存储）、体积与类型白名单、URL 生成策略，是一块独立设计；届时作为新增端点属 v1 内增量，不影响本轮表结构（URL 已在 JSON / cover 列里，无需新列）。
 - 引用外部图床（或将来本站上传服务）的防盗链、失效、HTTP 升级问题属内容运营与前端渲染事务，后端不处理。
 
