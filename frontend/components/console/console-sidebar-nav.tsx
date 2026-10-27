@@ -12,11 +12,17 @@ import { flushSync } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ChevronRight,
   CircleUserRound,
   Code,
+  FileText,
+  Files,
+  Images,
   LogIn,
   Mail,
+  MessageSquare,
   MonitorSmartphone,
+  NotebookPen,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -66,6 +72,12 @@ const SETTINGS_CAPTCHA_HREF = `${PANEL_PREFIXES.settings}/captcha`;
 const SETTINGS_GROUPS_HREF = `${PANEL_PREFIXES.settings}/groups`;
 const SETTINGS_USERS_HREF = `${PANEL_PREFIXES.settings}/users`;
 const SETTINGS_MAIL_HREF = `${PANEL_PREFIXES.settings}/mail`;
+
+const CONTENT_POSTS_HREF = "/console/posts";
+const CONTENT_PAGES_HREF = "/console/pages";
+const CONTENT_COMMENTS_HREF = "/console/comments";
+const CONTENT_MOMENTS_HREF = "/console/moments";
+const CONTENT_MEDIA_HREF = "/console/media";
 
 const SLIDE_FALLBACK_MS = SIDEBAR_SLIDE_DURATION_MS + 80;
 
@@ -151,6 +163,7 @@ export function ConsoleSidebarNav({
 }) {
   const t = useTranslations("sidebar");
   const ts = useTranslations("settings");
+  const tc = useTranslations("content");
   const pathname = usePathname();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
@@ -368,39 +381,106 @@ export function ConsoleSidebarNav({
   const settingsEntryActive =
     displayedPanel === "main" && routePanel === "settings";
 
-  const mainPanel = useMemo(
-    () => (
-      <SidebarGroup>
-        <SidebarMenu>
-          {hasSettingsAccess ? (
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={settingsEntryActive}
-                render={
-                  <Link
-                    ref={settingsEntryRef}
-                    href={settingsEntryHref}
-                    draggable={false}
-                    onNavigate={(event) => {
-                      if (settingsEntryHref === pathname) {
-                        event.preventDefault();
-                      }
-                      setDisplayedPanel("settings");
-                    }}
-                  />
-                }
-                tooltip={t("settings")}
+  const mainPanel = useMemo(() => {
+    const contentItems: ConsoleSidebarSectionItem[] = [
+      {
+        href: CONTENT_POSTS_HREF,
+        label: tc("posts"),
+        icon: <FileText />,
+      },
+      {
+        href: CONTENT_PAGES_HREF,
+        label: tc("pages"),
+        icon: <Files />,
+      },
+      {
+        href: CONTENT_COMMENTS_HREF,
+        label: tc("comments"),
+        icon: <MessageSquare />,
+      },
+      {
+        href: CONTENT_MOMENTS_HREF,
+        label: tc("moments"),
+        icon: <NotebookPen />,
+      },
+      {
+        href: CONTENT_MEDIA_HREF,
+        label: tc("media"),
+        icon: <Images />,
+      },
+    ];
+
+    return (
+      <>
+        <SidebarGroup>
+          <SidebarMenu>
+            {contentItems.map((item, index) => (
+              <SidebarMenuItem
+                key={item.href}
+                className={index < contentItems.length - 1 ? "mb-1" : undefined}
               >
-                <Settings />
-                <span>{t("settings")}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ) : null}
-        </SidebarMenu>
-      </SidebarGroup>
-    ),
-    [hasSettingsAccess, pathname, settingsEntryActive, settingsEntryHref, t],
-  );
+                <SidebarMenuButton
+                  isActive={isUnder(pathname, item.href)}
+                  render={<Link href={item.href} draggable={false} />}
+                  tooltip={item.label}
+                  className="select-none"
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+        {hasSettingsAccess ? (
+          <>
+            <div className="mx-3.5 h-px bg-neutral-200 dark:bg-neutral-800" />
+            <SidebarGroup>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={settingsEntryActive}
+                    render={
+                      <Link
+                        ref={settingsEntryRef}
+                        href={settingsEntryHref}
+                        draggable={false}
+                        onNavigate={(event) => {
+                          if (settingsEntryHref === pathname) {
+                            event.preventDefault();
+                          }
+                          setDisplayedPanel("settings");
+                        }}
+                      />
+                    }
+                    tooltip={t("settings")}
+                  >
+                    <Settings />
+                    <span className="flex-1 truncate">{t("settings")}</span>
+                    <ChevronRight
+                      aria-hidden="true"
+                      className={cn(
+                        "size-3.5! shrink-0 text-neutral-500 transition-opacity duration-200 ease-out motion-reduce:transition-none",
+                        isCollapsed && "pointer-events-none opacity-0",
+                      )}
+                    />
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
+          </>
+        ) : null}
+      </>
+    );
+  }, [
+    hasSettingsAccess,
+    isCollapsed,
+    pathname,
+    settingsEntryActive,
+    settingsEntryHref,
+    t,
+    tc,
+  ]);
 
   const panelContent: Record<PanelKey, ReactNode> = {
     main: mainPanel,
