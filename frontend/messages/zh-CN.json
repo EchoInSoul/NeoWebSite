@@ -32,6 +32,13 @@
     "users": "用户",
     "mail": "邮件"
   },
+  "content": {
+    "posts": "文章",
+    "pages": "页面",
+    "comments": "评论",
+    "moments": "说说",
+    "media": "媒体"
+  },
   "settings": {
     "general": "站点信息",
     "developer": "开发者设置",

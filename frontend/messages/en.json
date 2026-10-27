@@ -32,6 +32,13 @@
     "users": "Users",
     "mail": "Mail"
   },
+  "content": {
+    "posts": "Posts",
+    "pages": "Pages",
+    "comments": "Comments",
+    "moments": "Moments",
+    "media": "Media"
+  },
   "settings": {
     "general": "Site information",
     "developer": "Developer settings",
