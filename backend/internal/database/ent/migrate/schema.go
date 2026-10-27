@@ -74,6 +74,37 @@ var (
 			},
 		},
 	}
+	// MediaAssetsColumns holds the columns for the "media_assets" table.
+	MediaAssetsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeUUID},
+		{Name: "provider", Type: field.TypeString},
+		{Name: "key", Type: field.TypeString, Unique: true},
+		{Name: "size_bytes", Type: field.TypeInt64},
+		{Name: "original_name", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "uploaded_by", Type: field.TypeUUID, Nullable: true},
+	}
+	// MediaAssetsTable holds the schema information for the "media_assets" table.
+	MediaAssetsTable = &schema.Table{
+		Name:       "media_assets",
+		Columns:    MediaAssetsColumns,
+		PrimaryKey: []*schema.Column{MediaAssetsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "media_assets_users_mediaAssets",
+				Columns:    []*schema.Column{MediaAssetsColumns[6]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "mediaasset_uploaded_by",
+				Unique:  false,
+				Columns: []*schema.Column{MediaAssetsColumns[6]},
+			},
+		},
+	}
 	// PasswordResetsColumns holds the columns for the "password_resets" table.
 	PasswordResetsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeUUID},
@@ -277,6 +308,7 @@ var (
 		CaptchaChallengesTable,
 		GroupsTable,
 		GroupPermissionsTable,
+		MediaAssetsTable,
 		PasswordResetsTable,
 		PendingRegistrationsTable,
 		RecoveryCodesTable,
@@ -289,6 +321,7 @@ var (
 
 func init() {
 	GroupPermissionsTable.ForeignKeys[0].RefTable = GroupsTable
+	MediaAssetsTable.ForeignKeys[0].RefTable = UsersTable
 	PasswordResetsTable.ForeignKeys[0].RefTable = UsersTable
 	RecoveryCodesTable.ForeignKeys[0].RefTable = UsersTable
 	UsersTable.ForeignKeys[0].RefTable = GroupsTable

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"website/backend/internal/database/ent/group"
+	"website/backend/internal/database/ent/mediaasset"
 	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/predicate"
 	"website/backend/internal/database/ent/recoverycode"
@@ -33,6 +34,7 @@ type UserQuery struct {
 	withPermissions    *UserPermissionQuery
 	withRecoveryCodes  *RecoveryCodeQuery
 	withPasswordResets *PasswordResetQuery
+	withMediaAssets    *MediaAssetQuery
 	modifiers          []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -151,6 +153,28 @@ func (_q *UserQuery) QueryPasswordResets() *PasswordResetQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(passwordreset.Table, passwordreset.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.PasswordResetsTable, user.PasswordResetsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryMediaAssets chains the current query on the "mediaAssets" edge.
+func (_q *UserQuery) QueryMediaAssets() *MediaAssetQuery {
+	query := (&MediaAssetClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(mediaasset.Table, mediaasset.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.MediaAssetsTable, user.MediaAssetsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -354,6 +378,7 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withPermissions:    _q.withPermissions.Clone(),
 		withRecoveryCodes:  _q.withRecoveryCodes.Clone(),
 		withPasswordResets: _q.withPasswordResets.Clone(),
+		withMediaAssets:    _q.withMediaAssets.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -401,6 +426,17 @@ func (_q *UserQuery) WithPasswordResets(opts ...func(*PasswordResetQuery)) *User
 		opt(query)
 	}
 	_q.withPasswordResets = query
+	return _q
+}
+
+// WithMediaAssets tells the query-builder to eager-load the nodes that are connected to
+// the "mediaAssets" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithMediaAssets(opts ...func(*MediaAssetQuery)) *UserQuery {
+	query := (&MediaAssetClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withMediaAssets = query
 	return _q
 }
 
@@ -482,11 +518,12 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [4]bool{
+		loadedTypes = [5]bool{
 			_q.withGroup != nil,
 			_q.withPermissions != nil,
 			_q.withRecoveryCodes != nil,
 			_q.withPasswordResets != nil,
+			_q.withMediaAssets != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -534,6 +571,13 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadPasswordResets(ctx, query, nodes,
 			func(n *User) { n.Edges.PasswordResets = []*PasswordReset{} },
 			func(n *User, e *PasswordReset) { n.Edges.PasswordResets = append(n.Edges.PasswordResets, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withMediaAssets; query != nil {
+		if err := _q.loadMediaAssets(ctx, query, nodes,
+			func(n *User) { n.Edges.MediaAssets = []*MediaAsset{} },
+			func(n *User, e *MediaAsset) { n.Edges.MediaAssets = append(n.Edges.MediaAssets, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -654,6 +698,39 @@ func (_q *UserQuery) loadPasswordResets(ctx context.Context, query *PasswordRese
 		node, ok := nodeids[fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadMediaAssets(ctx context.Context, query *MediaAssetQuery, nodes []*User, init func(*User), assign func(*User, *MediaAsset)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[uuid.UUID]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(mediaasset.FieldUploadedBy)
+	}
+	query.Where(predicate.MediaAsset(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.MediaAssetsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.UploadedBy
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "uploaded_by" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "uploaded_by" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

@@ -11,6 +11,7 @@ import (
 	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/mediaasset"
 	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/recoverycode"
@@ -85,6 +86,7 @@ func checkColumn(t, c string) error {
 			captchachallenge.Table:    captchachallenge.ValidColumn,
 			group.Table:               group.ValidColumn,
 			grouppermission.Table:     grouppermission.ValidColumn,
+			mediaasset.Table:          mediaasset.ValidColumn,
 			passwordreset.Table:       passwordreset.ValidColumn,
 			pendingregistration.Table: pendingregistration.ValidColumn,
 			recoverycode.Table:        recoverycode.ValidColumn,

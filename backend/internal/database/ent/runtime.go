@@ -7,6 +7,7 @@ import (
 	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/mediaasset"
 	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/recoverycode"
@@ -97,6 +98,28 @@ func init() {
 	grouppermissionDescID := grouppermissionFields[0].Descriptor()
 	// grouppermission.DefaultID holds the default value on creation for the id field.
 	grouppermission.DefaultID = grouppermissionDescID.Default.(func() uuid.UUID)
+	mediaassetFields := schema.MediaAsset{}.Fields()
+	_ = mediaassetFields
+	// mediaassetDescProvider is the schema descriptor for provider field.
+	mediaassetDescProvider := mediaassetFields[1].Descriptor()
+	// mediaasset.ProviderValidator is a validator for the "provider" field. It is called by the builders before save.
+	mediaasset.ProviderValidator = mediaassetDescProvider.Validators[0].(func(string) error)
+	// mediaassetDescKey is the schema descriptor for key field.
+	mediaassetDescKey := mediaassetFields[2].Descriptor()
+	// mediaasset.KeyValidator is a validator for the "key" field. It is called by the builders before save.
+	mediaasset.KeyValidator = mediaassetDescKey.Validators[0].(func(string) error)
+	// mediaassetDescSizeBytes is the schema descriptor for size_bytes field.
+	mediaassetDescSizeBytes := mediaassetFields[3].Descriptor()
+	// mediaasset.SizeBytesValidator is a validator for the "size_bytes" field. It is called by the builders before save.
+	mediaasset.SizeBytesValidator = mediaassetDescSizeBytes.Validators[0].(func(int64) error)
+	// mediaassetDescCreatedAt is the schema descriptor for created_at field.
+	mediaassetDescCreatedAt := mediaassetFields[6].Descriptor()
+	// mediaasset.DefaultCreatedAt holds the default value on creation for the created_at field.
+	mediaasset.DefaultCreatedAt = mediaassetDescCreatedAt.Default.(func() time.Time)
+	// mediaassetDescID is the schema descriptor for id field.
+	mediaassetDescID := mediaassetFields[0].Descriptor()
+	// mediaasset.DefaultID holds the default value on creation for the id field.
+	mediaasset.DefaultID = mediaassetDescID.Default.(func() uuid.UUID)
 	passwordresetFields := schema.PasswordReset{}.Fields()
 	_ = passwordresetFields
 	// passwordresetDescTokenHash is the schema descriptor for token_hash field.

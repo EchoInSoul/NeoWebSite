@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 	"website/backend/internal/database/ent/group"
+	"website/backend/internal/database/ent/mediaasset"
 	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/predicate"
 	"website/backend/internal/database/ent/recoverycode"
@@ -287,6 +288,21 @@ func (_u *UserUpdate) AddPasswordResets(v ...*PasswordReset) *UserUpdate {
 	return _u.AddPasswordResetIDs(ids...)
 }
 
+// AddMediaAssetIDs adds the "mediaAssets" edge to the MediaAsset entity by IDs.
+func (_u *UserUpdate) AddMediaAssetIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.AddMediaAssetIDs(ids...)
+	return _u
+}
+
+// AddMediaAssets adds the "mediaAssets" edges to the MediaAsset entity.
+func (_u *UserUpdate) AddMediaAssets(v ...*MediaAsset) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMediaAssetIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -359,6 +375,27 @@ func (_u *UserUpdate) RemovePasswordResets(v ...*PasswordReset) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePasswordResetIDs(ids...)
+}
+
+// ClearMediaAssets clears all "mediaAssets" edges to the MediaAsset entity.
+func (_u *UserUpdate) ClearMediaAssets() *UserUpdate {
+	_u.mutation.ClearMediaAssets()
+	return _u
+}
+
+// RemoveMediaAssetIDs removes the "mediaAssets" edge to MediaAsset entities by IDs.
+func (_u *UserUpdate) RemoveMediaAssetIDs(ids ...uuid.UUID) *UserUpdate {
+	_u.mutation.RemoveMediaAssetIDs(ids...)
+	return _u
+}
+
+// RemoveMediaAssets removes "mediaAssets" edges to MediaAsset entities.
+func (_u *UserUpdate) RemoveMediaAssets(v ...*MediaAsset) *UserUpdate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMediaAssetIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -655,6 +692,51 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.MediaAssetsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MediaAssetsTable,
+			Columns: []string{user.MediaAssetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(mediaasset.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMediaAssetsIDs(); len(nodes) > 0 && !_u.mutation.MediaAssetsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MediaAssetsTable,
+			Columns: []string{user.MediaAssetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(mediaasset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MediaAssetsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MediaAssetsTable,
+			Columns: []string{user.MediaAssetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(mediaasset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -929,6 +1011,21 @@ func (_u *UserUpdateOne) AddPasswordResets(v ...*PasswordReset) *UserUpdateOne {
 	return _u.AddPasswordResetIDs(ids...)
 }
 
+// AddMediaAssetIDs adds the "mediaAssets" edge to the MediaAsset entity by IDs.
+func (_u *UserUpdateOne) AddMediaAssetIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.AddMediaAssetIDs(ids...)
+	return _u
+}
+
+// AddMediaAssets adds the "mediaAssets" edges to the MediaAsset entity.
+func (_u *UserUpdateOne) AddMediaAssets(v ...*MediaAsset) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMediaAssetIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -1001,6 +1098,27 @@ func (_u *UserUpdateOne) RemovePasswordResets(v ...*PasswordReset) *UserUpdateOn
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePasswordResetIDs(ids...)
+}
+
+// ClearMediaAssets clears all "mediaAssets" edges to the MediaAsset entity.
+func (_u *UserUpdateOne) ClearMediaAssets() *UserUpdateOne {
+	_u.mutation.ClearMediaAssets()
+	return _u
+}
+
+// RemoveMediaAssetIDs removes the "mediaAssets" edge to MediaAsset entities by IDs.
+func (_u *UserUpdateOne) RemoveMediaAssetIDs(ids ...uuid.UUID) *UserUpdateOne {
+	_u.mutation.RemoveMediaAssetIDs(ids...)
+	return _u
+}
+
+// RemoveMediaAssets removes "mediaAssets" edges to MediaAsset entities.
+func (_u *UserUpdateOne) RemoveMediaAssets(v ...*MediaAsset) *UserUpdateOne {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMediaAssetIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -1320,6 +1438,51 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.MediaAssetsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MediaAssetsTable,
+			Columns: []string{user.MediaAssetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(mediaasset.FieldID, field.TypeUUID),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMediaAssetsIDs(); len(nodes) > 0 && !_u.mutation.MediaAssetsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MediaAssetsTable,
+			Columns: []string{user.MediaAssetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(mediaasset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MediaAssetsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MediaAssetsTable,
+			Columns: []string{user.MediaAssetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(mediaasset.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

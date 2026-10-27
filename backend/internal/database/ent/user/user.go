@@ -49,6 +49,8 @@ const (
 	EdgeRecoveryCodes = "recoveryCodes"
 	// EdgePasswordResets holds the string denoting the passwordresets edge name in mutations.
 	EdgePasswordResets = "passwordResets"
+	// EdgeMediaAssets holds the string denoting the mediaassets edge name in mutations.
+	EdgeMediaAssets = "mediaAssets"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// GroupTable is the table that holds the group relation/edge.
@@ -79,6 +81,13 @@ const (
 	PasswordResetsInverseTable = "password_resets"
 	// PasswordResetsColumn is the table column denoting the passwordResets relation/edge.
 	PasswordResetsColumn = "user_id"
+	// MediaAssetsTable is the table that holds the mediaAssets relation/edge.
+	MediaAssetsTable = "media_assets"
+	// MediaAssetsInverseTable is the table name for the MediaAsset entity.
+	// It exists in this package in order to avoid circular dependency with the "mediaasset" package.
+	MediaAssetsInverseTable = "media_assets"
+	// MediaAssetsColumn is the table column denoting the mediaAssets relation/edge.
+	MediaAssetsColumn = "uploaded_by"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -253,6 +262,20 @@ func ByPasswordResets(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newPasswordResetsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByMediaAssetsCount orders the results by mediaAssets count.
+func ByMediaAssetsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newMediaAssetsStep(), opts...)
+	}
+}
+
+// ByMediaAssets orders the results by mediaAssets terms.
+func ByMediaAssets(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newMediaAssetsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newGroupStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -279,5 +302,12 @@ func newPasswordResetsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(PasswordResetsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, PasswordResetsTable, PasswordResetsColumn),
+	)
+}
+func newMediaAssetsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(MediaAssetsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, MediaAssetsTable, MediaAssetsColumn),
 	)
 }

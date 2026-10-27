@@ -14,6 +14,7 @@ import (
 	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/mediaasset"
 	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/recoverycode"
@@ -40,6 +41,8 @@ type Client struct {
 	Group *GroupClient
 	// GroupPermission is the client for interacting with the GroupPermission builders.
 	GroupPermission *GroupPermissionClient
+	// MediaAsset is the client for interacting with the MediaAsset builders.
+	MediaAsset *MediaAssetClient
 	// PasswordReset is the client for interacting with the PasswordReset builders.
 	PasswordReset *PasswordResetClient
 	// PendingRegistration is the client for interacting with the PendingRegistration builders.
@@ -68,6 +71,7 @@ func (c *Client) init() {
 	c.CaptchaChallenge = NewCaptchaChallengeClient(c.config)
 	c.Group = NewGroupClient(c.config)
 	c.GroupPermission = NewGroupPermissionClient(c.config)
+	c.MediaAsset = NewMediaAssetClient(c.config)
 	c.PasswordReset = NewPasswordResetClient(c.config)
 	c.PendingRegistration = NewPendingRegistrationClient(c.config)
 	c.RecoveryCode = NewRecoveryCodeClient(c.config)
@@ -170,6 +174,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		CaptchaChallenge:    NewCaptchaChallengeClient(cfg),
 		Group:               NewGroupClient(cfg),
 		GroupPermission:     NewGroupPermissionClient(cfg),
+		MediaAsset:          NewMediaAssetClient(cfg),
 		PasswordReset:       NewPasswordResetClient(cfg),
 		PendingRegistration: NewPendingRegistrationClient(cfg),
 		RecoveryCode:        NewRecoveryCodeClient(cfg),
@@ -199,6 +204,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		CaptchaChallenge:    NewCaptchaChallengeClient(cfg),
 		Group:               NewGroupClient(cfg),
 		GroupPermission:     NewGroupPermissionClient(cfg),
+		MediaAsset:          NewMediaAssetClient(cfg),
 		PasswordReset:       NewPasswordResetClient(cfg),
 		PendingRegistration: NewPendingRegistrationClient(cfg),
 		RecoveryCode:        NewRecoveryCodeClient(cfg),
@@ -235,7 +241,7 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.CaptchaChallenge, c.Group, c.GroupPermission, c.PasswordReset,
+		c.CaptchaChallenge, c.Group, c.GroupPermission, c.MediaAsset, c.PasswordReset,
 		c.PendingRegistration, c.RecoveryCode, c.Session, c.SettingValue, c.User,
 		c.UserPermission,
 	} {
@@ -247,7 +253,7 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.CaptchaChallenge, c.Group, c.GroupPermission, c.PasswordReset,
+		c.CaptchaChallenge, c.Group, c.GroupPermission, c.MediaAsset, c.PasswordReset,
 		c.PendingRegistration, c.RecoveryCode, c.Session, c.SettingValue, c.User,
 		c.UserPermission,
 	} {
@@ -264,6 +270,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Group.mutate(ctx, m)
 	case *GroupPermissionMutation:
 		return c.GroupPermission.mutate(ctx, m)
+	case *MediaAssetMutation:
+		return c.MediaAsset.mutate(ctx, m)
 	case *PasswordResetMutation:
 		return c.PasswordReset.mutate(ctx, m)
 	case *PendingRegistrationMutation:
@@ -727,6 +735,155 @@ func (c *GroupPermissionClient) mutate(ctx context.Context, m *GroupPermissionMu
 		return (&GroupPermissionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GroupPermission mutation op: %q", m.Op())
+	}
+}
+
+// MediaAssetClient is a client for the MediaAsset schema.
+type MediaAssetClient struct {
+	config
+}
+
+// NewMediaAssetClient returns a client for the MediaAsset from the given config.
+func NewMediaAssetClient(c config) *MediaAssetClient {
+	return &MediaAssetClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `mediaasset.Hooks(f(g(h())))`.
+func (c *MediaAssetClient) Use(hooks ...Hook) {
+	c.hooks.MediaAsset = append(c.hooks.MediaAsset, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `mediaasset.Intercept(f(g(h())))`.
+func (c *MediaAssetClient) Intercept(interceptors ...Interceptor) {
+	c.inters.MediaAsset = append(c.inters.MediaAsset, interceptors...)
+}
+
+// Create returns a builder for creating a MediaAsset entity.
+func (c *MediaAssetClient) Create() *MediaAssetCreate {
+	mutation := newMediaAssetMutation(c.config, OpCreate)
+	return &MediaAssetCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of MediaAsset entities.
+func (c *MediaAssetClient) CreateBulk(builders ...*MediaAssetCreate) *MediaAssetCreateBulk {
+	return &MediaAssetCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MediaAssetClient) MapCreateBulk(slice any, setFunc func(*MediaAssetCreate, int)) *MediaAssetCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MediaAssetCreateBulk{err: fmt.Errorf("calling to MediaAssetClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MediaAssetCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MediaAssetCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for MediaAsset.
+func (c *MediaAssetClient) Update() *MediaAssetUpdate {
+	mutation := newMediaAssetMutation(c.config, OpUpdate)
+	return &MediaAssetUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MediaAssetClient) UpdateOne(_m *MediaAsset) *MediaAssetUpdateOne {
+	mutation := newMediaAssetMutation(c.config, OpUpdateOne, withMediaAsset(_m))
+	return &MediaAssetUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MediaAssetClient) UpdateOneID(id uuid.UUID) *MediaAssetUpdateOne {
+	mutation := newMediaAssetMutation(c.config, OpUpdateOne, withMediaAssetID(id))
+	return &MediaAssetUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for MediaAsset.
+func (c *MediaAssetClient) Delete() *MediaAssetDelete {
+	mutation := newMediaAssetMutation(c.config, OpDelete)
+	return &MediaAssetDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MediaAssetClient) DeleteOne(_m *MediaAsset) *MediaAssetDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MediaAssetClient) DeleteOneID(id uuid.UUID) *MediaAssetDeleteOne {
+	builder := c.Delete().Where(mediaasset.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MediaAssetDeleteOne{builder}
+}
+
+// Query returns a query builder for MediaAsset.
+func (c *MediaAssetClient) Query() *MediaAssetQuery {
+	return &MediaAssetQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMediaAsset},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a MediaAsset entity by its id.
+func (c *MediaAssetClient) Get(ctx context.Context, id uuid.UUID) (*MediaAsset, error) {
+	return c.Query().Where(mediaasset.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MediaAssetClient) GetX(ctx context.Context, id uuid.UUID) *MediaAsset {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUploader queries the uploader edge of a MediaAsset.
+func (c *MediaAssetClient) QueryUploader(_m *MediaAsset) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(mediaasset.Table, mediaasset.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, mediaasset.UploaderTable, mediaasset.UploaderColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *MediaAssetClient) Hooks() []Hook {
+	return c.hooks.MediaAsset
+}
+
+// Interceptors returns the client interceptors.
+func (c *MediaAssetClient) Interceptors() []Interceptor {
+	return c.inters.MediaAsset
+}
+
+func (c *MediaAssetClient) mutate(ctx context.Context, m *MediaAssetMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MediaAssetCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MediaAssetUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MediaAssetUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MediaAssetDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown MediaAsset mutation op: %q", m.Op())
 	}
 }
 
@@ -1599,6 +1756,22 @@ func (c *UserClient) QueryPasswordResets(_m *User) *PasswordResetQuery {
 	return query
 }
 
+// QueryMediaAssets queries the mediaAssets edge of a User.
+func (c *UserClient) QueryMediaAssets(_m *User) *MediaAssetQuery {
+	query := (&MediaAssetClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(mediaasset.Table, mediaasset.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.MediaAssetsTable, user.MediaAssetsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *UserClient) Hooks() []Hook {
 	return c.hooks.User
@@ -1776,11 +1949,13 @@ func (c *UserPermissionClient) mutate(ctx context.Context, m *UserPermissionMuta
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		CaptchaChallenge, Group, GroupPermission, PasswordReset, PendingRegistration,
-		RecoveryCode, Session, SettingValue, User, UserPermission []ent.Hook
+		CaptchaChallenge, Group, GroupPermission, MediaAsset, PasswordReset,
+		PendingRegistration, RecoveryCode, Session, SettingValue, User,
+		UserPermission []ent.Hook
 	}
 	inters struct {
-		CaptchaChallenge, Group, GroupPermission, PasswordReset, PendingRegistration,
-		RecoveryCode, Session, SettingValue, User, UserPermission []ent.Interceptor
+		CaptchaChallenge, Group, GroupPermission, MediaAsset, PasswordReset,
+		PendingRegistration, RecoveryCode, Session, SettingValue, User,
+		UserPermission []ent.Interceptor
 	}
 )

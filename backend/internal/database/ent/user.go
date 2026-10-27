@@ -61,9 +61,11 @@ type UserEdges struct {
 	RecoveryCodes []*RecoveryCode `json:"recoveryCodes,omitempty"`
 	// PasswordResets holds the value of the passwordResets edge.
 	PasswordResets []*PasswordReset `json:"passwordResets,omitempty"`
+	// MediaAssets holds the value of the mediaAssets edge.
+	MediaAssets []*MediaAsset `json:"mediaAssets,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [4]bool
+	loadedTypes [5]bool
 }
 
 // GroupOrErr returns the Group value or an error if the edge
@@ -102,6 +104,15 @@ func (e UserEdges) PasswordResetsOrErr() ([]*PasswordReset, error) {
 		return e.PasswordResets, nil
 	}
 	return nil, &NotLoadedError{edge: "passwordResets"}
+}
+
+// MediaAssetsOrErr returns the MediaAssets value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) MediaAssetsOrErr() ([]*MediaAsset, error) {
+	if e.loadedTypes[4] {
+		return e.MediaAssets, nil
+	}
+	return nil, &NotLoadedError{edge: "mediaAssets"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -252,6 +263,11 @@ func (_m *User) QueryRecoveryCodes() *RecoveryCodeQuery {
 // QueryPasswordResets queries the "passwordResets" edge of the User entity.
 func (_m *User) QueryPasswordResets() *PasswordResetQuery {
 	return NewUserClient(_m.config).QueryPasswordResets(_m)
+}
+
+// QueryMediaAssets queries the "mediaAssets" edge of the User entity.
+func (_m *User) QueryMediaAssets() *MediaAssetQuery {
+	return NewUserClient(_m.config).QueryMediaAssets(_m)
 }
 
 // Update returns a builder for updating this User.

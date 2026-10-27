@@ -12,6 +12,7 @@ import (
 	"website/backend/internal/database/ent/captchachallenge"
 	"website/backend/internal/database/ent/group"
 	"website/backend/internal/database/ent/grouppermission"
+	"website/backend/internal/database/ent/mediaasset"
 	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/pendingregistration"
 	"website/backend/internal/database/ent/predicate"
@@ -38,6 +39,7 @@ const (
 	TypeCaptchaChallenge    = "CaptchaChallenge"
 	TypeGroup               = "Group"
 	TypeGroupPermission     = "GroupPermission"
+	TypeMediaAsset          = "MediaAsset"
 	TypePasswordReset       = "PasswordReset"
 	TypePendingRegistration = "PendingRegistration"
 	TypeRecoveryCode        = "RecoveryCode"
@@ -1961,6 +1963,733 @@ func (m *GroupPermissionMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown GroupPermission edge %s", name)
+}
+
+// MediaAssetMutation represents an operation that mutates the MediaAsset nodes in the graph.
+type MediaAssetMutation struct {
+	config
+	op              Op
+	typ             string
+	id              *uuid.UUID
+	provider        *string
+	key             *string
+	size_bytes      *int64
+	addsize_bytes   *int64
+	original_name   *string
+	created_at      *time.Time
+	clearedFields   map[string]struct{}
+	uploader        *uuid.UUID
+	cleareduploader bool
+	done            bool
+	oldValue        func(context.Context) (*MediaAsset, error)
+	predicates      []predicate.MediaAsset
+}
+
+var _ ent.Mutation = (*MediaAssetMutation)(nil)
+
+// mediaassetOption allows management of the mutation configuration using functional options.
+type mediaassetOption func(*MediaAssetMutation)
+
+// newMediaAssetMutation creates new mutation for the MediaAsset entity.
+func newMediaAssetMutation(c config, op Op, opts ...mediaassetOption) *MediaAssetMutation {
+	m := &MediaAssetMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeMediaAsset,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withMediaAssetID sets the ID field of the mutation.
+func withMediaAssetID(id uuid.UUID) mediaassetOption {
+	return func(m *MediaAssetMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *MediaAsset
+		)
+		m.oldValue = func(ctx context.Context) (*MediaAsset, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().MediaAsset.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withMediaAsset sets the old MediaAsset of the mutation.
+func withMediaAsset(node *MediaAsset) mediaassetOption {
+	return func(m *MediaAssetMutation) {
+		m.oldValue = func(context.Context) (*MediaAsset, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m MediaAssetMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m MediaAssetMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of MediaAsset entities.
+func (m *MediaAssetMutation) SetID(id uuid.UUID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *MediaAssetMutation) ID() (id uuid.UUID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *MediaAssetMutation) IDs(ctx context.Context) ([]uuid.UUID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []uuid.UUID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().MediaAsset.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetProvider sets the "provider" field.
+func (m *MediaAssetMutation) SetProvider(s string) {
+	m.provider = &s
+}
+
+// Provider returns the value of the "provider" field in the mutation.
+func (m *MediaAssetMutation) Provider() (r string, exists bool) {
+	v := m.provider
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProvider returns the old "provider" field's value of the MediaAsset entity.
+// If the MediaAsset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MediaAssetMutation) OldProvider(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProvider is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProvider requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProvider: %w", err)
+	}
+	return oldValue.Provider, nil
+}
+
+// ResetProvider resets all changes to the "provider" field.
+func (m *MediaAssetMutation) ResetProvider() {
+	m.provider = nil
+}
+
+// SetKey sets the "key" field.
+func (m *MediaAssetMutation) SetKey(s string) {
+	m.key = &s
+}
+
+// Key returns the value of the "key" field in the mutation.
+func (m *MediaAssetMutation) Key() (r string, exists bool) {
+	v := m.key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKey returns the old "key" field's value of the MediaAsset entity.
+// If the MediaAsset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MediaAssetMutation) OldKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKey: %w", err)
+	}
+	return oldValue.Key, nil
+}
+
+// ResetKey resets all changes to the "key" field.
+func (m *MediaAssetMutation) ResetKey() {
+	m.key = nil
+}
+
+// SetSizeBytes sets the "size_bytes" field.
+func (m *MediaAssetMutation) SetSizeBytes(i int64) {
+	m.size_bytes = &i
+	m.addsize_bytes = nil
+}
+
+// SizeBytes returns the value of the "size_bytes" field in the mutation.
+func (m *MediaAssetMutation) SizeBytes() (r int64, exists bool) {
+	v := m.size_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSizeBytes returns the old "size_bytes" field's value of the MediaAsset entity.
+// If the MediaAsset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MediaAssetMutation) OldSizeBytes(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSizeBytes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSizeBytes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSizeBytes: %w", err)
+	}
+	return oldValue.SizeBytes, nil
+}
+
+// AddSizeBytes adds i to the "size_bytes" field.
+func (m *MediaAssetMutation) AddSizeBytes(i int64) {
+	if m.addsize_bytes != nil {
+		*m.addsize_bytes += i
+	} else {
+		m.addsize_bytes = &i
+	}
+}
+
+// AddedSizeBytes returns the value that was added to the "size_bytes" field in this mutation.
+func (m *MediaAssetMutation) AddedSizeBytes() (r int64, exists bool) {
+	v := m.addsize_bytes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSizeBytes resets all changes to the "size_bytes" field.
+func (m *MediaAssetMutation) ResetSizeBytes() {
+	m.size_bytes = nil
+	m.addsize_bytes = nil
+}
+
+// SetOriginalName sets the "original_name" field.
+func (m *MediaAssetMutation) SetOriginalName(s string) {
+	m.original_name = &s
+}
+
+// OriginalName returns the value of the "original_name" field in the mutation.
+func (m *MediaAssetMutation) OriginalName() (r string, exists bool) {
+	v := m.original_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOriginalName returns the old "original_name" field's value of the MediaAsset entity.
+// If the MediaAsset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MediaAssetMutation) OldOriginalName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOriginalName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOriginalName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOriginalName: %w", err)
+	}
+	return oldValue.OriginalName, nil
+}
+
+// ResetOriginalName resets all changes to the "original_name" field.
+func (m *MediaAssetMutation) ResetOriginalName() {
+	m.original_name = nil
+}
+
+// SetUploadedBy sets the "uploaded_by" field.
+func (m *MediaAssetMutation) SetUploadedBy(u uuid.UUID) {
+	m.uploader = &u
+}
+
+// UploadedBy returns the value of the "uploaded_by" field in the mutation.
+func (m *MediaAssetMutation) UploadedBy() (r uuid.UUID, exists bool) {
+	v := m.uploader
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUploadedBy returns the old "uploaded_by" field's value of the MediaAsset entity.
+// If the MediaAsset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MediaAssetMutation) OldUploadedBy(ctx context.Context) (v *uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUploadedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUploadedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUploadedBy: %w", err)
+	}
+	return oldValue.UploadedBy, nil
+}
+
+// ClearUploadedBy clears the value of the "uploaded_by" field.
+func (m *MediaAssetMutation) ClearUploadedBy() {
+	m.uploader = nil
+	m.clearedFields[mediaasset.FieldUploadedBy] = struct{}{}
+}
+
+// UploadedByCleared returns if the "uploaded_by" field was cleared in this mutation.
+func (m *MediaAssetMutation) UploadedByCleared() bool {
+	_, ok := m.clearedFields[mediaasset.FieldUploadedBy]
+	return ok
+}
+
+// ResetUploadedBy resets all changes to the "uploaded_by" field.
+func (m *MediaAssetMutation) ResetUploadedBy() {
+	m.uploader = nil
+	delete(m.clearedFields, mediaasset.FieldUploadedBy)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *MediaAssetMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *MediaAssetMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the MediaAsset entity.
+// If the MediaAsset object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MediaAssetMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *MediaAssetMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUploaderID sets the "uploader" edge to the User entity by id.
+func (m *MediaAssetMutation) SetUploaderID(id uuid.UUID) {
+	m.uploader = &id
+}
+
+// ClearUploader clears the "uploader" edge to the User entity.
+func (m *MediaAssetMutation) ClearUploader() {
+	m.cleareduploader = true
+	m.clearedFields[mediaasset.FieldUploadedBy] = struct{}{}
+}
+
+// UploaderCleared reports if the "uploader" edge to the User entity was cleared.
+func (m *MediaAssetMutation) UploaderCleared() bool {
+	return m.UploadedByCleared() || m.cleareduploader
+}
+
+// UploaderID returns the "uploader" edge ID in the mutation.
+func (m *MediaAssetMutation) UploaderID() (id uuid.UUID, exists bool) {
+	if m.uploader != nil {
+		return *m.uploader, true
+	}
+	return
+}
+
+// UploaderIDs returns the "uploader" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UploaderID instead. It exists only for internal usage by the builders.
+func (m *MediaAssetMutation) UploaderIDs() (ids []uuid.UUID) {
+	if id := m.uploader; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUploader resets all changes to the "uploader" edge.
+func (m *MediaAssetMutation) ResetUploader() {
+	m.uploader = nil
+	m.cleareduploader = false
+}
+
+// Where appends a list predicates to the MediaAssetMutation builder.
+func (m *MediaAssetMutation) Where(ps ...predicate.MediaAsset) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the MediaAssetMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *MediaAssetMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.MediaAsset, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *MediaAssetMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *MediaAssetMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (MediaAsset).
+func (m *MediaAssetMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *MediaAssetMutation) Fields() []string {
+	fields := make([]string, 0, 6)
+	if m.provider != nil {
+		fields = append(fields, mediaasset.FieldProvider)
+	}
+	if m.key != nil {
+		fields = append(fields, mediaasset.FieldKey)
+	}
+	if m.size_bytes != nil {
+		fields = append(fields, mediaasset.FieldSizeBytes)
+	}
+	if m.original_name != nil {
+		fields = append(fields, mediaasset.FieldOriginalName)
+	}
+	if m.uploader != nil {
+		fields = append(fields, mediaasset.FieldUploadedBy)
+	}
+	if m.created_at != nil {
+		fields = append(fields, mediaasset.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *MediaAssetMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case mediaasset.FieldProvider:
+		return m.Provider()
+	case mediaasset.FieldKey:
+		return m.Key()
+	case mediaasset.FieldSizeBytes:
+		return m.SizeBytes()
+	case mediaasset.FieldOriginalName:
+		return m.OriginalName()
+	case mediaasset.FieldUploadedBy:
+		return m.UploadedBy()
+	case mediaasset.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *MediaAssetMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case mediaasset.FieldProvider:
+		return m.OldProvider(ctx)
+	case mediaasset.FieldKey:
+		return m.OldKey(ctx)
+	case mediaasset.FieldSizeBytes:
+		return m.OldSizeBytes(ctx)
+	case mediaasset.FieldOriginalName:
+		return m.OldOriginalName(ctx)
+	case mediaasset.FieldUploadedBy:
+		return m.OldUploadedBy(ctx)
+	case mediaasset.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown MediaAsset field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MediaAssetMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case mediaasset.FieldProvider:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProvider(v)
+		return nil
+	case mediaasset.FieldKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKey(v)
+		return nil
+	case mediaasset.FieldSizeBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSizeBytes(v)
+		return nil
+	case mediaasset.FieldOriginalName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOriginalName(v)
+		return nil
+	case mediaasset.FieldUploadedBy:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUploadedBy(v)
+		return nil
+	case mediaasset.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown MediaAsset field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *MediaAssetMutation) AddedFields() []string {
+	var fields []string
+	if m.addsize_bytes != nil {
+		fields = append(fields, mediaasset.FieldSizeBytes)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *MediaAssetMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case mediaasset.FieldSizeBytes:
+		return m.AddedSizeBytes()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MediaAssetMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case mediaasset.FieldSizeBytes:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSizeBytes(v)
+		return nil
+	}
+	return fmt.Errorf("unknown MediaAsset numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *MediaAssetMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(mediaasset.FieldUploadedBy) {
+		fields = append(fields, mediaasset.FieldUploadedBy)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *MediaAssetMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *MediaAssetMutation) ClearField(name string) error {
+	switch name {
+	case mediaasset.FieldUploadedBy:
+		m.ClearUploadedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown MediaAsset nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *MediaAssetMutation) ResetField(name string) error {
+	switch name {
+	case mediaasset.FieldProvider:
+		m.ResetProvider()
+		return nil
+	case mediaasset.FieldKey:
+		m.ResetKey()
+		return nil
+	case mediaasset.FieldSizeBytes:
+		m.ResetSizeBytes()
+		return nil
+	case mediaasset.FieldOriginalName:
+		m.ResetOriginalName()
+		return nil
+	case mediaasset.FieldUploadedBy:
+		m.ResetUploadedBy()
+		return nil
+	case mediaasset.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown MediaAsset field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *MediaAssetMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.uploader != nil {
+		edges = append(edges, mediaasset.EdgeUploader)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *MediaAssetMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case mediaasset.EdgeUploader:
+		if id := m.uploader; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *MediaAssetMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *MediaAssetMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *MediaAssetMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.cleareduploader {
+		edges = append(edges, mediaasset.EdgeUploader)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *MediaAssetMutation) EdgeCleared(name string) bool {
+	switch name {
+	case mediaasset.EdgeUploader:
+		return m.cleareduploader
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *MediaAssetMutation) ClearEdge(name string) error {
+	switch name {
+	case mediaasset.EdgeUploader:
+		m.ClearUploader()
+		return nil
+	}
+	return fmt.Errorf("unknown MediaAsset unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *MediaAssetMutation) ResetEdge(name string) error {
+	switch name {
+	case mediaasset.EdgeUploader:
+		m.ResetUploader()
+		return nil
+	}
+	return fmt.Errorf("unknown MediaAsset edge %s", name)
 }
 
 // PasswordResetMutation represents an operation that mutates the PasswordReset nodes in the graph.
@@ -4659,6 +5388,9 @@ type UserMutation struct {
 	passwordResets            map[uuid.UUID]struct{}
 	removedpasswordResets     map[uuid.UUID]struct{}
 	clearedpasswordResets     bool
+	mediaAssets               map[uuid.UUID]struct{}
+	removedmediaAssets        map[uuid.UUID]struct{}
+	clearedmediaAssets        bool
 	done                      bool
 	oldValue                  func(context.Context) (*User, error)
 	predicates                []predicate.User
@@ -5531,6 +6263,60 @@ func (m *UserMutation) ResetPasswordResets() {
 	m.removedpasswordResets = nil
 }
 
+// AddMediaAssetIDs adds the "mediaAssets" edge to the MediaAsset entity by ids.
+func (m *UserMutation) AddMediaAssetIDs(ids ...uuid.UUID) {
+	if m.mediaAssets == nil {
+		m.mediaAssets = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		m.mediaAssets[ids[i]] = struct{}{}
+	}
+}
+
+// ClearMediaAssets clears the "mediaAssets" edge to the MediaAsset entity.
+func (m *UserMutation) ClearMediaAssets() {
+	m.clearedmediaAssets = true
+}
+
+// MediaAssetsCleared reports if the "mediaAssets" edge to the MediaAsset entity was cleared.
+func (m *UserMutation) MediaAssetsCleared() bool {
+	return m.clearedmediaAssets
+}
+
+// RemoveMediaAssetIDs removes the "mediaAssets" edge to the MediaAsset entity by IDs.
+func (m *UserMutation) RemoveMediaAssetIDs(ids ...uuid.UUID) {
+	if m.removedmediaAssets == nil {
+		m.removedmediaAssets = make(map[uuid.UUID]struct{})
+	}
+	for i := range ids {
+		delete(m.mediaAssets, ids[i])
+		m.removedmediaAssets[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedMediaAssets returns the removed IDs of the "mediaAssets" edge to the MediaAsset entity.
+func (m *UserMutation) RemovedMediaAssetsIDs() (ids []uuid.UUID) {
+	for id := range m.removedmediaAssets {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// MediaAssetsIDs returns the "mediaAssets" edge IDs in the mutation.
+func (m *UserMutation) MediaAssetsIDs() (ids []uuid.UUID) {
+	for id := range m.mediaAssets {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetMediaAssets resets all changes to the "mediaAssets" edge.
+func (m *UserMutation) ResetMediaAssets() {
+	m.mediaAssets = nil
+	m.clearedmediaAssets = false
+	m.removedmediaAssets = nil
+}
+
 // Where appends a list predicates to the UserMutation builder.
 func (m *UserMutation) Where(ps ...predicate.User) {
 	m.predicates = append(m.predicates, ps...)
@@ -5928,7 +6714,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 5)
 	if m.group != nil {
 		edges = append(edges, user.EdgeGroup)
 	}
@@ -5940,6 +6726,9 @@ func (m *UserMutation) AddedEdges() []string {
 	}
 	if m.passwordResets != nil {
 		edges = append(edges, user.EdgePasswordResets)
+	}
+	if m.mediaAssets != nil {
+		edges = append(edges, user.EdgeMediaAssets)
 	}
 	return edges
 }
@@ -5970,13 +6759,19 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeMediaAssets:
+		ids := make([]ent.Value, 0, len(m.mediaAssets))
+		for id := range m.mediaAssets {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 5)
 	if m.removedpermissions != nil {
 		edges = append(edges, user.EdgePermissions)
 	}
@@ -5985,6 +6780,9 @@ func (m *UserMutation) RemovedEdges() []string {
 	}
 	if m.removedpasswordResets != nil {
 		edges = append(edges, user.EdgePasswordResets)
+	}
+	if m.removedmediaAssets != nil {
+		edges = append(edges, user.EdgeMediaAssets)
 	}
 	return edges
 }
@@ -6011,13 +6809,19 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeMediaAssets:
+		ids := make([]ent.Value, 0, len(m.removedmediaAssets))
+		for id := range m.removedmediaAssets {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 5)
 	if m.clearedgroup {
 		edges = append(edges, user.EdgeGroup)
 	}
@@ -6029,6 +6833,9 @@ func (m *UserMutation) ClearedEdges() []string {
 	}
 	if m.clearedpasswordResets {
 		edges = append(edges, user.EdgePasswordResets)
+	}
+	if m.clearedmediaAssets {
+		edges = append(edges, user.EdgeMediaAssets)
 	}
 	return edges
 }
@@ -6045,6 +6852,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedrecoveryCodes
 	case user.EdgePasswordResets:
 		return m.clearedpasswordResets
+	case user.EdgeMediaAssets:
+		return m.clearedmediaAssets
 	}
 	return false
 }
@@ -6075,6 +6884,9 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgePasswordResets:
 		m.ResetPasswordResets()
+		return nil
+	case user.EdgeMediaAssets:
+		m.ResetMediaAssets()
 		return nil
 	}
 	return fmt.Errorf("unknown User edge %s", name)

@@ -15,6 +15,9 @@ type Group func(*sql.Selector)
 // GroupPermission is the predicate function for grouppermission builders.
 type GroupPermission func(*sql.Selector)
 
+// MediaAsset is the predicate function for mediaasset builders.
+type MediaAsset func(*sql.Selector)
+
 // PasswordReset is the predicate function for passwordreset builders.
 type PasswordReset func(*sql.Selector)
 

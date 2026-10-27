@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 	"website/backend/internal/database/ent/group"
+	"website/backend/internal/database/ent/mediaasset"
 	"website/backend/internal/database/ent/passwordreset"
 	"website/backend/internal/database/ent/recoverycode"
 	"website/backend/internal/database/ent/user"
@@ -240,6 +241,21 @@ func (_c *UserCreate) AddPasswordResets(v ...*PasswordReset) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddPasswordResetIDs(ids...)
+}
+
+// AddMediaAssetIDs adds the "mediaAssets" edge to the MediaAsset entity by IDs.
+func (_c *UserCreate) AddMediaAssetIDs(ids ...uuid.UUID) *UserCreate {
+	_c.mutation.AddMediaAssetIDs(ids...)
+	return _c
+}
+
+// AddMediaAssets adds the "mediaAssets" edges to the MediaAsset entity.
+func (_c *UserCreate) AddMediaAssets(v ...*MediaAsset) *UserCreate {
+	ids := make([]uuid.UUID, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddMediaAssetIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -490,6 +506,22 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(passwordreset.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.MediaAssetsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.MediaAssetsTable,
+			Columns: []string{user.MediaAssetsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(mediaasset.FieldID, field.TypeUUID),
 			},
 		}
 		for _, k := range nodes {

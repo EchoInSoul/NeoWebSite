@@ -48,6 +48,7 @@ func (User) Edges() []ent.Edge {
 		edge.To("permissions", UserPermission.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("recoveryCodes", RecoveryCode.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 		edge.To("passwordResets", PasswordReset.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
+		edge.To("mediaAssets", MediaAsset.Type).Annotations(entsql.OnDelete(entsql.SetNull)),
 	}
 }
 
