@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -60,7 +61,7 @@ func newTestServer(t *testing.T, environment string) (*httptest.Server, *databas
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	application, err := New(cfg, db)
+	application, err := newWithRoot(cfg, db, t.TempDir())
 	if err != nil {
 		t.Fatalf("new app: %v", err)
 	}
@@ -563,7 +564,7 @@ func newDegradedServer(t *testing.T) *httptest.Server {
 		t.Fatal("expected the degraded fixture database url to be unreachable")
 	}
 
-	application, err := New(cfg, db)
+	application, err := newWithRoot(cfg, db, t.TempDir())
 	if err != nil {
 		t.Fatalf("new app: %v", err)
 	}
@@ -1089,7 +1090,7 @@ func TestShutdownClosesMailer(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	a, err := New(cfg, db)
+	a, err := newWithRoot(cfg, db, t.TempDir())
 	if err != nil {
 		t.Fatalf("new app: %v", err)
 	}
@@ -1700,5 +1701,78 @@ func TestRecoveryHandlerLogsPanicWithStack(t *testing.T) {
 	}
 	if !strings.Contains(logged, "status=500") || !strings.Contains(logged, "request failed") {
 		t.Fatalf("log = %q, want the 5xx funnel line alongside the panic line", logged)
+	}
+}
+
+func TestMediaUploadAndStorageThroughFullChain(t *testing.T) {
+	ts, db := newTestServer(t, config.EnvironmentDevelopment)
+	user, password := createTestUser(t, db)
+	if err := db.Client.User.UpdateOneID(uuid.MustParse(user.ID)).SetGroupID(rbac.GroupIDOwner).Exec(context.Background()); err != nil {
+		t.Fatalf("promote user: %v", err)
+	}
+	client := newClient(t)
+	postLoginWithLogout(t, client, ts, user.Email, password)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", "a.jpg")
+	if err != nil {
+		t.Fatalf("create part: %v", err)
+	}
+	if _, err := part.Write([]byte("hello")); err != nil {
+		t.Fatalf("write part: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/media", &body)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("upload status = %d, want 201", resp.StatusCode)
+	}
+
+	var uploaded struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&uploaded); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if uploaded.URL == "" {
+		t.Fatal("empty url")
+	}
+
+	stored, err := client.Get(ts.URL + uploaded.URL)
+	if err != nil {
+		t.Fatalf("get stored: %v", err)
+	}
+	defer stored.Body.Close()
+	storedBody, err := io.ReadAll(stored.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if stored.StatusCode != http.StatusOK || string(storedBody) != "hello" {
+		t.Fatalf("status = %d, body = %q", stored.StatusCode, storedBody)
+	}
+
+	missing := ts.URL + "/storage/2026/10/27/" + uuid.Must(uuid.NewV7()).String() + ".jpg"
+	notFound, err := client.Get(missing)
+	if err != nil {
+		t.Fatalf("get missing: %v", err)
+	}
+	defer notFound.Body.Close()
+	if notFound.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing status = %d, want 404", notFound.StatusCode)
+	}
+	if got := notFound.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("cache-control = %q, want no-store", got)
 	}
 }

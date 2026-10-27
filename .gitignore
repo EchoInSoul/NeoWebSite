@@ -1,2 +1,5 @@
 # superpowers 技能的工作区（台账 / 临时件），本机原有 .git/info/exclude 忽略，这里一并入库
 .superpowers/
+
+# 运行时数据（媒体文件），见 backend/README.md「媒体存储」
+/data/

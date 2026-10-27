@@ -27,6 +27,7 @@ import (
 	"website/backend/internal/modules/health"
 	"website/backend/internal/modules/login"
 	"website/backend/internal/modules/mail"
+	"website/backend/internal/modules/media"
 	"website/backend/internal/modules/passwordreset"
 	"website/backend/internal/modules/registration"
 	"website/backend/internal/modules/session"
@@ -36,6 +37,7 @@ import (
 
 const (
 	apiPrefix         = "/api/v1"
+	mediaRootPath     = "../data/storage"
 	readHeaderTimeout = 10 * time.Second
 	readTimeout       = 30 * time.Second
 	writeTimeout      = 60 * time.Second
@@ -50,6 +52,10 @@ type App struct {
 }
 
 func New(cfg config.Config, db *database.Database) (*App, error) {
+	return newWithRoot(cfg, db, mediaRootPath)
+}
+
+func newWithRoot(cfg config.Config, db *database.Database, mediaRoot string) (*App, error) {
 	settingsModule, err := settings.New(db)
 	if err != nil {
 		return nil, err
@@ -72,6 +78,11 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	sessions := newSessionManager(cfg, db)
 
 	api := engine.Group(apiPrefix)
+
+	mediaModule, err := media.New(db, mediaRoot)
+	if err != nil {
+		return nil, err
+	}
 
 	healthModule := health.New(cfg, db)
 	healthModule.Register(api)
@@ -101,6 +112,9 @@ func New(cfg config.Config, db *database.Database) (*App, error) {
 	accessModule.RegisterProtected(protected)
 	mailModule.RegisterProtected(protected)
 	settingsModule.RegisterProtected(protected)
+	mediaModule.RegisterProtected(protected)
+
+	mediaModule.RegisterStorage(engine)
 
 	engine.NoRoute(func(c *gin.Context) {
 		apierror.Write(c, apierror.ErrNotFound)
@@ -183,6 +197,10 @@ func (w *writeTracker) Write(body []byte) (int, error) {
 
 func (w *writeTracker) Written() bool {
 	return w.written
+}
+
+func (w *writeTracker) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 func trackWrites(next http.Handler) http.Handler {
