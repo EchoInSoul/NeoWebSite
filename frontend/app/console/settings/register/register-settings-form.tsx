@@ -83,18 +83,29 @@ export function RegisterSettingsForm({
   const canEnable =
     prerequisites?.smtpConfigured === true &&
     prerequisites?.siteUrlConfigured === true;
-  const missingHints =
-    prerequisites === null
-      ? [t("emailVerificationUnknownHint")]
-      : [
-          prerequisites.smtpConfigured ? null : t("emailVerificationSmtpHint"),
-          prerequisites.siteUrlConfigured
-            ? null
-            : t("emailVerificationSiteUrlHint"),
-        ].filter((value): value is string => value !== null);
+  function missingPrerequisiteHint(): string | null {
+    if (prerequisites === null) {
+      return t("emailVerificationUnknownHint");
+    }
+
+    const smtpMissing = !prerequisites.smtpConfigured;
+    const siteUrlMissing = !prerequisites.siteUrlConfigured;
+
+    if (smtpMissing && siteUrlMissing) {
+      return t("emailVerificationBothHints");
+    }
+    if (smtpMissing) {
+      return t("emailVerificationSmtpHint");
+    }
+    if (siteUrlMissing) {
+      return t("emailVerificationSiteUrlHint");
+    }
+    return null;
+  }
+
   const emailVerificationDescription = values.emailVerificationEnabled
     ? undefined
-    : missingHints.join(" ");
+    : (missingPrerequisiteHint() ?? undefined);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

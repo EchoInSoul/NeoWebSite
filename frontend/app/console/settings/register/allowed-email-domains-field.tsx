@@ -400,10 +400,6 @@ export function AllowedEmailDomainsField({
         <p className="mt-1 text-xs text-destructive">
           {t("emailDomainInvalid")}
         </p>
-      ) : domains.length === 0 ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          {t("allowedEmailDomainsEmptyHint")}
-        </p>
       ) : null}
       {popup === null ? null : createPortal(popup, document.body)}
     </div>
