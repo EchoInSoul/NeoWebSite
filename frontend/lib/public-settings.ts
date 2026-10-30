@@ -1,4 +1,4 @@
-import { cache } from "react";
+import { cacheLife } from "next/cache";
 
 import { backendUrl } from "@/lib/backend-url";
 import type { CaptchaScope } from "@/lib/captcha-settings";
@@ -40,10 +40,12 @@ function toSettings(payload: unknown): PublicSettings {
   return settings;
 }
 
-export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
+export async function getPublicSettings(): Promise<PublicSettings> {
+  "use cache";
+  cacheLife({ revalidate: 60 });
+
   try {
     const response = await fetch(`${backendUrl}/api/v1/public/settings`, {
-      next: { revalidate: 60 },
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
@@ -55,7 +57,7 @@ export const getPublicSettings = cache(async (): Promise<PublicSettings> => {
   } catch {
     return {};
   }
-});
+}
 
 export function isSignupOpen(settings: PublicSettings): boolean {
   return settings.register?.enabled !== false;
