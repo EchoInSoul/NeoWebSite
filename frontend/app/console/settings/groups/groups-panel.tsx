@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -175,8 +174,6 @@ export function GroupsPanel({
     {
       key: "name",
       header: t("columnName"),
-      headerClassName: "px-4",
-      cellClassName: "px-4",
       render: (group) => (
         <span className="flex min-w-0 items-center gap-3">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
@@ -197,23 +194,21 @@ export function GroupsPanel({
       key: "members",
       header: t("columnMembers"),
       sortField: "memberCount",
-      headerClassName: "px-4",
-      cellClassName: "px-4 text-xs text-muted-foreground",
+      cellClassName: "text-[13px] text-muted-foreground",
       render: (group) => group.memberCount,
     },
     {
       key: "permissions",
       header: t("columnPermissions"),
       sortField: "permissions",
-      headerClassName: "px-4",
-      cellClassName: "px-4 text-xs text-muted-foreground",
+      cellClassName: "text-[13px] text-muted-foreground",
       render: (group) => permissionCount(group),
     },
   ];
 
   return (
     <>
-      <Card size="none">
+      <div className="overflow-hidden rounded-[8px] border border-border bg-muted">
         <ConsoleListToolbar
           start={
             canEdit ? (
@@ -260,7 +255,7 @@ export function GroupsPanel({
             </p>
           }
         />
-      </Card>
+      </div>
 
       {dialog === null ? null : (
         <GroupDialog

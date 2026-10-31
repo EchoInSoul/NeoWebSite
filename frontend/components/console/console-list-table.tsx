@@ -6,16 +6,15 @@ import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 export type ConsoleListSortDirection = "asc" | "desc";
+
+export type ConsoleListSelectAllProperties = {
+  isAllSelected: boolean;
+  isSomeSelected: boolean;
+  onToggleAllSelected: (checked: boolean) => void;
+  selectAllLabel: string;
+};
 
 export type ConsoleListColumn<TRow> = {
   key: string;
@@ -44,7 +43,7 @@ export type ConsoleListTableProperties<TRow> = {
   rows: readonly TRow[];
   columns: readonly ConsoleListColumn<TRow>[];
   getRowKey: (row: TRow) => string;
-  density?: "default" | "dense";
+  selectAll?: ConsoleListSelectAllProperties;
   sortField?: string;
   sortDirection?: ConsoleListSortDirection;
   onToggleSort?: (sortField: string) => void;
@@ -64,7 +63,7 @@ export function ConsoleListTable<TRow>({
   rows,
   columns,
   getRowKey,
-  density = "default",
+  selectAll,
   sortField,
   sortDirection = "desc",
   onToggleSort,
@@ -95,137 +94,163 @@ export function ConsoleListTable<TRow>({
     (rowActions === undefined ? 0 : 1);
 
   if (rows.length === 0) {
-    return <>{emptyState ?? null}</>;
+    return (
+      <div className="overflow-hidden rounded-[8px] border-t border-border bg-card">
+        {emptyState}
+      </div>
+    );
   }
 
   return (
-    <Table
-      className={cn(
-        density === "dense" && "text-[13px] [&_td]:py-1.5 [&_th]:h-8",
-        className,
-      )}
-    >
-      {shouldRenderHeader ? (
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            {isExpandable ? <TableHead className="w-[40px] px-1.5" /> : null}
-            {onToggleRowSelected === undefined ? null : (
-              <TableHead className="w-[48px] px-4" />
-            )}
-            {columns.map((column) => {
-              const isSortActive =
-                onToggleSort !== undefined &&
-                column.sortField !== undefined &&
-                column.sortField === sortField;
-              return (
-                <TableHead
-                  key={column.key}
-                  className={column.headerClassName}
-                  aria-sort={
-                    isSortActive
-                      ? sortDirection === "asc"
-                        ? "ascending"
-                        : "descending"
-                      : undefined
-                  }
-                >
-                  {onToggleSort !== undefined &&
-                  column.sortField !== undefined ? (
-                    <ConsoleListSortHeader
-                      label={column.header}
-                      isActive={isSortActive}
-                      isAscending={sortDirection === "asc"}
-                      onToggle={() =>
-                        onToggleSort(column.sortField ?? column.key)
-                      }
-                    />
-                  ) : (
-                    (column.header ?? null)
-                  )}
-                </TableHead>
-              );
-            })}
-            {rowActions === undefined ? null : (
-              <TableHead className="w-[56px] pr-4">
-                {actionsHeader ?? null}
-              </TableHead>
-            )}
-          </TableRow>
-        </TableHeader>
-      ) : null}
-      <TableBody>
-        {rows.map((row, rowIndex) => {
-          const rowKey = getRowKey(row);
-          const isSelected = selectedKeys?.has(rowKey) ?? false;
-          const isExpanded = expandedKeys?.has(rowKey) ?? false;
-          return (
-            <Fragment key={rowKey}>
-              <TableRow
-                data-state={isSelected ? "selected" : undefined}
-                className={getRowClassName?.(row, rowIndex)}
-              >
-                {isExpandable ? (
-                  <TableCell className="w-[40px] px-1.5">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={getRowExpandLabel?.(row)}
-                      aria-expanded={isExpanded}
-                      onClick={() => onToggleRowExpanded?.(rowKey)}
-                    >
-                      <ChevronRight
-                        aria-hidden="true"
-                        className={cn(
-                          "transition-transform",
-                          isExpanded && "rotate-90",
-                        )}
-                      />
-                    </Button>
-                  </TableCell>
-                ) : null}
-                {onToggleRowSelected === undefined ? null : (
-                  <TableCell className="w-[48px] px-4">
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={(checkedValue) =>
-                        onToggleRowSelected(rowKey, checkedValue)
-                      }
-                      disabled={
-                        isBusy || getRowSelectionDisabled?.(row) === true
-                      }
-                      aria-label={getRowSelectionLabel?.(row)}
-                    />
-                  </TableCell>
-                )}
-                {columns.map((column) => (
-                  <TableCell key={column.key} className={column.cellClassName}>
-                    {column.render(row)}
-                  </TableCell>
-                ))}
-                {rowActions === undefined ? null : (
-                  <TableCell className="w-[56px] pr-4">
-                    <span className="flex items-center justify-end">
-                      {rowActions(row)}
-                    </span>
-                  </TableCell>
-                )}
-              </TableRow>
-              {isExpandable && isExpanded ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell
-                    colSpan={totalCellCount}
-                    className="px-4 pt-1 pb-4"
-                  >
-                    {renderExpandedContent?.(row)}
-                  </TableCell>
-                </TableRow>
+    <div className="overflow-x-auto rounded-[8px] border-t border-border bg-card">
+      <table
+        className={cn(
+          "w-full border-separate border-spacing-0 text-left text-sm text-card-foreground",
+          className,
+        )}
+      >
+        {shouldRenderHeader ? (
+          <thead>
+            <tr>
+              {isExpandable ? (
+                <th className="h-[46px] w-10 border-b border-border pl-3" />
               ) : null}
-            </Fragment>
-          );
-        })}
-      </TableBody>
-    </Table>
+              {onToggleRowSelected === undefined ? null : (
+                <th className="h-[46px] w-11 border-b border-border pr-0 pl-4 text-left align-middle">
+                  {selectAll === undefined ? null : (
+                    <Checkbox
+                      checked={selectAll.isAllSelected}
+                      indeterminate={selectAll.isSomeSelected}
+                      onCheckedChange={selectAll.onToggleAllSelected}
+                      disabled={isBusy}
+                      aria-label={selectAll.selectAllLabel}
+                      className="data-checked:border-blue-600 data-checked:bg-blue-600 data-checked:text-white dark:data-checked:border-blue-500 dark:data-checked:bg-blue-500"
+                    />
+                  )}
+                </th>
+              )}
+              {columns.map((column) => {
+                const isSortActive =
+                  onToggleSort !== undefined &&
+                  column.sortField !== undefined &&
+                  column.sortField === sortField;
+                return (
+                  <th
+                    key={column.key}
+                    className={cn(
+                      "h-[46px] border-b border-border px-3 text-left align-middle text-xs leading-4 font-semibold whitespace-nowrap text-foreground",
+                      column.headerClassName,
+                    )}
+                    aria-sort={
+                      isSortActive
+                        ? sortDirection === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : undefined
+                    }
+                  >
+                    {onToggleSort !== undefined &&
+                    column.sortField !== undefined ? (
+                      <ConsoleListSortHeader
+                        label={column.header}
+                        isActive={isSortActive}
+                        isAscending={sortDirection === "asc"}
+                        onToggle={() =>
+                          onToggleSort(column.sortField ?? column.key)
+                        }
+                      />
+                    ) : (
+                      (column.header ?? null)
+                    )}
+                  </th>
+                );
+              })}
+              {rowActions === undefined ? null : (
+                <th className="h-[46px] w-[60px] border-b border-border pr-4 pl-3 text-right align-middle text-xs leading-4 font-semibold whitespace-nowrap text-foreground">
+                  {actionsHeader ?? null}
+                </th>
+              )}
+            </tr>
+          </thead>
+        ) : null}
+        <tbody>
+          {rows.map((row, rowIndex) => {
+            const rowKey = getRowKey(row);
+            const isSelected = selectedKeys?.has(rowKey) ?? false;
+            const isExpanded = expandedKeys?.has(rowKey) ?? false;
+            return (
+              <Fragment key={rowKey}>
+                <tr
+                  data-state={isSelected ? "selected" : undefined}
+                  className={cn(
+                    "h-[59px] even:bg-muted/60 data-[state=selected]:bg-muted",
+                    getRowClassName?.(row, rowIndex),
+                  )}
+                >
+                  {isExpandable ? (
+                    <td className="w-10 pl-3 align-middle">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={getRowExpandLabel?.(row)}
+                        aria-expanded={isExpanded}
+                        onClick={() => onToggleRowExpanded?.(rowKey)}
+                      >
+                        <ChevronRight
+                          aria-hidden="true"
+                          className={cn(
+                            "transition-transform",
+                            isExpanded && "rotate-90",
+                          )}
+                        />
+                      </Button>
+                    </td>
+                  ) : null}
+                  {onToggleRowSelected === undefined ? null : (
+                    <td className="pr-0 pl-4 align-middle">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checkedValue) =>
+                          onToggleRowSelected(rowKey, checkedValue)
+                        }
+                        disabled={
+                          isBusy || getRowSelectionDisabled?.(row) === true
+                        }
+                        aria-label={getRowSelectionLabel?.(row)}
+                        className="data-checked:border-blue-600 data-checked:bg-blue-600 data-checked:text-white dark:data-checked:border-blue-500 dark:data-checked:bg-blue-500"
+                      />
+                    </td>
+                  )}
+                  {columns.map((column) => (
+                    <td
+                      key={column.key}
+                      className={cn("px-3 align-middle", column.cellClassName)}
+                    >
+                      {column.render(row)}
+                    </td>
+                  ))}
+                  {rowActions === undefined ? null : (
+                    <td className="pr-4 pl-3 text-right align-middle">
+                      <span className="flex items-center justify-end">
+                        {rowActions(row)}
+                      </span>
+                    </td>
+                  )}
+                </tr>
+                {isExpandable && isExpanded ? (
+                  <tr className="bg-muted/40">
+                    <td colSpan={totalCellCount} className="px-4 pt-1 pb-4">
+                      {renderExpandedContent?.(row)}
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

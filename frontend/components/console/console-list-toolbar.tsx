@@ -5,20 +5,11 @@ import { ArrowDown, ArrowUp, RefreshCw, Search } from "lucide-react";
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-
-export type ConsoleListToolbarSelectionProperties = {
-  isAllSelected: boolean;
-  isSomeSelected: boolean;
-  onToggleAllSelected: (checked: boolean) => void;
-  selectAllLabel: string;
-};
 
 export type ConsoleListToolbarProperties = {
   start?: ReactNode;
   end?: ReactNode;
-  selection?: ConsoleListToolbarSelectionProperties;
   isSelectionActive?: boolean;
   selectionActions?: ReactNode;
   isBusy?: boolean;
@@ -31,7 +22,6 @@ export type ConsoleListToolbarProperties = {
 export function ConsoleListToolbar({
   start,
   end,
-  selection,
   isSelectionActive = false,
   selectionActions,
   isBusy = false,
@@ -43,20 +33,11 @@ export function ConsoleListToolbar({
   return (
     <div
       className={cn(
-        "flex h-[58px] items-center justify-between gap-3 rounded-t-[5px] bg-muted px-4 text-sm select-none max-md:h-auto max-md:flex-col max-md:items-stretch max-md:gap-2 max-md:py-2.5 dark:bg-muted/57.5",
+        "flex h-[46px] items-center justify-between gap-3 px-4 text-sm select-none max-md:h-auto max-md:flex-col max-md:items-stretch max-md:gap-2 max-md:py-2.5",
         className,
       )}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        {selection === undefined ? null : (
-          <Checkbox
-            checked={selection.isAllSelected}
-            indeterminate={selection.isSomeSelected}
-            onCheckedChange={selection.onToggleAllSelected}
-            disabled={isBusy}
-            aria-label={selection.selectAllLabel}
-          />
-        )}
         {isSelectionActive ? null : start}
       </span>
       <span className="flex shrink-0 items-center gap-2">

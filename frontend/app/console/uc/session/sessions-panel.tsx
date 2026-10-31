@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Empty,
   EmptyDescription,
@@ -43,7 +42,7 @@ import type { UserSession } from "@/lib/user-sessions";
 const missingValue = "—";
 const deviceChipClassName =
   "flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground";
-const timeCellClassName = "px-4 text-xs text-muted-foreground";
+const timeCellClassName = "text-[13px] text-muted-foreground";
 
 const sessionSortFields = ["lastSeenAt", "createdAt", "expiresAt"] as const;
 
@@ -177,8 +176,6 @@ export function SessionsPanel({
     {
       key: "device",
       header: t("device"),
-      headerClassName: "px-4",
-      cellClassName: "px-4",
       render: (session) => (
         <span className="flex min-w-0 items-center gap-3">
           <span className={deviceChipClassName}>
@@ -200,7 +197,6 @@ export function SessionsPanel({
       key: "lastSeenAt",
       header: t("lastSeen"),
       sortField: "lastSeenAt",
-      headerClassName: "px-4",
       cellClassName: timeCellClassName,
       render: (session) => formatTimestamp(session.lastSeenAt) || missingValue,
     },
@@ -208,7 +204,6 @@ export function SessionsPanel({
       key: "createdAt",
       header: t("signedIn"),
       sortField: "createdAt",
-      headerClassName: "px-4",
       cellClassName: timeCellClassName,
       render: (session) => formatTimestamp(session.createdAt) || missingValue,
     },
@@ -216,7 +211,6 @@ export function SessionsPanel({
       key: "expiresAt",
       header: t("expiresAt"),
       sortField: "expiresAt",
-      headerClassName: "px-4",
       cellClassName: timeCellClassName,
       render: (session) => formatTimestamp(session.expiresAt) || missingValue,
     },
@@ -263,7 +257,7 @@ export function SessionsPanel({
 
   return (
     <>
-      <Card size="none">
+      <div className="overflow-hidden rounded-[8px] border border-border bg-muted">
         <ConsoleListToolbar
           start={
             <ConsoleListSearchInput
@@ -296,7 +290,7 @@ export function SessionsPanel({
           actionsHeader={t("actions")}
           emptyState={emptyState}
         />
-      </Card>
+      </div>
 
       <AlertDialog open={isConfirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>

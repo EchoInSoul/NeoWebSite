@@ -20,8 +20,8 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useUsers } from "@/hooks/use-users";
 import {
   deleteBlockReason,
@@ -99,13 +99,13 @@ export function UsersPanel({
     {
       key: "user",
       header: t("columnUser"),
-      headerClassName: "px-4",
-      cellClassName: "px-4",
       render: (user) => (
-        <span className="flex min-w-0 items-center gap-3">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-            <UserRound className="size-[18px]" aria-hidden="true" />
-          </span>
+        <span className="flex min-w-0 items-center gap-2.5">
+          <Avatar>
+            <AvatarFallback>
+              <UserRound aria-hidden="true" className="size-4" />
+            </AvatarFallback>
+          </Avatar>
           <ConsoleListTitleBlock title={user.nickname} secondary={user.email} />
         </span>
       ),
@@ -113,38 +113,34 @@ export function UsersPanel({
     {
       key: "group",
       header: t("columnGroup"),
-      headerClassName: "px-4",
-      cellClassName: "px-4 text-xs text-muted-foreground",
       render: (user) => user.group.name,
     },
     {
       key: "emailVerification",
       header: t("columnEmailVerification"),
-      headerClassName: "px-4",
-      cellClassName: "px-4 text-xs text-muted-foreground",
-      render: (user) =>
-        t(
-          user.emailVerificationStatus === "verified"
-            ? "emailVerificationVerified"
-            : "emailVerificationNotRequired",
-        ),
+      cellClassName: "text-[13px]",
+      render: (user) => (
+        <span
+          className={
+            user.emailVerificationStatus === "verified"
+              ? "text-emerald-700 dark:text-emerald-400"
+              : "text-muted-foreground"
+          }
+        >
+          {t(
+            user.emailVerificationStatus === "verified"
+              ? "emailVerificationVerified"
+              : "emailVerificationNotRequired",
+          )}
+        </span>
+      ),
     },
   ];
 
   return (
     <>
-      <Card size="none">
+      <div className="overflow-hidden rounded-[8px] border border-border bg-muted">
         <ConsoleListToolbar
-          selection={
-            canDelete
-              ? {
-                  isAllSelected,
-                  isSomeSelected,
-                  onToggleAllSelected: toggleAllSelected,
-                  selectAllLabel: t("selectAll"),
-                }
-              : undefined
-          }
           isSelectionActive={canDelete && selectedKeys.size > 0}
           selectionActions={
             <Button
@@ -166,6 +162,16 @@ export function UsersPanel({
           rows={users}
           columns={columns}
           getRowKey={(user) => user.id}
+          selectAll={
+            canDelete
+              ? {
+                  isAllSelected,
+                  isSomeSelected,
+                  onToggleAllSelected: toggleAllSelected,
+                  selectAllLabel: t("selectAll"),
+                }
+              : undefined
+          }
           selectedKeys={canDelete ? selectedKeys : undefined}
           onToggleRowSelected={canDelete ? toggleRowSelected : undefined}
           getRowSelectionLabel={
@@ -197,7 +203,7 @@ export function UsersPanel({
             </p>
           }
         />
-      </Card>
+      </div>
 
       <AlertDialog open={isDeleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>

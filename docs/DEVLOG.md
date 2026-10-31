@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-10-31 · 用户管理 / 用户组列表改用 CF 表格样式
+
+**范围**：`components/console/console-list-table.tsx` 与 `console-list-toolbar.tsx` 直接改为 CF 版式（不再保留原 shadcn `Table` 分支与 `variant` 开关，删除未使用的 `density`）：外层 8px 圆角 + 1px 边框 + muted 灰条由各页面容器提供，内层白面板以 `border-t` 内嵌；表头 46px / 12px 600、数据行 59px、even 斑马纹、首列为复选列、操作列右对齐；**全选框从工具栏移入表头首列**（`selectAll` 由表格接收，与行复选框上下对齐），工具栏不再渲染复选控件；复选框选中态覆盖为蓝色。`app/console/settings/users/users-panel.tsx`、`app/console/settings/groups/groups-panel.tsx`、`app/console/uc/session/sessions-panel.tsx` 三处容器统一换成灰壳，并按新表头/单元格内边距调整列定义；用户头像改用 shadcn `Avatar` + `UserRound`，邮箱验证「已验证」用 emerald 文案。刷新 / 新建 / 行操作等既有按钮保留，未新增按钮。
+
+**验证**：`npx tsc --noEmit`、ESLint、Prettier 通过。后端未启动（访问设置页被重定向到登录），真实页面未截图；在 `ui-check` 临时挂载同一套 `ConsoleListToolbar` + `ConsoleListTable` 渲染预览并截图确认结构（含全选框位于表头首列、与行复选框同 x 对齐），验收后已移除临时预览。
+
+**已知缺口**：真实用户管理 / 用户组 / 会话页的运行时观感（含权限分支：不可删除时不显示复选列、无编辑权限时不显示新建）需在有后端与登录态的环境实测；dark 模式未截图确认。
+
+---
+
 ## 2026-10-27 · 媒体存储（任意格式上传 + 本地磁盘 + 静态直出）
 
 **范围**：新增 `internal/modules/media`（`Provider` 抽象 + 本地实现 + service / repository / controller / dto）、`media_assets` 表与迁移 `20261027130001_media_assets.sql`、两条接口 `POST /api/v1/media` / `DELETE /api/v1/media/:id`、静态路由 `GET|HEAD /storage/*key`；`app.go` 新增 `mediaRootPath = "../data/storage"` 与 `newWithRoot`（测试注入临时根），`writeTracker` 补 `Unwrap` 让 `ResponseController` 能清上传 / 下载的 deadline；仓库根 `.gitignore` 加 `/data/`；README / API 规范 / content spec 同步。零环境变量、零新权限点、零新错误码。

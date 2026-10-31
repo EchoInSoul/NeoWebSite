@@ -6,6 +6,11 @@ import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { ConsoleSettingsGroup } from "@/components/console/console-settings-group";
 import { ConsoleSettingsRow } from "@/components/console/console-settings-row";
 import {
+  CF_FONT_FAMILY,
+  CfUserTable,
+  type CfUser,
+} from "@/components/cf/user-table";
+import {
   Alert,
   AlertAction,
   AlertDescription,
@@ -236,16 +241,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Toaster as BaseToaster, toast } from "@/components/ui/toast";
@@ -345,6 +340,61 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 const demoItems = ["按钮", "卡片", "对话框", "表格", "图表"];
+
+const CF_CHECKBOX_CLASS =
+  "data-checked:border-[oklch(57.72%_0.2324_260)] data-checked:bg-[oklch(57.72%_0.2324_260)] data-checked:text-white dark:data-checked:bg-[oklch(57.72%_0.2324_260)]";
+
+const cfUsers: CfUser[] = [
+  {
+    id: "u_8f3a",
+    name: "木下",
+    email: "owner@neoblog.local",
+    group: "所有者",
+    status: "verified",
+    lastActive: "3 小时前",
+  },
+  {
+    id: "u_2c71",
+    name: "林一",
+    email: "lin@neoblog.dev",
+    group: "管理员",
+    status: "verified",
+    lastActive: "刚刚",
+    isSelf: true,
+  },
+  {
+    id: "u_91bd",
+    name: "陈默",
+    email: "chenmo@example.com",
+    group: "编辑",
+    status: "verified",
+    lastActive: "昨天 18:04",
+  },
+  {
+    id: "u_4e02",
+    name: "苏晚",
+    email: "suwan@example.com",
+    group: "普通用户",
+    status: "not_required",
+    lastActive: "10 月 28 日",
+  },
+  {
+    id: "u_77c5",
+    name: "周予",
+    email: "zhouyu@example.com",
+    group: "普通用户",
+    status: "verified",
+    lastActive: "10 月 26 日",
+  },
+  {
+    id: "u_1a90",
+    name: "顾言",
+    email: "guyan@example.com",
+    group: "普通用户",
+    status: "not_required",
+    lastActive: "从未登录",
+  },
+];
 
 export default function UiCheckPage() {
   const isHydrated = useIsHydrated();
@@ -742,38 +792,79 @@ export default function UiCheckPage() {
           </div>
         </Demo>
         <Demo label="table" wide>
-          <Table>
-            <TableCaption>文章列表</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead>标题</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className="text-right">阅读量</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell className="font-medium">第一篇</TableCell>
-                <TableCell>
-                  <Badge variant="secondary">草稿</Badge>
-                </TableCell>
-                <TableCell className="text-right">128</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="font-medium">第二篇</TableCell>
-                <TableCell>
-                  <Badge>已发布</Badge>
-                </TableCell>
-                <TableCell className="text-right">1,204</TableCell>
-              </TableRow>
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell colSpan={2}>合计</TableCell>
-                <TableCell className="text-right">1,332</TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
+          <div
+            className="overflow-hidden rounded-[8px] border border-[oklch(92.2%_0_0)] bg-[oklch(98%_0_0)] pt-[46px]"
+            style={{ fontFamily: CF_FONT_FAMILY }}
+          >
+            <div className="overflow-hidden rounded-[8px] border-t border-[oklch(92.2%_0_0)] bg-white">
+              <table
+                aria-label="文章列表"
+                className="w-full table-fixed border-separate border-spacing-0 text-left text-sm text-[#36393a]"
+              >
+                <colgroup>
+                  <col className="w-11" />
+                  <col />
+                  <col className="w-40" />
+                  <col className="w-[130px]" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="h-[46px] border-b border-[oklch(92.2%_0_0)] pr-0 pl-4 text-left align-middle">
+                      <Checkbox
+                        aria-label="全选文章"
+                        className={CF_CHECKBOX_CLASS}
+                      />
+                    </th>
+                    <th className="h-[46px] border-b border-[oklch(92.2%_0_0)] px-3 text-left align-middle text-xs leading-4 font-semibold whitespace-nowrap text-[oklch(14.5%_0_0)]">
+                      标题
+                    </th>
+                    <th className="h-[46px] border-b border-[oklch(92.2%_0_0)] px-3 text-left align-middle text-xs leading-4 font-semibold whitespace-nowrap text-[oklch(14.5%_0_0)]">
+                      状态
+                    </th>
+                    <th className="h-[46px] border-b border-[oklch(92.2%_0_0)] pr-4 pl-3 text-right align-middle text-xs leading-4 font-semibold whitespace-nowrap text-[oklch(14.5%_0_0)]">
+                      阅读量
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="h-[59px] even:bg-[oklch(98%_0_0)]">
+                    <td className="pr-0 pl-4 align-middle">
+                      <Checkbox
+                        aria-label="选择「第一篇」"
+                        className={CF_CHECKBOX_CLASS}
+                      />
+                    </td>
+                    <td className="px-3 align-middle text-sm font-medium text-[oklch(14.5%_0_0)]">
+                      第一篇
+                    </td>
+                    <td className="px-3 align-middle text-[13px] text-[oklch(55.6%_0_0)]">
+                      草稿
+                    </td>
+                    <td className="pr-4 pl-3 text-right align-middle text-[13px] text-[oklch(55.6%_0_0)]">
+                      128
+                    </td>
+                  </tr>
+                  <tr className="h-[59px] even:bg-[oklch(98%_0_0)]">
+                    <td className="pr-0 pl-4 align-middle">
+                      <Checkbox
+                        aria-label="选择「第二篇」"
+                        className={CF_CHECKBOX_CLASS}
+                      />
+                    </td>
+                    <td className="px-3 align-middle text-sm font-medium text-[oklch(14.5%_0_0)]">
+                      第二篇
+                    </td>
+                    <td className="px-3 align-middle text-[13px] text-[oklch(45%_0.13_163.225)]">
+                      已发布
+                    </td>
+                    <td className="pr-4 pl-3 text-right align-middle text-[13px] text-[oklch(55.6%_0_0)]">
+                      1,204
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </Demo>
       </Section>
 
@@ -1212,6 +1303,20 @@ export default function UiCheckPage() {
               </CommandGroup>
             </CommandList>
           </Command>
+        </Demo>
+      </Section>
+
+      <Separator />
+
+      <Section title="CF 用户表格（新建一套）">
+        <p className="max-w-prose text-sm text-muted-foreground">
+          独立的一套 CF/Kumo 风格表格组件，样式与 cf-canvas 1:1 对应；没有修改
+          components/ui 下的现有组件。
+        </p>
+        <Demo label="cf-user-table" wide>
+          <div className="w-full max-w-[1000px]">
+            <CfUserTable users={cfUsers} />
+          </div>
         </Demo>
       </Section>
 
