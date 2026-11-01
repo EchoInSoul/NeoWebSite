@@ -22,8 +22,14 @@ func TestClickGeneratorProducesChallenge(t *testing.T) {
 	if !strings.HasPrefix(generated.PromptImage, "data:image/png;base64,") {
 		t.Fatalf("prompt image = %.40q", generated.PromptImage)
 	}
-	if generated.MasterWidth != 300 || generated.MasterHeight != 220 {
-		t.Fatalf("master size = %dx%d, want 300x220", generated.MasterWidth, generated.MasterHeight)
+	if generated.MasterWidth != captchaCanvasWidth || generated.MasterHeight != captchaCanvasHeight {
+		t.Fatalf(
+			"master size = %dx%d, want %dx%d",
+			generated.MasterWidth,
+			generated.MasterHeight,
+			captchaCanvasWidth,
+			captchaCanvasHeight,
+		)
 	}
 	if len(generated.Dots) != 3 {
 		t.Fatalf("dots = %d, want 3", len(generated.Dots))

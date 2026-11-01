@@ -19,8 +19,14 @@ func TestGeneratorProducesSlideChallenge(t *testing.T) {
 	if !strings.HasPrefix(got.TileImage, "data:image/png;base64,") {
 		t.Fatalf("tile image = %.40q", got.TileImage)
 	}
-	if got.MasterWidth != 300 || got.MasterHeight != 220 {
-		t.Fatalf("master size = %dx%d, want 300x220", got.MasterWidth, got.MasterHeight)
+	if got.MasterWidth != captchaCanvasWidth || got.MasterHeight != captchaCanvasHeight {
+		t.Fatalf(
+			"master size = %dx%d, want %dx%d",
+			got.MasterWidth,
+			got.MasterHeight,
+			captchaCanvasWidth,
+			captchaCanvasHeight,
+		)
 	}
 	if got.TileWidth <= 0 || got.TileHeight <= 0 {
 		t.Fatalf("tile size = %dx%d", got.TileWidth, got.TileHeight)

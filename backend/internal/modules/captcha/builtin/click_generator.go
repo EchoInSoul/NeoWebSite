@@ -37,7 +37,13 @@ func newClickGenerator() (*clickGenerator, error) {
 
 	builder := click.NewBuilder()
 	builder.SetResources(click.WithBackgrounds(backgrounds), click.WithFonts([]*truetype.Font{font}))
-	builder.SetOptions(click.WithRangeVerifyLen(option.RangeVal{Min: 3, Max: 3}))
+	builder.SetOptions(
+		click.WithRangeVerifyLen(option.RangeVal{Min: 3, Max: 3}),
+		click.WithImageSize(option.Size{
+			Width:  captchaCanvasWidth,
+			Height: captchaCanvasHeight,
+		}),
+	)
 
 	return &clickGenerator{captcha: builder.Make()}, nil
 }

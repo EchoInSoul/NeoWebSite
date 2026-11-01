@@ -5,6 +5,7 @@ import (
 
 	"github.com/wenlng/go-captcha-assets/resources/imagesv2"
 	"github.com/wenlng/go-captcha-assets/resources/tiles"
+	"github.com/wenlng/go-captcha/v2/base/option"
 	"github.com/wenlng/go-captcha/v2/slide"
 )
 
@@ -47,6 +48,10 @@ func newGenerator() (*generator, error) {
 
 	builder := slide.NewBuilder()
 	builder.SetResources(slide.WithBackgrounds(backgrounds), slide.WithGraphImages(graphs))
+	builder.SetOptions(slide.WithImageSize(option.Size{
+		Width:  captchaCanvasWidth,
+		Height: captchaCanvasHeight,
+	}))
 
 	return &generator{captcha: builder.Make()}, nil
 }
