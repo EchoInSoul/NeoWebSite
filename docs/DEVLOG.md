@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-11-01 · 人机验证弹窗按参考图改版（点选形态）
+
+**范围**：后端 `internal/modules/captcha/builtin/canvas.go`（新增共用常量 `captchaCanvasWidth` / `captchaCanvasHeight` = 400×175）、`click_generator.go` 与 `generator.go`（两种形态都设 `WithImageSize`，画布 300×220 → 400×175）、`click_generator_test.go` 与 `generator_test.go`（断言改用常量）；前端 `components/auth/captcha-dialog.tsx`（标题栏独立、满宽分界线、关闭按钮移入标题栏、builtin 分支 470 宽、4px 圆角、内边距 18px/上 16px、标题与内容间距 22px、Turnstile 与 builtin 共用同一宽度（小组件保持 flexible 铺满））、`components/auth/click-captcha.tsx`（图片 1px 细边 + 4px 圆角，去掉带内边距的外框；提示条改为 56px 纯文字，去掉字符缩略图）、`components/auth/builtin-captcha.tsx`（宿主去掉 `gap-3`，滑块条改 `mt-3`，滑块图片补 1px 细边 + 4px 圆角，与点选图一致）、`messages/{zh-CN,en}.json`（`auth.captchaDialogTitle` 改为「请完成安全验证 / Verify you are human」、新增 `auth.captchaClickPrompt`、删除 `auth.captchaClickHint`、`common.close`）。接口字段与 `backend/README.md` 无需改动。
+
+**动机**：用户提供参考截图，要求按图重做点选弹窗——标题「请完成安全验证」、标题下满宽分界线、宽扁图片、提示条整句「请依次点击【兴,读,百】」，并明确不要刷新按钮。
+
+**决策**：
+- 横图靠后端改画布尺寸，不在前端裁图：点击坐标按渲染宽度换算（`click-captcha.tsx` 的 `handlePointerDown`），`object-cover` 裁成横图会让点位错位。
+- 画布宽度上限是 400：go-captcha 的背景图（`go-captcha-assets/imagesv2`）固定 400×340，`click.WithImageSize` 设得比 400 宽时绘制库不会铺满右侧，编码成 JPEG 后是一条黑竖条（首版设 440×190 时实测复现）。取 400×175 后比例 2.29:1，与参考图 435×188 基本一致；前端再按该比例撑到 434 宽。
+- `prompt_text` 保持空格分隔（后端契约不变），前端按空格拼逗号后填入 `auth.captchaClickPrompt` 的 `{chars}`。
+- Turnstile 与 builtin 共用同一个弹窗宽度（0.85 后都是 400）：小组件本身是 Cloudflare 的 iframe、无法缩放字号，所以保持 `size: "flexible"` 让它铺满 368 的内容宽度，壳子与标题栏跟 builtin 完全一致。
+- 滑块形态与点选共用同一画布尺寸（400×175）：弹窗已是 470 宽，滑块图若仍是 300×220 会被拉成 434×318 的近方形大图，和点选的宽扁图完全不搭。滑块默认的拼图块 60–70px 在 175 高的画布里仍有充足落点余量。
+- 滑块图的容器补上与点选图相同的 1px 细边 + 4px 圆角；滑块条自身 40px 高、12px 间距维持原样，只跟随宽度变宽。
+- 内边距取 18px（上 16px），使 470 卡片内图片正好 434 宽，与参考图的 435 对齐。
+- 关闭按钮从 `DialogContent` 自带的绝对定位改为标题栏内的 `DialogClose`，`showCloseButton={false}`；分隔线用负边距做到满宽。
+- **同日追加：整体等比缩到 0.85**——卡片 470 → 400 宽，宽度 / 内边距 / 字号 / 圆角 / 条高统一乘 0.85（内边距 15px、上 14px，标题 13px，标题区 pb 10px，标题到内容 19px，点选提示条 48px、上间距 25px，滑块条 34px、上间距 10px，圆角 3px，点选序号 20px / 10px 字，状态条 10px 字），只保留 1px 描边不缩。落地后点选卡片 400×336、滑块卡片 400×307。
+- 占位常量同步：`builtin-captcha.tsx` 里只用于「加载失败占位框」的 `DEFAULT_CAPTCHA_CANVAS`（300×220）、控制行 40px、间距 12px，换成 `CAPTCHA_CANVAS`（400×175）、34px、10px；占位框只保留 `aspectRatio`（368:205，即 368 宽下图片 161 + 间距 10 + 滑块条 34），不再写死 `minHeight`，窄屏时随宽度等比缩；失败卡圆角也跟外层统一到 3px。占位框按滑块形态的行高计算，点选形态的提示条更高（25 + 48），加载失败时占位比真实点选内容矮约 29px，属既有性质的近似。
+
+**验证**：`go test ./internal/modules/captcha/...`、`go build ./...` 通过；`npx tsc --noEmit`、ESLint（0 error，3 条既有 `<img>` warning）、Prettier 通过。用临时路由挂真实 `CaptchaDialog` + 假点选题目做浏览器预览（验收后临时路由已删除）截图确认：卡片 470×386、圆角 4px、分界线满宽、图片 434 宽且带 1px 边、提示条 56px、文案「请依次点击【兴,读,百】」、关闭按钮 aria 为「关闭」。等比缩到 0.85 后二次预览：点选卡片 400×336、滑块卡片 400×307、标题 13px、关闭按钮 28px、图片 368 宽、提示条 48px。首轮预览发现 `common.close` 缺键（dev overlay 报 1 个 issue、aria 直接显示原始 key），已补键后复查为 0 issue。画布改 400×175 后用临时测试把出图落成 JPEG 检查：点选与滑块两张都是 400×175、四边铺满、无黑竖条（滑块拼图块 67×67，落点 (94,66) 在界内），随后删除临时测试与图片（440×190 那版实测右侧有黑条，见决策第 2 条）。
+
+**已知缺口**：改尺寸后的真实链路（后端重启后登录 / 注册页出 400×175 题、点选命中与滑块拖动判分）未在浏览器实测；dark 模式未截图。
+
+---
+
 ## 2026-10-31 · 用户管理 / 用户组列表改用 CF 表格样式
 
 **范围**：`components/console/console-list-table.tsx` 与 `console-list-toolbar.tsx` 直接改为 CF 版式（不再保留原 shadcn `Table` 分支与 `variant` 开关，删除未使用的 `density`）：外层 8px 圆角 + 1px 边框 + muted 灰条由各页面容器提供，内层白面板以 `border-t` 内嵌；表头 46px / 12px 600、数据行 59px、even 斑马纹、首列为复选列、操作列右对齐；**全选框从工具栏移入表头首列**（`selectAll` 由表格接收，与行复选框上下对齐），工具栏不再渲染复选控件；复选框选中态覆盖为蓝色。`app/console/settings/users/users-panel.tsx`、`app/console/settings/groups/groups-panel.tsx`、`app/console/uc/session/sessions-panel.tsx` 三处容器统一换成灰壳，并按新表头/单元格内边距调整列定义；用户头像改用 shadcn `Avatar` + `UserRound`，邮箱验证「已验证」用 emerald 文案。刷新 / 新建 / 行操作等既有按钮保留，未新增按钮。
