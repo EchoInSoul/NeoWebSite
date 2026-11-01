@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { XIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -79,15 +81,33 @@ export function CaptchaDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal>
-      <DialogContent blockOpenAutoFocus className="gap-3 p-5 sm:max-w-[340px]">
-        <DialogHeader>
-          <DialogTitle>{t("captchaDialogTitle")}</DialogTitle>
+      <DialogContent
+        blockOpenAutoFocus
+        showCloseButton={false}
+        className="gap-0 rounded-sm p-[15px] pt-[14px] sm:max-w-[400px]"
+      >
+        <DialogHeader className="-mx-[15px] flex-row items-center justify-between gap-0 border-b border-border px-[15px] pb-[10px]">
+          <DialogTitle className="text-[13px] leading-none font-medium">
+            {t("captchaDialogTitle")}
+          </DialogTitle>
+          <DialogClose
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="-mr-1 size-7"
+                aria-label={tCommon("close")}
+              />
+            }
+          >
+            <XIcon className="size-3.5" />
+          </DialogClose>
         </DialogHeader>
         {open ? (
-          <div className="grid max-w-full min-w-0 gap-4 py-1 [&>*]:max-w-full [&>*]:min-w-0">
+          <div className="mt-[19px] grid max-w-full min-w-0 gap-4 py-[7px] [&>*]:max-w-full [&>*]:min-w-0">
             {isUnavailable ? (
               <div className="flex flex-col gap-3">
-                <p className="text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   {t("captchaUnavailable")}
                 </p>
                 <div className="flex justify-end">

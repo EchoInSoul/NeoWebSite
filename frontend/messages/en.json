@@ -329,15 +329,16 @@
     "serviceUnavailableButton": "Service unavailable",
     "refresh": "Refresh",
     "cancel": "Cancel",
+    "close": "Close",
     "retry": "Retry"
   },
   "auth": {
-    "captchaDialogTitle": "Human verification",
+    "captchaDialogTitle": "Verify you are human",
     "captchaUnavailable": "Verification failed to load",
     "captchaImageAlt": "Puzzle verification image",
     "captchaSliderHint": "Drag the slider to complete the puzzle",
     "captchaClickImageAlt": "Click verification image",
-    "captchaClickHint": "Click in order",
+    "captchaClickPrompt": "Click {chars} in order",
     "captchaLoadFailed": "The puzzle failed to load",
     "captchaReload": "Reload",
     "captchaSuccess": "Verified in {seconds}s",

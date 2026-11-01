@@ -73,6 +73,7 @@ export function ClickCaptcha({
   }, []);
 
   const scale = renderedWidth === 0 ? 1 : renderedWidth / challenge.masterWidth;
+  const promptChars = challenge.promptText.split(" ").filter(Boolean).join(",");
 
   async function submitClicks(points: CaptchaClick[]) {
     const controller = new AbortController();
@@ -143,7 +144,7 @@ export function ClickCaptcha({
     <>
       <div
         ref={imageRef}
-        className="relative w-full cursor-default touch-none overflow-hidden bg-muted/20 select-none"
+        className="relative w-full cursor-default touch-none overflow-hidden rounded-sm border border-border bg-muted/20 select-none"
         style={{
           aspectRatio: `${challenge.masterWidth} / ${challenge.masterHeight}`,
         }}
@@ -159,7 +160,7 @@ export function ClickCaptcha({
           <span
             key={`${click.x}-${click.y}-${index}`}
             className={cn(
-              "pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-xs font-medium text-white shadow-sm",
+              "pointer-events-none absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border text-[10px] font-medium text-white shadow-sm",
               phase === "failed"
                 ? "border-red-200/80 bg-red-500/85"
                 : "border-white/80 bg-sky-500/85",
@@ -172,8 +173,8 @@ export function ClickCaptcha({
         {phase === "success" ? (
           <>
             <div className="absolute inset-0 bg-emerald-500/30" />
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-emerald-500/85 px-2 py-1 text-xs font-medium text-white">
-              <Check className="h-3 w-3" aria-hidden="true" />
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-emerald-500/85 px-[7px] py-[3px] text-[10px] font-medium text-white">
+              <Check className="h-2.5 w-2.5" aria-hidden="true" />
               {elapsedSeconds === null
                 ? null
                 : t("captchaSuccess", { seconds: elapsedSeconds })}
@@ -181,22 +182,16 @@ export function ClickCaptcha({
           </>
         ) : null}
         {phase === "failed" ? (
-          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-red-500/85 px-2 py-1 text-xs font-medium text-white">
-            <X className="h-3 w-3" aria-hidden="true" />
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-red-500/85 px-[7px] py-[3px] text-[10px] font-medium text-white">
+            <X className="h-2.5 w-2.5" aria-hidden="true" />
             {t("captchaError")}
           </div>
         ) : null}
       </div>
-      <div className="flex h-10 w-full items-center justify-center gap-2 rounded-sm border border-border bg-muted/30 px-2">
-        <span className="text-sm text-muted-foreground">
-          {t("captchaClickHint")}
+      <div className="mt-[25px] flex h-12 w-full items-center justify-center rounded-sm border border-border px-[10px] text-center">
+        <span className="text-[13px]">
+          {t("captchaClickPrompt", { chars: promptChars })}
         </span>
-        <img
-          src={challenge.promptImage}
-          alt={challenge.promptText}
-          className="h-7 w-auto select-none"
-          draggable={false}
-        />
       </div>
     </>
   );
