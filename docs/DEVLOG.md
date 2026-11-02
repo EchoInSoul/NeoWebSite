@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-11-01 · 邮件设置：未配置 SMTP 时禁用测试发送
+
+**范围**：`components/console/console-settings-group.tsx`（新增可选 `description`，标题下方渲染一行说明）、`app/console/settings/mail/mail-settings-form.tsx`（三个模板行的测试发送按钮改由 SMTP 是否配置控制）、`messages/{zh-CN,en}.json`（`mailSendTestEnableFirst` 换成 `mailSendTestSmtpMissing`）。
+
+**动机**：用户反馈只把「是否启用」打开、SMTP 服务器地址留空时，三个模板行的发送按钮仍可点击；希望像「启用邮箱所有权认证」那样置灰，并提示先配置 SMTP 服务器。
+
+**决策**：
+- 判定用表单当前值 `values.enabled && values.smtpHost.trim() !== ""`，不读服务端 `/admin/mail/status`：后者是保存后的快照，保存完不会自动刷新，按钮会一直显示禁用；而发送流程本来就是「有改动先保存再发」（`handleConfirmSend`），所以按当前值判定与实际行为一致。
+- 提示只出现在「邮件模板」组标题下（新增的 `ConsoleSettingsGroup.description`），不在三行里各重复一次。
+- 按钮保留 `canSendTestEmail` 的角色门槛；aria-label 仍是具体模板名，置灰时的原因走 `title` 与组标题下的提示。
+
+**验证**：临时路由挂真实 `MailSettingsForm`（`enabled=true`、`smtpHost` 空）在浏览器检查：三个按钮均 `disabled`、`title` 为「请先配置 SMTP 服务器」，组标题下显示该提示，图标呈置灰态；随后删除临时路由。`tsc`、ESLint、Prettier 通过。
+
+**已知缺口**：未在真实登录态的 `/console/settings/mail` 页面上实测（临时路由用的假 settings，只验证渲染与按钮状态）。
+
+---
+
 ## 2026-11-01 · 人机验证弹窗按参考图改版（点选形态）
 
 **范围**：后端 `internal/modules/captcha/builtin/canvas.go`（新增共用常量 `captchaCanvasWidth` / `captchaCanvasHeight` = 400×175）、`click_generator.go` 与 `generator.go`（两种形态都设 `WithImageSize`，画布 300×220 → 400×175）、`click_generator_test.go` 与 `generator_test.go`（断言改用常量）；前端 `components/auth/captcha-dialog.tsx`（标题栏独立、满宽分界线、关闭按钮移入标题栏、builtin 分支 470 宽、4px 圆角、内边距 18px/上 16px、标题与内容间距 22px、Turnstile 与 builtin 共用同一宽度（小组件保持 flexible 铺满））、`components/auth/click-captcha.tsx`（图片 1px 细边 + 4px 圆角，去掉带内边距的外框；提示条改为 56px 纯文字，去掉字符缩略图）、`components/auth/builtin-captcha.tsx`（宿主去掉 `gap-3`，滑块条改 `mt-3`，滑块图片补 1px 细边 + 4px 圆角，与点选图一致）、`messages/{zh-CN,en}.json`（`auth.captchaDialogTitle` 改为「请完成安全验证 / Verify you are human」、新增 `auth.captchaClickPrompt`、删除 `auth.captchaClickHint`、`common.close`）。接口字段与 `backend/README.md` 无需改动。

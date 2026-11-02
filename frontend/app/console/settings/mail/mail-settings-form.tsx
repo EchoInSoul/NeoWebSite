@@ -81,6 +81,7 @@ export function MailSettingsForm({
   const { target, isSending, requestSend, close, confirmSend } =
     useMailTestSend(currentUserEmail);
   const smtpExpansion = useSwitchRowExpansion(values.enabled);
+  const smtpConfigured = values.enabled && values.smtpHost.trim() !== "";
 
   const unknownEncryption = MAIL_ENCRYPTIONS.includes(values.smtpEncryption)
     ? null
@@ -299,7 +300,10 @@ export function MailSettingsForm({
           label={t("senderName")}
         />
       </ConsoleSettingsGroup>
-      <ConsoleSettingsGroup title={t("mailTemplatesGroup")}>
+      <ConsoleSettingsGroup
+        title={t("mailTemplatesGroup")}
+        description={smtpConfigured ? undefined : t("mailSendTestSmtpMissing")}
+      >
         <ConsoleSettingsRow
           control={
             <Switch
@@ -322,7 +326,7 @@ export function MailSettingsForm({
                 <Button
                   aria-label={t("mailSendTest", { template: template.label })}
                   disabled={
-                    !values.enabled || isSaving || currentUserEmail === ""
+                    !smtpConfigured || isSaving || currentUserEmail === ""
                   }
                   onClick={(event) => {
                     event.stopPropagation();
@@ -333,9 +337,9 @@ export function MailSettingsForm({
                   }}
                   size="icon-sm"
                   title={
-                    values.enabled
+                    smtpConfigured
                       ? t("mailSendTest", { template: template.label })
-                      : t("mailSendTestEnableFirst")
+                      : t("mailSendTestSmtpMissing")
                   }
                   type="button"
                   variant="ghost"

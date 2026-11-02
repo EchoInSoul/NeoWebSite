@@ -64,7 +64,7 @@
     "mailSmtpPasswordRequired": "填写用户名时必须填写密码或授权码",
     "mailSenderAddressInvalid": "发件人地址格式不正确",
     "mailSendTest": "发送测试邮件：{template}",
-    "mailSendTestEnableFirst": "请先启用邮件",
+    "mailSendTestSmtpMissing": "请先配置 SMTP 服务器",
     "mailSendTestConfirmTitle": "发送测试邮件？",
     "mailSendTestConfirmDescription": "将使用「{template}」模板向 {email} 发送一封测试邮件。",
     "mailSendTestConfirm": "发送",

@@ -64,7 +64,7 @@
     "mailSmtpPasswordRequired": "A password or authorization code is required when a username is set",
     "mailSenderAddressInvalid": "Invalid sender address",
     "mailSendTest": "Send test email: {template}",
-    "mailSendTestEnableFirst": "Enable mail first",
+    "mailSendTestSmtpMissing": "Configure an SMTP server first",
     "mailSendTestConfirmTitle": "Send test email?",
     "mailSendTestConfirmDescription": "Send a test email using the \"{template}\" template to {email}.",
     "mailSendTestConfirm": "Send",

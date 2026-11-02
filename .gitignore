@@ -44,6 +44,7 @@ next-env.d.ts
 # scratch（与 backend/.gitignore 同款：放临时脚本）
 .scratch/
 .zcode/
+.idea/
 
 # superpowers 技能的工作区（台账 / 临时件），本机原有 .git/info/exclude 忽略，这里一并入库
 .superpowers/
